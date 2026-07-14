@@ -1,0 +1,8 @@
+# Nix build output
+result
+result-*
+
+# Editor and temporary files
+*~
+*.swp
+*.tmp
