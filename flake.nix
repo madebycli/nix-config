@@ -146,11 +146,15 @@
           util-linux
         ];
         text = ''
-          exec ${pkgs.python3}/bin/python3 ${./scripts/config-sync.py} "$@"
+          exec ${pkgs.bash}/bin/bash \
+            ${./scripts/config-sync-wrapper.sh} \
+            ${./scripts/config-sync.py} \
+            "$@"
         '';
         checkPhase = ''
           PYTHONPYCACHEPREFIX="$TMPDIR/pycache" \
             ${pkgs.python3}/bin/python3 -m py_compile ${./scripts/config-sync.py}
+          ${pkgs.bash}/bin/bash -n ${./scripts/config-sync-wrapper.sh}
           ${pkgs.bash}/bin/bash -n "$target"
         '';
       };
