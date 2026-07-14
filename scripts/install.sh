@@ -25,7 +25,7 @@ Optionen:
   --mango           nur Mango
   --niri            nur Niri
   --both            Mango und Niri (Standard)
-  --ssh              Repository über SSH klonen (SSH-Key muss funktionieren)
+  --ssh             Repository über SSH klonen (SSH-Key muss funktionieren)
   --yes, -y         Bestätigungen automatisch bejahen
 USAGE
 }
@@ -123,6 +123,10 @@ fi
 git -C "$REPO_DIR" ls-files --error-unmatch "$HARDWARE_RELATIVE" >/dev/null 2>&1 \
   || die "Hardware-Platzhalter ist nicht durch Git erfasst: $HARDWARE_RELATIVE"
 
+cd "$REPO_DIR"
+info "Flake-Inputs werden im lokalen Clone auf den neuesten Stand aktualisiert"
+nix flake update
+
 mkdir -p "$BACKUP_DIR"
 if [[ -f "$TARGET_HARDWARE" ]] && ! cmp -s "$SOURCE_HARDWARE" "$TARGET_HARDWARE"; then
   cp -a "$TARGET_HARDWARE" "$BACKUP_DIR/${HOST}-hardware-configuration.nix"
@@ -135,7 +139,6 @@ install -m 0644 "$SOURCE_HARDWARE" "$TARGET_HARDWARE"
 # Flake-Datei gelesen, aber von normalen Git-/Sync-Vorgängen nicht verändert.
 git -C "$REPO_DIR" update-index --skip-worktree "$HARDWARE_RELATIVE"
 
-cd "$REPO_DIR"
 info "Flake-Ausgabe wird ausgewertet: $PROFILE"
 nix eval --raw ".#nixosConfigurations.${PROFILE}.config.networking.hostName" >/dev/null
 
