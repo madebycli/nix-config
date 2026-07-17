@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   xdg.portal = {
@@ -110,4 +110,5 @@
     komikku
     prismlauncher
   ];
+nixpkgs.config.allowInsecurePredicate = pkg: lib.getName pkg == "electron";
 }
