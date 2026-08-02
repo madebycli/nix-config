@@ -1,10 +1,6 @@
 { pkgs, ... }:
 
 {
-  imports = [
-    ./helium.nix
-  ];
-
   home = {
     username = "xxxxx";
     homeDirectory = "/home/xxxxx";
