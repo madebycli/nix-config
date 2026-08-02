@@ -163,6 +163,10 @@ sudo nixos-rebuild switch \
   --flake ".#${PROFILE}" \
   "${NIX_CACHE_OPTIONS[@]}"
 
+info "TRIM wird für den nächsten Neustart vorgemerkt"
+sudo install -d -m 0755 /var/lib/nixos-config
+sudo touch /var/lib/nixos-config/fstrim-pending
+
 SYNC_BIN="/run/current-system/sw/bin/config-sync"
 if [[ ! -x "$SYNC_BIN" ]]; then
   die "config-sync wurde nicht im neuen System gefunden: $SYNC_BIN"
@@ -178,4 +182,5 @@ init_args=(
 
 printf '\nFertig.\nHost: %s\nProfil: %s\nRepository: %s\nInstallationsbackups: %s\n' \
   "$HOST" "$PROFILE" "$REPO_DIR" "$BACKUP_DIR"
+printf '\nBeim nächsten Neustart läuft fstrim automatisch genau einmal.\n'
 printf '\nNächste Prüfung:\n  config-sync --repo %q status\n' "$REPO_DIR"
