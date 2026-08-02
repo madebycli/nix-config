@@ -16,22 +16,31 @@ in
     allowDiscards = true;
   }) generatedLuksDevices;
 
-  # Läuft nach Aktivierung eines neuen Systems sowie bei jedem Start. Ein
-  # fehlendes TRIM-Feature blockiert weder Boot noch nixos-rebuild switch.
+  # Installer und config-update legen nach einem erfolgreichen Switch die Datei
+  # /var/lib/nixos-config/fstrim-pending an. Erst beim folgenden Neustart ist
+  # das Root-LUKS-Gerät mit den neuen Discard-Optionen geöffnet; dann läuft TRIM
+  # genau einmal und die Markierung wird wieder entfernt.
   systemd.services.nixos-config-fstrim = {
-    description = "TRIM root filesystem after NixOS activation";
+    description = "Run pending TRIM after reboot";
     wantedBy = [ "multi-user.target" ];
     after = [ "local-fs.target" ];
     wants = [ "local-fs.target" ];
-    restartIfChanged = true;
 
-    serviceConfig.Type = "oneshot";
+    unitConfig.ConditionPathExists = "/var/lib/nixos-config/fstrim-pending";
+
+    serviceConfig = {
+      Type = "oneshot";
+      StateDirectory = "nixos-config";
+    };
 
     script = ''
       ${pkgs.coreutils}/bin/sleep 10
+
       if ! ${pkgs.util-linux}/bin/fstrim -v /; then
         echo "Hinweis: fstrim für / wurde nicht unterstützt oder war nicht nötig." >&2
       fi
+
+      ${pkgs.coreutils}/bin/rm -f /var/lib/nixos-config/fstrim-pending
     '';
   };
 }
