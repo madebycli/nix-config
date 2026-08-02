@@ -15,6 +15,8 @@
     };
   };
 
+  services.gnome.sushi.enable = true;
+
   fonts = {
     enableDefaultPackages = true;
     packages = with pkgs; [
@@ -110,5 +112,6 @@
     komikku
     prismlauncher
   ];
-nixpkgs.config.allowInsecurePredicate = pkg: lib.getName pkg == "electron";
+
+  nixpkgs.config.allowInsecurePredicate = pkg: lib.getName pkg == "electron";
 }
