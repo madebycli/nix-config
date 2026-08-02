@@ -107,4 +107,8 @@ fi
 
 printf '\n==> System wird aktiviert\n'
 sudo nixos-rebuild switch --flake "$REPO#$PROFILE" "${CACHE_OPTIONS[@]}"
+
+printf '\n==> TRIM wird nach kurzer Pause ausgeführt\n'
+sudo systemctl start nixos-config-fstrim.service
+
 printf '\nFertig. Aktiver Stand: %s#%s\n' "$REPO" "$PROFILE"
