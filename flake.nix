@@ -30,7 +30,7 @@
     nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
 
     mango = {
-      url = "github:mangowm/mango";  #?ref=0.14.4
+      url = "github:mangowm/mango"; # ?ref=0.14.4
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -49,11 +49,13 @@
         nyx = {
           cpuArch = "znver4";
           module = ./hosts/nyx;
+          hardwareConfigPath = ./hosts/nyx/hardware-configuration.nix;
         };
 
         aether = {
           cpuArch = "x86-64-v3";
           module = ./hosts/aether;
+          hardwareConfigPath = ./hosts/aether/hardware-configuration.nix;
           specialArgs.nvidiaPrime = {
             # Verify both IDs on the laptop with `lspci -D` before the first switch.
             intelBusId = "PCI:0:2:0";
@@ -68,6 +70,7 @@
         }
 
         ./modules/nixos/base.nix
+        ./modules/nixos/storage-tuning.nix
         ./modules/nixos/desktop.nix
         ./modules/nixos/noctalia.nix
         ./modules/nixos/greeter.nix
@@ -106,6 +109,7 @@
             specialArgs = {
               inherit inputs desktops defaultSession hostName;
               cpuArch = host.cpuArch;
+              hardwareConfigPath = host.hardwareConfigPath;
             } // hostSpecialArgs;
 
             modules = commonModules
