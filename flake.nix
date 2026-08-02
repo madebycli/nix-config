@@ -78,6 +78,7 @@
         {
           environment.systemPackages = [
             configSyncProgram
+            configUpdateProgram
             scriptUpdateProgram
             saveConfigProgram
           ];
@@ -159,6 +160,20 @@
         '';
       };
 
+      configUpdateProgram = pkgs.writeShellApplication {
+        name = "config-update";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [
+          coreutils
+          git
+          nix
+        ];
+        text = builtins.readFile ./scripts/update.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
       scriptUpdateProgram = pkgs.writeShellApplication {
         name = "script-update";
         inheritPath = true;
@@ -224,6 +239,7 @@
 
       packages.${system} = {
         install = installProgram;
+        update = configUpdateProgram;
         config-sync = configSyncProgram;
         script-update = scriptUpdateProgram;
         save-config = saveConfigProgram;
@@ -233,6 +249,11 @@
         install = {
           type = "app";
           program = "${installProgram}/bin/nixos-config-install";
+        };
+
+        update = {
+          type = "app";
+          program = "${configUpdateProgram}/bin/config-update";
         };
 
         config-sync = {
