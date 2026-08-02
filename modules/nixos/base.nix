@@ -58,6 +58,12 @@
     enable = true;
     interactiveShellInit = ''
       set -g fish_greeting
+
+      function c
+        clear
+        fastfetch
+      end
+
       fastfetch
     '';
   };
