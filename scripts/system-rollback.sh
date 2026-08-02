@@ -36,14 +36,14 @@ esac
   exit 1
 }
 
+printf '\n==> Administratorrechte werden einmalig bestätigt\n'
+sudo -v
+
 printf '\n==> Verfügbare letzte Systemgenerationen\n'
 sudo nix-env \
   --profile /nix/var/nix/profiles/system \
   --list-generations \
   | tail -n 5
-
-printf '\n==> Administratorrechte werden bestätigt\n'
-sudo -v
 
 printf '\n==> Wechsel auf die vorherige NixOS-Generation\n'
 sudo nixos-rebuild switch --rollback
