@@ -82,6 +82,8 @@
           environment.systemPackages = [
             configSyncProgram
             configUpdateProgram
+            systemUpdateProgram
+            systemRollbackProgram
             scriptUpdateProgram
             saveConfigProgram
           ];
@@ -178,6 +180,35 @@
         '';
       };
 
+      systemUpdateProgram = pkgs.writeShellApplication {
+        name = "system-update";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [
+          coreutils
+          findutils
+          git
+          jq
+          nix
+        ];
+        text = builtins.readFile ./scripts/system-update.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
+      systemRollbackProgram = pkgs.writeShellApplication {
+        name = "system-rollback";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [
+          coreutils
+          nix
+        ];
+        text = builtins.readFile ./scripts/system-rollback.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
       scriptUpdateProgram = pkgs.writeShellApplication {
         name = "script-update";
         inheritPath = true;
@@ -244,6 +275,8 @@
       packages.${system} = {
         install = installProgram;
         update = configUpdateProgram;
+        system-update = systemUpdateProgram;
+        system-rollback = systemRollbackProgram;
         config-sync = configSyncProgram;
         script-update = scriptUpdateProgram;
         save-config = saveConfigProgram;
@@ -258,6 +291,16 @@
         update = {
           type = "app";
           program = "${configUpdateProgram}/bin/config-update";
+        };
+
+        system-update = {
+          type = "app";
+          program = "${systemUpdateProgram}/bin/system-update";
+        };
+
+        system-rollback = {
+          type = "app";
+          program = "${systemRollbackProgram}/bin/system-rollback";
         };
 
         config-sync = {
