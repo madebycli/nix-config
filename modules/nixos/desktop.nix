@@ -70,6 +70,7 @@
     fuzzel
     lxqt.lxqt-policykit
     git
+    jq
 
     (python3.withPackages (pythonPackages: with pythonPackages; [
       pygobject3
