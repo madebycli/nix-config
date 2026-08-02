@@ -7,7 +7,10 @@ readonly REPO_SSH="git@github.com:xnixjoyer/nixos-config.git"
 readonly CACHE_URL="https://attic.xuyh0120.win/lantian"
 readonly CACHE_KEY="lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc="
 
-HOST=""
+case "$(hostname -s)" in
+  nyx|aether) HOST="$(hostname -s)" ;;
+  *) HOST="" ;;
+esac
 MODE="both"
 AUTO_YES=0
 
@@ -20,7 +23,8 @@ while (($#)); do
     --both) MODE="both" ;;
     --yes|-y) AUTO_YES=1 ;;
     --help|-h)
-      printf 'Verwendung: config-update --nyx|--aether [--both|--mango|--niri] [--yes]\n'
+      printf 'Verwendung: config-update [--nyx|--aether] [--both|--mango|--niri] [--yes]\n'
+      printf 'Ohne Hostoption wird der aktuelle Hostname verwendet.\n'
       exit 0
       ;;
     *) printf 'Fehler: unbekannte Option: %s\n' "$1" >&2; exit 2 ;;
@@ -28,7 +32,10 @@ while (($#)); do
   shift
 done
 
-[[ -n "$HOST" ]] || { printf 'Fehler: --nyx oder --aether fehlt.\n' >&2; exit 2; }
+[[ -n "$HOST" ]] || {
+  printf 'Fehler: Host konnte nicht erkannt werden. Nutze --nyx oder --aether.\n' >&2
+  exit 2
+}
 [[ "$EUID" -ne 0 ]] || { printf 'Fehler: nicht als root starten.\n' >&2; exit 1; }
 [[ "$(id -un)" == "$TARGET_USER" ]] || { printf 'Fehler: als %s starten.\n' "$TARGET_USER" >&2; exit 1; }
 
@@ -50,7 +57,11 @@ read -r AHEAD BEHIND < <(git -C "$REPO" rev-list --left-right --count "HEAD...$U
 
 STASHED=0
 if ((BEHIND > 0)); then
-  mapfile -t LOCAL < <({ git -C "$REPO" diff --name-only; git -C "$REPO" diff --cached --name-only; git -C "$REPO" ls-files --others --exclude-standard; } | sort -u)
+  mapfile -t LOCAL < <({
+    git -C "$REPO" diff --name-only
+    git -C "$REPO" diff --cached --name-only
+    git -C "$REPO" ls-files --others --exclude-standard
+  } | sort -u)
   mapfile -t REMOTE_PATHS < <(git -C "$REPO" diff --name-only "HEAD..$UPSTREAM")
 
   for local_path in "${LOCAL[@]}"; do
@@ -67,13 +78,17 @@ if ((BEHIND > 0)); then
     STASHED=1
   fi
 
+  printf '\n==> Neue GitHub-Konfiguration wird übernommen\n'
   git -C "$REPO" merge --ff-only "$UPSTREAM"
+
   if ((STASHED)); then
     git -C "$REPO" stash pop --quiet || {
       printf 'Fehler: Wiederherstellung hatte Konflikte; die Sicherung bleibt in git stash.\n' >&2
       exit 1
     }
   fi
+else
+  printf '\n==> Repository ist bereits auf dem neuesten GitHub-Stand\n'
 fi
 
 CACHE_OPTIONS=(
