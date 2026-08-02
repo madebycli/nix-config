@@ -108,7 +108,9 @@ fi
 printf '\n==> System wird aktiviert\n'
 sudo nixos-rebuild switch --flake "$REPO#$PROFILE" "${CACHE_OPTIONS[@]}"
 
-printf '\n==> TRIM wird nach kurzer Pause ausgeführt\n'
-sudo systemctl start nixos-config-fstrim.service
+printf '\n==> TRIM wird für den nächsten Neustart vorgemerkt\n'
+sudo install -d -m 0755 /var/lib/nixos-config
+sudo touch /var/lib/nixos-config/fstrim-pending
 
 printf '\nFertig. Aktiver Stand: %s#%s\n' "$REPO" "$PROFILE"
+printf 'Nach dem nächsten Neustart läuft fstrim automatisch genau einmal.\n'
