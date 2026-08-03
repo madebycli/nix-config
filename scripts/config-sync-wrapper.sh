@@ -50,9 +50,9 @@ if [[ "$COMMAND" == push || "$COMMAND" == sync ]]; then
   name="$(git -C "$REPO" config user.name || true)"
   email="$(git -C "$REPO" config user.email || true)"
   if [[ -z "$name" ]]; then
-    printf 'Git-Name [xnixjoyer]: '
+    printf 'Git-Name [madebycli]: '
     read -r name
-    git -C "$REPO" config user.name "${name:-xnixjoyer}"
+    git -C "$REPO" config user.name "${name:-madebycli}"
   fi
   if [[ -z "$email" ]]; then
     printf 'Git-E-Mail: '

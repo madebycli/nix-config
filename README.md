@@ -34,7 +34,23 @@ Zusätzlich werden diese Benutzerkonfigurationen manuell und versioniert synchro
 ```
 
 > [!IMPORTANT]
-> `hardware-configuration.nix` bleibt **lokal pro Rechner**. Sie wird bei der Installation aus `/etc/nixos/hardware-configuration.nix` übernommen und nicht zwischen `nyx` und `aether` synchronisiert.
+> `hardware-configuration.nix` bleibt **lokal pro Rechner**. Im Repository liegt für jeden Host ausschließlich ein leerer, getrackter Platzhalter. Der Installer ersetzt nur die Datei des ausgewählten Hosts durch `/etc/nixos/hardware-configuration.nix` und schützt sie lokal mit `skip-worktree`. Echte Hardwaredateien dürfen niemals ins Remote gelangen.
+
+### Repository-Adressen
+
+```text
+HTTPS: https://github.com/madebycli/nix-config.git
+SSH:   git@github.com:madebycli/nix-config.git
+Flake: github:madebycli/nix-config
+```
+
+Manueller Clone, falls er für Diagnosezwecke benötigt wird:
+
+```bash
+git clone https://github.com/madebycli/nix-config.git
+# oder
+git clone git@github.com:madebycli/nix-config.git
+```
 
 ---
 
@@ -42,7 +58,7 @@ Zusätzlich werden diese Benutzerkonfigurationen manuell und versioniert synchro
 
 ```mermaid
 flowchart TB
-    GH["GitHub Repository<br/>xnixjoyer/nixos-config"]
+    GH["GitHub Repository<br/>madebycli/nix-config"]
 
     subgraph SHARED["Versioniert und gemeinsam"]
         F["flake.nix + flake.lock"]
@@ -102,13 +118,13 @@ Vor dem Start muss eine normale minimale NixOS-Installation vorhanden sein.
 ### Nyx
 
 ```bash
-nix run --refresh github:xnixjoyer/nixos-config#install -- --nyx
+nix run --refresh github:madebycli/nix-config#install -- --nyx
 ```
 
 ### Aether
 
 ```bash
-nix run --refresh github:xnixjoyer/nixos-config#install -- --aether
+nix run --refresh github:madebycli/nix-config#install -- --aether
 ```
 
 ## Desktop-Profile
@@ -123,7 +139,7 @@ nix run --refresh github:xnixjoyer/nixos-config#install -- --aether
 Beispiel für Nyx mit ausschließlich Niri:
 
 ```bash
-nix run --refresh github:xnixjoyer/nixos-config#install -- --nyx --niri
+nix run --refresh github:madebycli/nix-config#install -- --nyx --niri
 ```
 
 ## Installationsablauf
@@ -143,7 +159,8 @@ flowchart TD
     J -- Ja --> L{"Switch bestätigen?"}
     L -- Nein --> M["Build bleibt unter ~/host/result"]
     L -- Ja --> N["nixos-rebuild switch"]
-    N --> O["Dotconfigs sicher initialisieren"]
+    N --> T["TRIM für den nächsten Neustart vormerken"]
+    T --> O["Dotconfigs sicher initialisieren"]
     O --> P["Fertig"]
 ```
 
@@ -219,6 +236,25 @@ sudo nixos-rebuild switch --flake ~/nyx#nyx
 
 Für Aether entsprechend `~/aether` und `#aether` verwenden.
 
+## Automatischer LUKS- und TRIM-Fix
+
+`modules/nixos/storage-tuning.nix` wertet die lokale Hardwaredatei über `hardwareConfigPath` aus. Für jedes dort gefundene LUKS-Gerät werden automatisch diese Optionen gesetzt:
+
+```nix
+bypassWorkqueues = true;
+allowDiscards = true;
+```
+
+Es steht deshalb **keine manuell eingetragene LUKS-UUID** in `hosts/nyx/default.nix` oder `hosts/aether/default.nix`.
+
+Nach einem erfolgreichen Installer-, `config-update`- oder `system-update`-Switch wird folgende Markierung angelegt:
+
+```text
+/var/lib/nixos-config/fstrim-pending
+```
+
+Beim nächsten Boot wartet `nixos-config-fstrim.service` zehn Sekunden, führt `fstrim -v /` aus und entfernt die Markierung. Der reguläre NixOS-fstrim-Dienst bleibt zusätzlich aktiviert.
+
 ---
 
 # Flake-Updates
@@ -243,6 +279,22 @@ getestete flake.lock wird anschließend versioniert
 
 > [!WARNING]
 > `flake.lock` nicht löschen. Aktualisieren statt löschen.
+
+## System- und Konfigurationsupdates
+
+Die vollständigen Abläufe und Input-Gruppen stehen in [UPDATES.md](UPDATES.md).
+
+| Befehl | Wirkung |
+|---|---|
+| `config-update` | Neue Konfigurationscommits sicher per Fast-Forward holen, bauen und erst danach aktivieren |
+| `system-update` | Alle Flake-Inputs aktualisieren |
+| `system-update base` | Nur `nixpkgs` und `nix-cachyos-kernel` aktualisieren |
+| `system-update packages` | Nur `nixpkgs` aktualisieren |
+| `system-update kernel` | Nur `nix-cachyos-kernel` aktualisieren |
+| `system-update desktop` | `home-manager`, Mango, Noctalia und Noctalia-Greeter aktualisieren |
+| `system-rollback` | Auf die vorherige NixOS-Systemgeneration wechseln |
+
+`system-update base` setzt Mango, Noctalia und den Greeter **nicht** auf neue eigene Git-Revisionen. Schlägt ein Input-Update oder Build fehl, stellt `system-update` die vorherige `flake.lock` wieder her.
 
 ## Nach erfolgreicher Neuinstallation aktualisierte Inputs speichern
 
@@ -324,7 +376,7 @@ Die Datei `sync/paths.conf` enthält:
 .config/noctalia
 ```
 
-Der Repository-Spiegel liegt unter:
+Der Repository-Spiegel liegt nach seiner ersten bewussten Übernahme unter:
 
 ```text
 config/home/.config/
@@ -332,6 +384,9 @@ config/home/.config/
 ├── niri/
 └── noctalia/
 ```
+
+> [!NOTE]
+> Der wiederhergestellte Stand enthält diesen Spiegel noch nicht. Die Dateien müssen später auf Nyx aus den vorhandenen Verzeichnissen unter `~/.config/mango`, `~/.config/niri` und `~/.config/noctalia` mit `config-sync` übernommen werden. Es werden keine Dotconfigs erfunden oder leer vorgefüllt.
 
 ## Schnellübersicht
 
@@ -583,7 +638,7 @@ config-sync --repo ~/nyx --scope nixos push
 ├── modules/
 │   ├── home/
 │   └── nixos/
-├── config/
+├── config/                    # entsteht erst beim ersten Dotconfig-Upload
 │   └── home/
 │       └── .config/
 │           ├── mango/

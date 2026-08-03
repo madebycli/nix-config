@@ -1,7 +1,9 @@
 # Update-Befehle
 
 Diese Konfiguration trennt Änderungen am GitHub-Repository von Updates der
-Flake-Inputs. Alle Befehle erkennen `nyx` oder `aether` automatisch.
+Flake-Inputs. Alle Befehle erkennen `nyx` oder `aether` automatisch. Das erwartete
+Remote ist `https://github.com/madebycli/nix-config.git` oder
+`git@github.com:madebycli/nix-config.git`. Zurück zur [README](README.md).
 
 ## Übersicht
 
@@ -34,6 +36,9 @@ noctalia-greeter
 nixpkgs
 nix-cachyos-kernel
 ```
+
+Dieser Modus aktualisiert **nicht** die eigenen Git-Revisionen von Mango,
+Noctalia, Noctalia-Greeter oder Home Manager.
 
 ### Packages
 

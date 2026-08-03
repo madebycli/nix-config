@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 EXPECTED_REMOTES = {
-    "https://github.com/xnixjoyer/nixos-config.git",
-    "git@github.com:xnixjoyer/nixos-config.git",
+    "https://github.com/madebycli/nix-config.git",
+    "git@github.com:madebycli/nix-config.git",
 }
 MIRROR_PREFIX = Path("config/home")
 PATHS_FILE = Path("sync/paths.conf")

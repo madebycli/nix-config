@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 readonly TARGET_USER="xxxxx"
-readonly REPO_HTTPS="https://github.com/xnixjoyer/nixos-config.git"
-readonly REPO_SSH="git@github.com:xnixjoyer/nixos-config.git"
+readonly REPO_HTTPS="https://github.com/madebycli/nix-config.git"
+readonly REPO_SSH="git@github.com:madebycli/nix-config.git"
 readonly CACHE_URL="https://attic.xuyh0120.win/lantian"
 readonly CACHE_KEY="lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc="
 
