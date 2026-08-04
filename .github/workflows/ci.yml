@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  systems:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@61cbfe2efc2d4e7a8a6d56967c3c1058e846c858 # v3.21.9
+
+      - name: Verify source and lock file
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/config-sync.py
+          for script in scripts/*.sh; do
+            bash -n "$script"
+          done
+          nix flake lock
+          git diff --exit-code -- flake.lock
+
+      - name: Install CI-only hardware stubs
+        run: |
+          set -euo pipefail
+          for host in nyx aether; do
+            cat > "hosts/$host/hardware-configuration.nix" <<'EOF'
+          { ... }:
+          {
+            fileSystems."/" = {
+              device = "none";
+              fsType = "tmpfs";
+              options = [ "mode=0755" ];
+            };
+            fileSystems."/boot" = {
+              device = "none";
+              fsType = "tmpfs";
+            };
+          }
+          EOF
+          done
+
+      - name: Evaluate flake outputs
+        run: |
+          set -euo pipefail
+          nix flake show --no-write-lock-file
+          nix eval --raw .#nixosConfigurations.nyx.config.networking.hostName
+          nix eval --raw .#nixosConfigurations.aether.config.networking.hostName
+
+      - name: Build Nyx
+        run: |
+          set -euo pipefail
+          nix build .#nixosConfigurations.nyx.config.system.build.toplevel \
+            --no-write-lock-file --print-build-logs
+
+      - name: Build Aether
+        run: |
+          set -euo pipefail
+          nix build .#nixosConfigurations.aether.config.system.build.toplevel \
+            --no-write-lock-file --print-build-logs
