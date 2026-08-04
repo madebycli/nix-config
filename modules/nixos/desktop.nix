@@ -52,7 +52,7 @@
 
     winetricks
     wineWow64Packages.waylandFull
-
+    firefox
     mpv
     ffmpeg
     gpu-screen-recorder
