@@ -11,6 +11,11 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    nix-pkgs = {
+      url = "github:madebycli/nix-pkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -77,9 +82,13 @@
         ./modules/flatpak
 
         home-manager.nixosModules.home-manager
+        inputs.nix-pkgs.nixosModules.twintaillauncher
 
         {
+          programs.twintaillauncher.enable = true;
+
           environment.systemPackages = [
+            inputs.nix-pkgs.packages.${system}.helium
             configSyncProgram
             configUpdateProgram
             systemUpdateProgram
