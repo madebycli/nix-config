@@ -28,13 +28,13 @@ Each host also provides dedicated Mango-only and Niri-only profiles.
 - Mango and Niri sessions with Noctalia, Noctalia Greeter, and Home Manager
 - CachyOS kernel integration with a configured binary cache
 - Native Flatpak integration
+- Helium Browser and TwintailLauncher from [`madebycli/nix-pkgs`](https://github.com/madebycli/nix-pkgs)
 - Safe local handling of `hardware-configuration.nix`
 - Build-before-switch installation and update flow
 - Automatic lock-file recovery when an input update or build fails
 - LUKS tuning and a one-time TRIM pass after successful system changes
 - Manual, versioned synchronization for Mango, Niri, and Noctalia dotfiles
 - System rollback and configuration recovery commands
-- Companion application catalog through [`madebycli/nix-pkgs`](https://github.com/madebycli/nix-pkgs)
 
 ## Fresh installation or reinstall
 
@@ -71,7 +71,13 @@ The installer:
 system-update
 ```
 
-`system-update` refreshes every flake input declared by this configuration, builds the active host profile, switches only after a successful build, and restores the previous `flake.lock` if the update fails.
+`system-update` refreshes every flake input declared by this configuration, including the application catalog, builds the active host profile, switches only after a successful build, and restores the previous `flake.lock` if the update fails.
+
+Update Nixpkgs and the application catalog without changing the desktop or kernel inputs:
+
+```bash
+system-update packages
+```
 
 Pull newer configuration code from GitHub without changing the input set:
 
@@ -87,21 +93,26 @@ system-rollback
 
 ## Application catalog
 
-Desktop applications and terminal tools maintained outside this system configuration are collected in [`madebycli/nix-pkgs`](https://github.com/madebycli/nix-pkgs).
+This configuration consumes [`madebycli/nix-pkgs`](https://github.com/madebycli/nix-pkgs) as a normal locked flake input.
 
-Add one catalog package:
+The system profile installs:
+
+- [`Helium Browser`](https://github.com/madebycli/helium-nix) from the catalog package;
+- [`TwintailLauncher`](https://github.com/madebycli/twintail-nix) through the catalog's NixOS module.
+
+Both are updated by `system-update` and `system-update packages`. Their dedicated repositories verify new upstream releases before the catalog accepts them, and this configuration still performs its own complete NixOS build before switching.
+
+Install another catalog package into a standalone Nix profile:
 
 ```bash
 nix profile add github:madebycli/nix-pkgs#<package>
 ```
 
-Update every package in the current Nix profile:
+Update standalone profile packages separately:
 
 ```bash
 nix profile upgrade --all --refresh
 ```
-
-Profile-managed packages and system-managed flake inputs are separate update paths. `system-update` updates this NixOS configuration; `nix profile upgrade --all --refresh` updates standalone profile packages.
 
 ## Desktop profiles
 
@@ -119,6 +130,7 @@ The most recently activated profile is remembered by the local tooling and reuse
 |---|---|
 | `config-update` | Pull configuration changes, build, and optionally activate them |
 | `system-update` | Update all declared flake inputs, build, switch, and publish a safe lock-file update when possible |
+| `system-update packages` | Update Nixpkgs and the madebycli application catalog |
 | `system-rollback` | Switch to the previous NixOS system generation |
 | `config-sync` | Compare, pull, push, or synchronize managed configuration files |
 | `save-config` | Save selected local configuration changes into the repository mirror |
