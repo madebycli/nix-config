@@ -10,9 +10,9 @@ readonly CACHE_KEY="lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc="
 usage() {
   cat <<'USAGE'
 Verwendung:
-  system-update              alle Flake-Inputs aktualisieren
+  system-update              alle Flake-Inputs inklusive Anwendungskatalog
   system-update base         Nixpkgs und CachyOS-Kernel
-  system-update packages     nur Nixpkgs/Systempakete
+  system-update packages     Nixpkgs und Anwendungskatalog
   system-update kernel       nur CachyOS-Kernel
   system-update desktop      Home Manager, Mango, Noctalia und Greeter
 
@@ -24,13 +24,13 @@ USAGE
 MODE="${1:-all}"
 case "$MODE" in
   all)
-    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter)
+    INPUTS=(nixpkgs nix-pkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter)
     ;;
   base)
     INPUTS=(nixpkgs nix-cachyos-kernel)
     ;;
   packages)
-    INPUTS=(nixpkgs)
+    INPUTS=(nixpkgs nix-pkgs)
     ;;
   kernel)
     INPUTS=(nix-cachyos-kernel)
