@@ -2,12 +2,12 @@
 
 let
   managedPackages = [
-    "app.twintaillauncher.ttl"
+    #"app.twintaillauncher.ttl"
     "com.github.tchx84.Flatseal"
     "gg.norisk.NoRiskClientLauncherV3"
     "io.mrarm.mcpelauncher"
-    "moe.launcher.sleepy-launcher"
-    "moe.launcher.the-honkers-railway-launcher"
+    #"moe.launcher.sleepy-launcher"
+    #"moe.launcher.the-honkers-railway-launcher"
   ];
 
   packageArguments =
