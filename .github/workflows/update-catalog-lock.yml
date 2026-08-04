@@ -1,0 +1,123 @@
+name: Update application catalog lock
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "integration/**"
+    paths:
+      - flake.nix
+      - .github/workflows/update-catalog-lock.yml
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - .github/workflows/update-catalog-lock.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-lock-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout target revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event_name == 'push' && github.ref_name || 'main' }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@61cbfe2efc2d4e7a8a6d56967c3c1058e846c858 # v3.21.9
+
+      - name: Refresh application catalog input
+        id: update
+        run: |
+          set -euo pipefail
+          nix flake update nix-pkgs --refresh
+
+          unexpected="$(git diff --name-only | grep -Ev '^flake\.lock$' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected files changed:" >&2
+            printf '%s\n' "$unexpected" >&2
+            exit 1
+          fi
+
+          if git diff --quiet -- flake.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "The application catalog lock is current."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git --no-pager diff --check
+            git --no-pager diff --stat -- flake.lock
+          fi
+
+      - name: Install CI-only hardware stubs
+        run: |
+          set -euo pipefail
+          for host in nyx aether; do
+            cat > "hosts/$host/hardware-configuration.nix" <<'EOF'
+          { ... }:
+          {
+            fileSystems."/" = {
+              device = "none";
+              fsType = "tmpfs";
+              options = [ "mode=0755" ];
+            };
+            fileSystems."/boot" = {
+              device = "none";
+              fsType = "tmpfs";
+            };
+          }
+          EOF
+          done
+
+      - name: Validate both systems
+        run: |
+          set -euo pipefail
+          nix flake show --no-write-lock-file
+          nix build .#nixosConfigurations.nyx.config.system.build.toplevel \
+            --no-write-lock-file --print-build-logs
+          nix build .#nixosConfigurations.aether.config.system.build.toplevel \
+            --no-write-lock-file --print-build-logs
+
+      - name: Print generated lock file for pull-request review
+        if: github.event_name == 'pull_request' && steps.update.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          printf '%s\n' '----- BEGIN GENERATED flake.lock -----'
+          cat flake.lock
+          printf '%s\n' '----- END GENERATED flake.lock -----'
+
+      - name: Publish validated lock file
+        if: github.event_name != 'pull_request' && steps.update.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          branch="$(git branch --show-current)"
+          test -n "$branch"
+          git fetch --no-tags origin "$branch"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$branch")" || {
+            echo "$branch advanced during validation; leaving publication to the next run" >&2
+            exit 1
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- flake.lock
+          git commit -m "chore(update): refresh application catalog lock"
+
+          git remote set-url origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin "HEAD:$branch"
+          git remote set-url origin \
+            "https://github.com/${GITHUB_REPOSITORY}.git"
