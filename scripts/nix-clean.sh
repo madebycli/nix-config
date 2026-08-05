@@ -7,12 +7,12 @@ readonly DEFAULT_BACKUPS=5
 
 usage() {
   cat <<'USAGE'
-Verwendung:
-  nix-clean                 aktuelle Generation + 5 Backups behalten
-  nix-clean ANZAHL          aktuelle Generation + 1 bis 20 Backups behalten
-  nix-clean --dry-run [N]   nur anzeigen, nichts löschen
-  nix-clean list            Generationen anzeigen
-  nix-clean --yes [N]       ohne Rückfrage ausführen
+Usage:
+  nix-clean                 keep current generation plus 5 backups
+  nix-clean COUNT           keep current generation plus 1 to 20 backups
+  nix-clean --dry-run [N]   show selected generations
+  nix-clean list            list generations
+  nix-clean --yes [N]       skip confirmation
 USAGE
 }
 
@@ -32,24 +32,25 @@ list_generations() {
   local current_target boot_target link generation target status date
   current_target="$(readlink -f /run/current-system)"
   boot_target="$(readlink -f "$PROFILE")"
-  printf '%-7s %-18s %s\n' 'GEN' 'DATUM' 'STATUS'
-  printf '%-7s %-18s %s\n' '-------' '------------------' '------------------'
+  printf '%-7s %-19s %s\n' 'GEN' 'DATE' 'STATUS'
+  printf '%-7s %-19s %s\n' '-------' '-------------------' '------------------'
   while IFS= read -r link; do
     [[ -n "$link" ]] || continue
     generation="$(generation_number "$link")"
     target="$(readlink -f "$link")"
-    status="Backup"
-    [[ "$target" == "$boot_target" ]] && status="Boot-Standard"
-    [[ "$target" == "$current_target" ]] && status="Läuft aktuell"
-    [[ "$target" == "$current_target" && "$target" == "$boot_target" ]] && status="Aktuell + Boot"
+    status="backup"
+    [[ "$target" == "$boot_target" ]] && status="boot default"
+    [[ "$target" == "$current_target" ]] && status="running"
+    [[ "$target" == "$current_target" && "$target" == "$boot_target" ]] && status="running + boot"
     date="$(stat -c '%y' "$link" 2>/dev/null | cut -d. -f1 || true)"
-    printf '%-7s %-18s %s\n' "$generation" "${date:-unbekannt}" "$status"
+    printf '%-7s %-19s %s\n' "$generation" "${date:-unknown}" "$status"
   done < <(generation_links)
 }
 
 DRY_RUN=0
 ASSUME_YES=0
 BACKUPS="$DEFAULT_BACKUPS"
+number_seen=0
 
 if [[ "${1:-}" == "list" ]]; then
   [[ $# -eq 1 ]] || { usage; exit 2; }
@@ -62,28 +63,31 @@ while (($#)); do
     --dry-run) DRY_RUN=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
     --help|-h|help) usage; exit 0 ;;
-    [0-9]*) BACKUPS="$1" ;;
-    *) usage; printf '\nFehler: unbekanntes Argument: %s\n' "$1" >&2; exit 2 ;;
+    [0-9]*)
+      ((number_seen == 0)) || { printf 'Error: only one backup count is allowed.\n' >&2; exit 2; }
+      BACKUPS="$1"
+      number_seen=1
+      ;;
+    *) usage; printf '\nError: unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac
   shift
 done
 
 [[ "$BACKUPS" =~ ^([1-9]|1[0-9]|20)$ ]] || {
-  printf 'Fehler: Die Zahl der Backups muss zwischen 1 und 20 liegen.\n' >&2
+  printf 'Error: backup count must be between 1 and 20.\n' >&2
   exit 2
 }
-[[ "$EUID" -ne 0 ]] || { printf 'Fehler: nicht als root starten. Das Skript verwendet sudo selbst.\n' >&2; exit 1; }
-[[ "$(id -un)" == "$TARGET_USER" ]] || { printf 'Fehler: als Benutzer %s starten.\n' "$TARGET_USER" >&2; exit 1; }
-[[ -L /run/current-system && -L "$PROFILE" ]] || { printf 'Fehler: NixOS-Systemprofil nicht gefunden.\n' >&2; exit 1; }
+[[ "$EUID" -ne 0 ]] || { printf 'Error: do not run as root; sudo is used internally.\n' >&2; exit 1; }
+[[ "$(id -un)" == "$TARGET_USER" ]] || { printf 'Error: run as user %s.\n' "$TARGET_USER" >&2; exit 1; }
+[[ -L /run/current-system && -L "$PROFILE" ]] || { printf 'Error: NixOS system profile not found.\n' >&2; exit 1; }
 
 mapfile -t LINKS < <(generation_links)
-((${#LINKS[@]} > 0)) || { printf 'Fehler: keine Systemgenerationen gefunden.\n' >&2; exit 1; }
+((${#LINKS[@]} > 0)) || { printf 'Error: no system generations found.\n' >&2; exit 1; }
 
 current_target="$(readlink -f /run/current-system)"
 boot_target="$(readlink -f "$PROFILE")"
 [[ "$current_target" == "$boot_target" ]] || {
-  printf 'Abbruch: Laufendes System und Boot-Standard unterscheiden sich.\n' >&2
-  printf 'Nach einem Rollback zuerst bewusst neu bauen/switchten oder den Zustand prüfen.\n' >&2
+  printf 'Error: running system and boot default differ.\n' >&2
   exit 1
 }
 
@@ -94,11 +98,10 @@ for link in "${LINKS[@]}"; do
     break
   fi
 done
-[[ -n "$current_generation" ]] || { printf 'Fehler: laufende Generation konnte nicht ermittelt werden.\n' >&2; exit 1; }
+[[ -n "$current_generation" ]] || { printf 'Error: running generation could not be resolved.\n' >&2; exit 1; }
 latest_generation="$(generation_number "${LINKS[0]}")"
 [[ "$current_generation" == "$latest_generation" ]] || {
-  printf 'Abbruch: Die laufende Generation %s ist nicht die neueste Generation %s.\n' "$current_generation" "$latest_generation" >&2
-  printf 'So wird verhindert, dass ein noch getesteter neuerer Stand gelöscht wird.\n' >&2
+  printf 'Error: running generation %s is not the latest generation %s.\n' "$current_generation" "$latest_generation" >&2
   exit 1
 }
 
@@ -108,30 +111,23 @@ for ((index=keep_total; index<${#LINKS[@]}; index++)); do
   DELETE+=("$(generation_number "${LINKS[$index]}")")
 done
 
-printf '\nNixOS-Systemgenerationen: %d\n' "${#LINKS[@]}"
-printf 'Geschützt: aktuelle Generation %s + %d Backup(s)\n' "$current_generation" "$BACKUPS"
+printf 'Generations: %d\n' "${#LINKS[@]}"
+printf 'Keep: current %s + %d backup(s)\n' "$current_generation" "$BACKUPS"
 if ((${#DELETE[@]} == 0)); then
-  printf 'Nichts zu löschen.\n'
+  printf 'Remove: none\n'
   exit 0
 fi
-printf 'Zu löschen (%d): %s\n' "${#DELETE[@]}" "${DELETE[*]}"
+printf 'Remove: %s\n' "${DELETE[*]}"
 
-if ((DRY_RUN == 1)); then
-  printf '\nDry Run: Es wurde nichts verändert.\n'
-  exit 0
-fi
+((DRY_RUN == 1)) && exit 0
 
 if ((ASSUME_YES == 0)); then
-  read -r -p $'Alte Systemgenerationen löschen und danach Garbage Collection starten? [j/N] ' answer
-  case "$answer" in j|J|ja|Ja|JA|y|Y|yes|YES) ;; *) printf 'Abgebrochen.\n'; exit 0 ;; esac
+  read -r -p 'Delete selected generations and run garbage collection? [y/N] ' answer
+  case "$answer" in y|Y|yes|YES) ;; *) exit 0 ;; esac
 fi
 
 sudo -v
-printf '\n==> Alte Systemgenerationen werden entfernt\n'
 sudo nix-env --profile "$PROFILE" --delete-generations "${DELETE[@]}"
-printf '\n==> Bootmenü wird aus dem laufenden System neu erzeugt\n'
 sudo /run/current-system/bin/switch-to-configuration boot
-printf '\n==> Unerreichbare Store-Pfade werden entfernt\n'
 sudo nix store gc
-printf '\nFertig. Aktuelle Generation und %d Backup(s) bleiben erhalten.\n' "$BACKUPS"
-printf 'Für zusätzliche Deduplizierung kann anschließend `nix-optimize` ausgeführt werden.\n'
+printf 'Remaining: current %s + %d backup(s)\n' "$current_generation" "$BACKUPS"

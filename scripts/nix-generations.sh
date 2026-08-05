@@ -5,9 +5,9 @@ readonly PROFILE=/nix/var/nix/profiles/system
 
 usage() {
   cat <<'USAGE'
-Verwendung:
+Usage:
   nix-generations
-  nix-generations --last ANZAHL
+  nix-generations --last COUNT
   nix-generations --diff GENERATION_A GENERATION_B
 USAGE
 }
@@ -27,7 +27,10 @@ generation_number() {
 find_generation_link() {
   local generation="$1"
   local link="/nix/var/nix/profiles/system-${generation}-link"
-  [[ -L "$link" ]] || { printf 'Fehler: Systemgeneration %s existiert nicht.\n' "$generation" >&2; exit 1; }
+  [[ -L "$link" ]] || {
+    printf 'Error: system generation %s does not exist.\n' "$generation" >&2
+    exit 1
+  }
   printf '%s\n' "$link"
 }
 
@@ -37,8 +40,8 @@ print_list() {
   current_target="$(readlink -f /run/current-system)"
   boot_target="$(readlink -f "$PROFILE")"
 
-  printf '%-7s %-18s %-18s %s\n' 'GEN' 'DATUM' 'STATUS' 'CLOSURE'
-  printf '%-7s %-18s %-18s %s\n' '-------' '------------------' '------------------' '----------'
+  printf '%-7s %-19s %-18s %s\n' 'GEN' 'DATE' 'STATUS' 'CLOSURE'
+  printf '%-7s %-19s %-18s %s\n' '-------' '-------------------' '------------------' '----------'
 
   while IFS= read -r link; do
     [[ -n "$link" ]] || continue
@@ -46,14 +49,14 @@ print_list() {
     ((limit == 0 || count <= limit)) || break
     generation="$(generation_number "$link")"
     target="$(readlink -f "$link")"
-    status="Backup"
-    [[ "$target" == "$boot_target" ]] && status="Boot-Standard"
-    [[ "$target" == "$current_target" ]] && status="Läuft aktuell"
-    [[ "$target" == "$current_target" && "$target" == "$boot_target" ]] && status="Aktuell + Boot"
+    status="backup"
+    [[ "$target" == "$boot_target" ]] && status="boot default"
+    [[ "$target" == "$current_target" ]] && status="running"
+    [[ "$target" == "$current_target" && "$target" == "$boot_target" ]] && status="running + boot"
     date="$(stat -c '%y' "$link" 2>/dev/null | cut -d. -f1 || true)"
     size="$(nix path-info -Sh "$link" 2>/dev/null | awk '{$1=""; sub(/^ /,""); print}' || true)"
-    [[ -n "$size" ]] || size="unbekannt"
-    printf '%-7s %-18s %-18s %s\n' "$generation" "${date:-unbekannt}" "$status" "$size"
+    [[ -n "$size" ]] || size="unknown"
+    printf '%-7s %-19s %-18s %s\n' "$generation" "${date:-unknown}" "$status" "$size"
   done < <(generation_links)
 }
 
@@ -68,7 +71,6 @@ case "${1:-}" in
     [[ $# -eq 3 && "$2" =~ ^[0-9]+$ && "$3" =~ ^[0-9]+$ ]] || { usage; exit 2; }
     first="$(find_generation_link "$2")"
     second="$(find_generation_link "$3")"
-    printf 'Unterschiede: Generation %s -> %s\n\n' "$2" "$3"
     nix store diff-closures "$first" "$second"
     ;;
   *) usage; exit 2 ;;

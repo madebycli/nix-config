@@ -4,50 +4,44 @@ set -Eeuo pipefail
 case "${1:-}" in
   ""|--help|-h|help) ;;
   *)
-    printf 'Fehler: nix-help akzeptiert keine Argumente.\n' >&2
+    printf 'Error: nix-help does not accept arguments.\n' >&2
     exit 2
     ;;
 esac
 
 cat <<'HELP'
-NixOS-Werkzeuge dieser Konfiguration
+NixOS command suite
 
-  config-update              Konfigurationscommits holen, bauen und aktivieren
+  config-update              Pull configuration commits, build, and activate
 
-  nix-status                 Lokale System-, Store- und Git-Übersicht
-  nix-status --online        Zusätzlich den GitHub-Stand prüfen
+  nix-status                 Show the local system, store, and Git overview
+  nix-status --online        Include the GitHub relationship
 
-  nix-updates                Alle Flake- und Profilupdates unverbindlich prüfen
-  nix-updates base           Nixpkgs und CachyOS-Kernel prüfen
-  nix-updates packages       Nixpkgs und Profilpakete prüfen
-  nix-updates kernel         Nur den CachyOS-Kernel prüfen
-  nix-updates desktop        Home Manager, Mango, Noctalia und Greeter prüfen
-  nix-updates profiles       Nur persönliche Nix-Profilpakete prüfen
-  nix-updates --full         Neue System-Closure bauen und Paketversionen vergleichen
+  nix-updates                Preview all Flake and profile updates
+  nix-updates base           Preview Nixpkgs and CachyOS kernel updates
+  nix-updates packages       Preview Nixpkgs and profile updates
+  nix-updates kernel         Preview only the CachyOS kernel input
+  nix-updates desktop        Preview Home Manager, Mango, Noctalia, and Greeter
+  nix-updates profiles       Preview only personal Nix profile updates
+  nix-updates --full         Build the candidate system and compare packages
 
-  nix-refresh                Alle Flake-Inputs aktualisieren, bauen und switchen;
-                             danach persönliche Profilpakete aktualisieren
-  nix-refresh base           Nixpkgs und CachyOS-Kernel plus Profilpakete
-  nix-refresh packages       Nixpkgs plus Profilpakete
-  nix-refresh kernel         Nur CachyOS-Kernel
-  nix-refresh desktop        Home Manager, Mango, Noctalia und Greeter
-  nix-refresh profiles       Nur persönliche Nix-Profilpakete
+  nix-refresh                Update every Flake input and personal profile
+  nix-refresh base           Update Nixpkgs, CachyOS kernel, and personal profile
+  nix-refresh packages       Update Nixpkgs and personal profile
+  nix-refresh kernel         Update only the CachyOS kernel input
+  nix-refresh desktop        Update Home Manager, Mango, Noctalia, and Greeter
+  nix-refresh profiles       Update only personal Nix profile packages
 
-  nix-generations            Alle NixOS-Systemgenerationen anzeigen
-  nix-generations --last 10  Nur die letzten zehn anzeigen
-  nix-generations --diff A B Paketunterschiede zwischen Generation A und B
+  nix-generations            List all NixOS system generations
+  nix-generations --last 10  List the latest ten generations
+  nix-generations --diff A B Compare packages between generations A and B
 
-  nix-clean                  Aktuelle Generation plus fünf Backups behalten
-  nix-clean 10               Aktuelle Generation plus zehn Backups behalten
-  nix-clean --dry-run 5      Nur anzeigen, was entfernt würde
-  nix-clean list             Generationen anzeigen, nichts löschen
+  nix-clean                  Keep current generation plus five backups
+  nix-clean 10               Keep current generation plus ten backups
+  nix-clean --dry-run 5      Show generations selected for removal
+  nix-clean list             List generations
 
-  nix-optimize               Identische Dateien im Nix Store deduplizieren
-  nix-rollback               Auf die vorherige NixOS-Systemgeneration wechseln
-
-  nix-help                   Diese Übersicht anzeigen
-
-Hinweis: Diese Befehle sind eigene Programme mit Bindestrich. Sie verändern
-keine offiziellen Unterbefehle wie `nix shell` oder `nix profile`.
+  nix-optimize               Deduplicate identical Nix Store files
+  nix-rollback               Switch to the previous NixOS generation
+  nix-help                   Show this overview
 HELP
-EOF
