@@ -82,8 +82,14 @@
           environment.systemPackages = [
             configSyncProgram
             configUpdateProgram
-            systemUpdateProgram
-            systemRollbackProgram
+            nixHelpProgram
+            nixStatusProgram
+            nixUpdatesProgram
+            nixRefreshProgram
+            nixGenerationsProgram
+            nixCleanProgram
+            nixOptimizeProgram
+            nixRollbackProgram
             scriptUpdateProgram
             saveConfigProgram
           ];
@@ -140,17 +146,7 @@
         name = "config-sync";
         inheritPath = true;
         runtimeInputs = with pkgs; [
-          coreutils
-          diffutils
-          findutils
-          git
-          gnugrep
-          gnused
-          jq
-          nix
-          python3
-          rsync
-          util-linux
+          coreutils diffutils findutils git gnugrep gnused jq nix python3 rsync util-linux
         ];
         text = ''
           exec ${pkgs.bash}/bin/bash \
@@ -169,41 +165,88 @@
       configUpdateProgram = pkgs.writeShellApplication {
         name = "config-update";
         inheritPath = true;
-        runtimeInputs = with pkgs; [
-          coreutils
-          git
-          nix
-        ];
+        runtimeInputs = with pkgs; [ coreutils git nix ];
         text = builtins.readFile ./scripts/update.sh;
         checkPhase = ''
           ${pkgs.bash}/bin/bash -n "$target"
         '';
       };
 
-      systemUpdateProgram = pkgs.writeShellApplication {
-        name = "system-update";
+      nixHelpProgram = pkgs.writeShellApplication {
+        name = "nix-help";
         inheritPath = true;
-        runtimeInputs = with pkgs; [
-          coreutils
-          findutils
-          git
-          jq
-          nix
-        ];
-        text = builtins.readFile ./scripts/system-update.sh;
+        runtimeInputs = with pkgs; [ coreutils ];
+        text = builtins.readFile ./scripts/nix-help.sh;
         checkPhase = ''
           ${pkgs.bash}/bin/bash -n "$target"
         '';
       };
 
-      systemRollbackProgram = pkgs.writeShellApplication {
-        name = "system-rollback";
+      nixStatusProgram = pkgs.writeShellApplication {
+        name = "nix-status";
         inheritPath = true;
-        runtimeInputs = with pkgs; [
-          coreutils
-          nix
-        ];
-        text = builtins.readFile ./scripts/system-rollback.sh;
+        runtimeInputs = with pkgs; [ coreutils findutils gawk git jq nix ];
+        text = builtins.readFile ./scripts/nix-status.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
+      nixUpdatesProgram = pkgs.writeShellApplication {
+        name = "nix-updates";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [ coreutils findutils git jq nix ];
+        text = builtins.readFile ./scripts/nix-updates.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
+      nixRefreshProgram = pkgs.writeShellApplication {
+        name = "nix-refresh";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [ coreutils findutils git jq nix ];
+        text = builtins.readFile ./scripts/nix-refresh.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
+      nixGenerationsProgram = pkgs.writeShellApplication {
+        name = "nix-generations";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [ coreutils findutils gawk nix ];
+        text = builtins.readFile ./scripts/nix-generations.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
+      nixCleanProgram = pkgs.writeShellApplication {
+        name = "nix-clean";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [ coreutils findutils nix ];
+        text = builtins.readFile ./scripts/nix-clean.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
+      nixOptimizeProgram = pkgs.writeShellApplication {
+        name = "nix-optimize";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [ coreutils gawk nix ];
+        text = builtins.readFile ./scripts/nix-optimize.sh;
+        checkPhase = ''
+          ${pkgs.bash}/bin/bash -n "$target"
+        '';
+      };
+
+      nixRollbackProgram = pkgs.writeShellApplication {
+        name = "nix-rollback";
+        inheritPath = true;
+        runtimeInputs = with pkgs; [ coreutils nix ];
+        text = builtins.readFile ./scripts/nix-rollback.sh;
         checkPhase = ''
           ${pkgs.bash}/bin/bash -n "$target"
         '';
@@ -212,15 +255,7 @@
       scriptUpdateProgram = pkgs.writeShellApplication {
         name = "script-update";
         inheritPath = true;
-        runtimeInputs = with pkgs; [
-          coreutils
-          diffutils
-          findutils
-          git
-          jq
-          nix
-          python3
-        ];
+        runtimeInputs = with pkgs; [ coreutils diffutils findutils git jq nix python3 ];
         text = builtins.readFile ./scripts/script-update.sh;
         checkPhase = ''
           ${pkgs.bash}/bin/bash -n "$target"
@@ -230,13 +265,7 @@
       saveConfigProgram = pkgs.writeShellApplication {
         name = "save-config";
         inheritPath = true;
-        runtimeInputs = with pkgs; [
-          coreutils
-          findutils
-          git
-          gnugrep
-          rsync
-        ];
+        runtimeInputs = with pkgs; [ coreutils findutils git gnugrep rsync ];
         text = builtins.readFile ./scripts/save-config.sh;
         checkPhase = ''
           ${pkgs.bash}/bin/bash -n "$target"
@@ -246,15 +275,7 @@
       installProgram = pkgs.writeShellApplication {
         name = "nixos-config-install";
         inheritPath = true;
-        runtimeInputs = with pkgs; [
-          coreutils
-          findutils
-          git
-          gnugrep
-          gnused
-          nix
-          rsync
-        ];
+        runtimeInputs = with pkgs; [ coreutils findutils git gnugrep gnused nix rsync ];
         text = builtins.readFile ./scripts/install.sh;
         checkPhase = ''
           ${pkgs.bash}/bin/bash -n "$target"
@@ -275,48 +296,33 @@
       packages.${system} = {
         install = installProgram;
         update = configUpdateProgram;
-        system-update = systemUpdateProgram;
-        system-rollback = systemRollbackProgram;
+        nix-help = nixHelpProgram;
+        nix-status = nixStatusProgram;
+        nix-updates = nixUpdatesProgram;
+        nix-refresh = nixRefreshProgram;
+        nix-generations = nixGenerationsProgram;
+        nix-clean = nixCleanProgram;
+        nix-optimize = nixOptimizeProgram;
+        nix-rollback = nixRollbackProgram;
         config-sync = configSyncProgram;
         script-update = scriptUpdateProgram;
         save-config = saveConfigProgram;
       };
 
       apps.${system} = {
-        install = {
-          type = "app";
-          program = "${installProgram}/bin/nixos-config-install";
-        };
-
-        update = {
-          type = "app";
-          program = "${configUpdateProgram}/bin/config-update";
-        };
-
-        system-update = {
-          type = "app";
-          program = "${systemUpdateProgram}/bin/system-update";
-        };
-
-        system-rollback = {
-          type = "app";
-          program = "${systemRollbackProgram}/bin/system-rollback";
-        };
-
-        config-sync = {
-          type = "app";
-          program = "${configSyncProgram}/bin/config-sync";
-        };
-
-        script-update = {
-          type = "app";
-          program = "${scriptUpdateProgram}/bin/script-update";
-        };
-
-        save-config = {
-          type = "app";
-          program = "${saveConfigProgram}/bin/save-config";
-        };
+        install = { type = "app"; program = "${installProgram}/bin/nixos-config-install"; };
+        update = { type = "app"; program = "${configUpdateProgram}/bin/config-update"; };
+        nix-help = { type = "app"; program = "${nixHelpProgram}/bin/nix-help"; };
+        nix-status = { type = "app"; program = "${nixStatusProgram}/bin/nix-status"; };
+        nix-updates = { type = "app"; program = "${nixUpdatesProgram}/bin/nix-updates"; };
+        nix-refresh = { type = "app"; program = "${nixRefreshProgram}/bin/nix-refresh"; };
+        nix-generations = { type = "app"; program = "${nixGenerationsProgram}/bin/nix-generations"; };
+        nix-clean = { type = "app"; program = "${nixCleanProgram}/bin/nix-clean"; };
+        nix-optimize = { type = "app"; program = "${nixOptimizeProgram}/bin/nix-optimize"; };
+        nix-rollback = { type = "app"; program = "${nixRollbackProgram}/bin/nix-rollback"; };
+        config-sync = { type = "app"; program = "${configSyncProgram}/bin/config-sync"; };
+        script-update = { type = "app"; program = "${scriptUpdateProgram}/bin/script-update"; };
+        save-config = { type = "app"; program = "${saveConfigProgram}/bin/save-config"; };
       };
     };
 }

@@ -33,12 +33,12 @@ Each host also provides dedicated Mango-only and Niri-only profiles.
 - Automatic lock-file recovery when an input update or build fails
 - LUKS tuning and a one-time TRIM pass after successful system changes
 - Manual, versioned synchronization for Mango, Niri, and Noctalia dotfiles
-- System rollback and configuration recovery commands
+- Integrated status, update preview, generation cleanup, optimization, and rollback tools
 - Companion application catalog through [`madebycli/nix-pkgs`](https://github.com/madebycli/nix-pkgs)
 
 ## Fresh installation or reinstall
 
-Start from a normal minimal NixOS installation with networking, Git, Nix, `sudo`, and `/etc/nixos/hardware-configuration.nix` available. The installer currently expects the configured user account to be named `xxxxx`.
+Start from a normal minimal NixOS installation with networking, Git, Nix, `sudo`, and `/etc/nixos/hardware-configuration.nix` available. The installer expects the configured user account to be named `xxxxx`.
 
 ### Nyx
 
@@ -54,24 +54,52 @@ nix run --refresh github:madebycli/nix-config#install -- --aether
 
 The default profile enables both Mango and Niri. Add `--mango`, `--niri`, or `--both` to select a desktop profile explicitly.
 
-The installer:
+The installer clones or safely fast-forwards the correct repository, copies only the selected host's hardware configuration, protects it with `skip-worktree`, evaluates and builds before switching, initializes managed dotfiles, and schedules a one-time TRIM pass for the next boot.
 
-1. clones or safely fast-forwards the correct host repository;
-2. refreshes the local flake inputs;
-3. copies the machine's current hardware configuration;
-4. protects that file from normal Git synchronization;
-5. builds the selected NixOS profile;
-6. switches only after a successful build;
-7. initializes the managed dotfiles;
-8. schedules a one-time TRIM pass for the next boot.
+## Nix command suite
 
-## Update everything
+Run the built-in overview:
 
 ```bash
-system-update
+nix-help
 ```
 
-`system-update` refreshes every flake input declared by this configuration, builds the active host profile, switches only after a successful build, and restores the previous `flake.lock` if the update fails.
+The commands are standalone programs with a hyphen. They do not replace or wrap official commands such as `nix shell` or `nix profile`.
+
+| Command | Purpose |
+|---|---|
+| `nix-status` | TUI-like overview of generations, Nix Store, closure, disk, Git, and profile packages |
+| `nix-updates` | Preview all selected Flake and personal profile updates without touching the real lock file |
+| `nix-refresh` | Update Flake inputs, build, switch, and update personal profile packages where configured |
+| `nix-generations` | List NixOS system generations or compare two closures |
+| `nix-clean` | Keep the current generation plus a chosen number of rollback generations |
+| `nix-optimize` | Deduplicate identical files in the Nix Store without deleting generations |
+| `nix-rollback` | Switch to the previous NixOS system generation |
+| `nix-help` | Show the complete command overview |
+
+Common examples:
+
+```bash
+nix-status --online
+nix-updates
+nix-updates --full
+nix-refresh
+nix-refresh base
+nix-refresh desktop
+nix-generations
+nix-clean --dry-run 5
+nix-clean 5
+nix-optimize
+nix-rollback
+```
+
+`nix-refresh`, `nix-refresh base`, and `nix-refresh packages` also run:
+
+```bash
+nix profile upgrade --all --refresh
+```
+
+`nix-refresh desktop` updates Home Manager, Mango, Noctalia, and Noctalia Greeter. It does not update Nixpkgs, the CachyOS kernel, or personal profile packages. See [UPDATES.md](UPDATES.md) for the exact groups and safety behavior.
 
 Pull newer configuration code from GitHub without changing the input set:
 
@@ -79,29 +107,18 @@ Pull newer configuration code from GitHub without changing the input set:
 config-update
 ```
 
-Return to the previous NixOS generation:
-
-```bash
-system-rollback
-```
+The former `system-update` and `system-rollback` programs were removed rather than retained as aliases.
 
 ## Application catalog
 
 Desktop applications and terminal tools maintained outside this system configuration are collected in [`madebycli/nix-pkgs`](https://github.com/madebycli/nix-pkgs).
 
-Add one catalog package:
-
 ```bash
 nix profile add github:madebycli/nix-pkgs#<package>
-```
-
-Update every package in the current Nix profile:
-
-```bash
 nix profile upgrade --all --refresh
 ```
 
-Profile-managed packages and system-managed flake inputs are separate update paths. `system-update` updates this NixOS configuration; `nix profile upgrade --all --refresh` updates standalone profile packages.
+Profile-managed packages and system-managed Flake inputs remain separate Nix profiles, but the appropriate `nix-refresh` modes update both in one guided workflow.
 
 ## Desktop profiles
 
@@ -118,8 +135,6 @@ The most recently activated profile is remembered by the local tooling and reuse
 | Command | Purpose |
 |---|---|
 | `config-update` | Pull configuration changes, build, and optionally activate them |
-| `system-update` | Update all declared flake inputs, build, switch, and publish a safe lock-file update when possible |
-| `system-rollback` | Switch to the previous NixOS system generation |
 | `config-sync` | Compare, pull, push, or synchronize managed configuration files |
 | `save-config` | Save selected local configuration changes into the repository mirror |
 | `script-update` | Review and replace maintained helper scripts safely |
@@ -136,25 +151,21 @@ Managed user configuration currently covers:
 
 Real hardware files are never sourced from GitHub during installation. The installer copies `/etc/nixos/hardware-configuration.nix` into the selected host directory and marks the tracked placeholder as `skip-worktree` locally.
 
-System changes follow the same safety model throughout the repository:
+System changes validate the expected repository and remote, refuse unsafe or diverged Git states, preserve local hardware data, build before switching, restore the previous lock file after failures before activation, and keep timestamped local backups where replacement is necessary.
 
-- validate the expected repository and remote;
-- refuse unsafe or diverged Git states;
-- preserve local hardware data;
-- build before switching;
-- restore the previous lock file after failed input updates;
-- avoid switching after a failed build;
-- keep timestamped local backups where replacement is necessary.
+`nix-clean` changes only the NixOS system profile. By default it protects the running generation plus five rollback generations. It refuses to run when the running system and boot default differ or when a newer generation exists, and always supports `--dry-run`.
+
+Automatic weekly garbage collection now removes only already-unreachable store paths. Generation retention is controlled explicitly through `nix-clean`, while automatic weekly store optimization remains enabled.
 
 ## Repository layout
 
 ```text
-flake.nix                 host profiles, applications, and update tools
+flake.nix                 host profiles, applications, and command suite
 hosts/                    nyx and aether definitions
 modules/nixos/            shared NixOS modules
 modules/home/             Home Manager configuration
 modules/flatpak/          Flatpak integration
-scripts/                  installer, updater, rollback, and sync tools
+scripts/                  installer, Nix tools, updater, and sync tools
 sync/                     managed path declarations
 config/home/              versioned user-configuration mirror
 ```

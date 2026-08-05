@@ -137,10 +137,12 @@
       ];
     };
 
+    # Wöchentliche GC entfernt nur bereits unerreichbare Store-Pfade. Alte
+    # NixOS-Systemgenerationen werden gezielt und nach Anzahl mit nix-clean
+    # verwaltet, nicht mehr automatisch nach ihrem Alter.
     gc = {
       automatic = true;
       dates = "weekly";
-      options = "--delete-older-than 30d";
       randomizedDelaySec = "45min";
     };
 
