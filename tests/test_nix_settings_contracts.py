@@ -98,6 +98,19 @@ class FakeAuthBackend:
         return FakeAuthStatus()
 
 
+class FakeSignedOutAuthBackend(FakeAuthBackend):
+    @staticmethod
+    def status(_repo: Path) -> FakeAuthStatus:
+        return FakeAuthStatus(
+            authenticated=False,
+            login=None,
+            permission=None,
+            can_push=False,
+            credential_helper_ready=False,
+            error="Not signed in to GitHub CLI",
+        )
+
+
 class ContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -116,6 +129,17 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(payload["github"]["login"], "madebycli")
         self.assertTrue(payload["github"]["canPush"])
         self.assertNotIn("token", payload["github"])
+
+    def test_signed_out_github_state_is_not_a_global_sync_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = argparse.Namespace(repo=None, offline=True, scope="nixos")
+            payload = self.sync_json.status_payload(
+                FakeSyncBackend(root), FakeSignedOutAuthBackend(), args
+            )
+        self.assertEqual(payload["errors"], [])
+        self.assertFalse(payload["github"]["authenticated"])
+        self.assertEqual(payload["github"]["error"], "Not signed in to GitHub CLI")
 
     def test_helper_mode_mapping(self) -> None:
         self.assertEqual(
