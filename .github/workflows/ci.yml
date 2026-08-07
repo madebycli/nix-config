@@ -11,10 +11,13 @@ permissions:
 jobs:
   contracts:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
       - name: Check Bash syntax
         run: |
+          set -euo pipefail
           bash -n scripts/config-sync-wrapper.sh
           bash -n scripts/nix-status.sh
           bash -n scripts/nix-updates.sh
@@ -22,11 +25,31 @@ jobs:
           bash -n scripts/nix-clean.sh
           bash scripts/nix-generations.sh --help >/dev/null
           bash scripts/nix-clean.sh --help >/dev/null
+
       - name: Compile Python adapters
         run: |
+          set -euo pipefail
           python3 -m py_compile \
             scripts/config-sync.py \
             scripts/config-sync-json.py \
+            scripts/github-cli-auth.py \
             scripts/nix-settings-helper.py
-      - name: Run contract tests
+
+      - name: Run whitebox and blackbox tests
         run: python3 -m unittest discover -s tests -v
+
+      - uses: DeterminateSystems/determinate-nix-action@61cbfe2efc2d4e7a8a6d56967c3c1058e846c858 # v3.21.9
+
+      - name: Evaluate Flake
+        run: |
+          set -euo pipefail
+          nix flake show --no-write-lock-file
+
+      - name: Build config-sync closure
+        run: |
+          set -euo pipefail
+          nix build .#config-sync --no-write-lock-file --print-build-logs
+          test -x ./result/bin/config-sync
+          ./result/bin/config-sync --help | grep -q sync
+          command -v gh >/dev/null || true
+          grep -q 'github-cli-auth.py' scripts/config-sync-wrapper.sh
