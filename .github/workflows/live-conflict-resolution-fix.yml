@@ -19,7 +19,10 @@ jobs:
           ref: feat/github-cli-sync
           fetch-depth: 0
       - name: Apply guarded backend patch
-        run: python3 .github/live_conflict_patch.py
+        run: |
+          set -euo pipefail
+          sed -i "0,/helper = '''/s//helper = r'''/" .github/live_conflict_patch.py
+          python3 .github/live_conflict_patch.py
       - name: Validate backend patch
         run: |
           set -euo pipefail
