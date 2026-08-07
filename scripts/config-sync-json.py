@@ -36,7 +36,8 @@ def status_payload(backend: ModuleType, args: argparse.Namespace) -> dict[str, A
     branch = backend.git(repo, "branch", "--show-current")
     state = backend.load_state(repo)
     local_changes = list(backend.worktree_lines(repo))
-    staged_changes = list(backend.staged(repo))
+    staged_output = backend.git(repo, "diff", "--cached", "--name-only")
+    staged_changes = staged_output.splitlines() if staged_output else []
 
     changes: dict[str, list[str]] = {
         "local": [],
