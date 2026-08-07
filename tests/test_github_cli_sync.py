@@ -300,5 +300,62 @@ class SyncBlackBoxTests(unittest.TestCase):
             self.assertEqual(command("git", "status", "--porcelain", cwd=repo), "")
 
 
+    def test_dotfiles_upload_conflict_can_explicitly_choose_local(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = root / "repo"
+            home = root / "home"
+            command("git", "init", str(repo))
+            configure_identity(repo)
+            (repo / "sync").mkdir(parents=True)
+            mirror_dir = repo / "config/home/.config/example"
+            mirror_dir.mkdir(parents=True)
+            active_dir = home / ".config/example"
+            active_dir.mkdir(parents=True)
+            (repo / "flake.nix").write_text("initial\n", encoding="utf-8")
+            (repo / "sync/paths.conf").write_text(".config/example\n", encoding="utf-8")
+            (repo / "sync/excludes.conf").write_text("**/*.tmp\n", encoding="utf-8")
+            active_file = active_dir / "settings.conf"
+            mirror_file = mirror_dir / "settings.conf"
+            active_file.write_text("base\n", encoding="utf-8")
+            mirror_file.write_text("base\n", encoding="utf-8")
+            command("git", "add", ".", cwd=repo)
+            command("git", "commit", "-m", "initial", cwd=repo)
+
+            with mock.patch.dict(os.environ, {"HOME": str(home)}, clear=False):
+                active, _mirror, _baseline = self.sync.manifests(repo)
+                self.sync.save_state(repo, active, "test")
+                active_file.write_text("local wins\n", encoding="utf-8")
+                mirror_file.write_text("repository changed\n", encoding="utf-8")
+                args = argparse.Namespace(
+                    repo=str(repo),
+                    offline=True,
+                    scope="dotfiles",
+                    message=None,
+                    no_commit=False,
+                    profile=None,
+                    yes=True,
+                    conflict_policy="local",
+                )
+                with mock.patch.object(self.sync, "ensure_remote"):
+                    self.sync.command_push(args)
+                active_after, mirror_after, baseline_after = self.sync.manifests(repo)
+
+            self.assertEqual(mirror_file.read_text(encoding="utf-8"), "local wins\n")
+            self.assertEqual(active_after, mirror_after)
+            self.assertEqual(active_after, baseline_after)
+            self.assertEqual(command("git", "status", "--porcelain", cwd=repo), "")
+
+    def test_dotfiles_upload_conflict_without_choice_remains_blocked(self) -> None:
+        changes = self.sync.ChangeSet((), (), (), (".config/example/settings.conf",))
+        with self.assertRaises(self.sync.SyncError):
+            self.sync.resolve_dotfile_conflicts(
+                Path("/tmp/repo"),
+                changes,
+                policy=None,
+                assume_yes=True,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

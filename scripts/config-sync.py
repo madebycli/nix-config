@@ -314,6 +314,45 @@ def print_changes(changes: ChangeSet, active: Mapping[str, str], mirror: Mapping
     )
 
 
+def resolve_dotfile_conflicts(
+    repo: Path,
+    changes: ChangeSet,
+    *,
+    policy: str | None,
+    assume_yes: bool,
+) -> None:
+    """Resolve only already-classified dotfile conflicts after an explicit choice."""
+    if not changes.conflicts:
+        return
+    if policy not in {"local", "repository"}:
+        raise SyncError(
+            "Dotconfig-Konflikte erkannt. Explizit lokale oder Repository-Version wählen."
+        )
+
+    print("\nKonfliktauflösung:")
+    for relative in changes.conflicts:
+        print(f"  {relative}")
+
+    if policy == "local":
+        if not confirm(
+            "Lokale Versionen für diese Konflikte übernehmen?",
+            assume_yes,
+        ):
+            raise SyncError("Konfliktauflösung abgebrochen.")
+        copy_local_to_mirror(repo, changes.conflicts)
+        print("\nLokale Versionen wurden für die ausgewählten Konflikte übernommen.")
+        return
+
+    backup_root = state_dir(repo) / "backups" / now_stamp()
+    apply_mirror_to_local(
+        repo,
+        changes.conflicts,
+        backup_root,
+        assume_yes=assume_yes,
+    )
+    print(f"\nLokale Konflikt-Backups: {backup_root}")
+
+
 def upstream(repo: Path) -> str | None:
     result = git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", check=False)
     if result:
@@ -761,10 +800,22 @@ def command_push(args: argparse.Namespace) -> None:
         active, mirror, baseline = manifests(repo)
         changes = classify(active, mirror, baseline)
         print_changes(changes, active, mirror)
-        if changes.conflicts:
-            raise SyncError("Dotconfig-Konflikte erkannt. Keine Datei wurde überschrieben.")
         if changes.remote:
             raise SyncError("Repository-Dotconfigs sind neuer. Zuerst pull oder sync ausführen.")
+        if changes.conflicts:
+            policy = getattr(args, "conflict_policy", None)
+            if policy not in {None, "local"}:
+                raise SyncError("Upload kann Konflikte nur explizit mit lokalen Versionen auflösen.")
+            resolve_dotfile_conflicts(
+                repo,
+                changes,
+                policy=policy,
+                assume_yes=args.yes,
+            )
+            active, mirror, baseline = manifests(repo)
+            changes = classify(active, mirror, baseline)
+            if changes.conflicts:
+                raise SyncError("Konflikte blieben nach lokaler Auflösung bestehen.")
         copy_local_to_mirror(repo, changes.local)
 
     changed = commit_and_push(
@@ -807,7 +858,19 @@ def command_pull(args: argparse.Namespace) -> None:
         changes = classify(active, mirror, baseline)
         print_changes(changes, active, mirror)
         if changes.conflicts:
-            raise SyncError("Lokale und entfernte Dotconfigs wurden gleichzeitig geändert.")
+            policy = getattr(args, "conflict_policy", None)
+            if policy not in {None, "repository"}:
+                raise SyncError("Download kann Konflikte nur explizit mit Repository-Versionen auflösen.")
+            resolve_dotfile_conflicts(
+                repo,
+                changes,
+                policy=policy,
+                assume_yes=args.yes,
+            )
+            active, mirror, baseline = manifests(repo)
+            changes = classify(active, mirror, baseline)
+            if changes.conflicts:
+                raise SyncError("Konflikte blieben nach Repository-Auflösung bestehen.")
         backup_root = state_dir(repo) / "backups" / now_stamp()
         apply_mirror_to_local(repo, changes.remote, backup_root, assume_yes=args.yes)
         new_active, new_mirror, _ = manifests(repo)
@@ -834,7 +897,16 @@ def command_sync(args: argparse.Namespace) -> None:
         changes = classify(active, mirror, baseline)
         print_changes(changes, active, mirror)
         if changes.conflicts:
-            raise SyncError("Konflikte erkannt. Keine automatische Gewinnerwahl nach Datum.")
+            resolve_dotfile_conflicts(
+                repo,
+                changes,
+                policy=getattr(args, "conflict_policy", None),
+                assume_yes=args.yes,
+            )
+            active, mirror, baseline = manifests(repo)
+            changes = classify(active, mirror, baseline)
+            if changes.conflicts:
+                raise SyncError("Konflikte blieben nach expliziter Auflösung bestehen.")
 
         backup_root = state_dir(repo) / "backups" / now_stamp()
         apply_mirror_to_local(repo, changes.remote, backup_root, assume_yes=args.yes)
@@ -982,14 +1054,17 @@ def parser() -> argparse.ArgumentParser:
     push = commands.add_parser("push", help="Lokale Änderungen committen und pushen")
     push.add_argument("--message", "-m")
     push.add_argument("--no-commit", action="store_true")
+    push.add_argument("--conflict-policy", choices=("local", "repository"))
 
     pull = commands.add_parser("pull", help="Fast-Forward-Pull und sichere Übernahme")
     pull.add_argument("--no-apply", action="store_true", help="Kein NixOS-Build/Switch")
+    pull.add_argument("--conflict-policy", choices=("local", "repository"))
 
     sync = commands.add_parser("sync", help="Sicherer kombinierter Pull/Push")
     sync.add_argument("--message", "-m")
     sync.add_argument("--no-commit", action="store_true")
     sync.add_argument("--no-apply", action="store_true")
+    sync.add_argument("--conflict-policy", choices=("local", "repository"))
 
     init = commands.add_parser("init", help="Lokalen Synchronisationszustand anlegen")
     init.add_argument("--from-repo", action="store_true", help="Repository nach HOME kopieren")
