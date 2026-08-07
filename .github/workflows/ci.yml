@@ -48,8 +48,12 @@ jobs:
       - name: Build config-sync closure
         run: |
           set -euo pipefail
-          nix build .#config-sync --no-write-lock-file --print-build-logs
+          if ! nix build .#config-sync --no-write-lock-file --print-build-logs; then
+            drv="$(nix path-info --derivation .#config-sync --no-write-lock-file)"
+            echo "Failed derivation: $drv"
+            nix log "$drv" || true
+            exit 1
+          fi
           test -x ./result/bin/config-sync
           ./result/bin/config-sync --help | grep -q sync
-          command -v gh >/dev/null || true
           grep -q 'github-cli-auth.py' scripts/config-sync-wrapper.sh
