@@ -59,4 +59,5 @@ jobs:
           help="$(./result/bin/config-sync --help)"
           printf '%s\n' "$help"
           [[ "$help" == *"config-sync"* ]]
-          grep -q 'github-cli-auth.py' scripts/config-sync-wrapper.sh
+          grep -Fq '${./scripts/github-cli-auth.py}' flake.nix
+          nix-store -qR ./result | grep -F '/gh-'
