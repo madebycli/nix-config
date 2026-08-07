@@ -102,12 +102,6 @@ def status_payload(
         planned_action = "upload"
 
     github = github_payload(auth_backend, repo)
-    errors = []
-    if github["error"] and github["ghInstalled"]:
-        # Authentication is required for upload, but public read-only status and
-        # download remain usable without a login.
-        errors.append(str(github["error"]))
-
     return {
         "schemaVersion": 1,
         "repositoryPath": str(repo),
@@ -127,7 +121,7 @@ def status_payload(
         "plannedAction": planned_action,
         "backups": backup_entries,
         "github": github,
-        "errors": errors,
+        "errors": [],
     }
 
 
