@@ -27,15 +27,25 @@ generation_number() {
   printf '%s\n' "${name%-link}"
 }
 
+json_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '"%s"' "$value"
+}
+
 emit_generation_list() {
-  local json="$1" current_target boot_target link generation target status date rows_file
+  local json="$1" current_target boot_target link generation target status date first=1
   current_target="$(readlink -f /run/current-system 2>/dev/null || true)"
   boot_target="$(readlink -f "$PROFILE" 2>/dev/null || true)"
-  rows_file="$(mktemp -t nix-clean-list.XXXXXXXX)"
-  trap 'rm -f "$rows_file"' RETURN
   if ((json == 0)); then
     printf '%-7s %-19s %s\n' 'GEN' 'DATE' 'STATUS'
     printf '%-7s %-19s %s\n' '-------' '-------------------' '------------------'
+  else
+    printf '{"schemaVersion":1,"generations":['
   fi
   while IFS= read -r link; do
     [[ -n "$link" ]] || continue
@@ -47,13 +57,18 @@ emit_generation_list() {
     [[ "$target" == "$current_target" && "$target" == "$boot_target" ]] && status="running-and-boot"
     date="$(stat -c '%y' "$link" 2>/dev/null | cut -d. -f1 || true)"
     if ((json == 1)); then
-      jq -n --argjson generation "$generation" --arg createdAt "$date" --arg status "$status" \
-        '{generation:$generation, createdAt:($createdAt | if length == 0 then null else . end), status:$status}' >>"$rows_file"
+      ((first == 1)) || printf ','
+      first=0
+      printf '{"generation":%s,"createdAt":' "$generation"
+      if [[ -n "$date" ]]; then json_string "$date"; else printf 'null'; fi
+      printf ',"status":'
+      json_string "$status"
+      printf '}'
     else
       printf '%-7s %-19s %s\n' "$generation" "${date:-unknown}" "${status//-/ }"
     fi
   done < <(generation_links)
-  if ((json == 1)); then jq -s '{schemaVersion:1, generations:., errors:[]}' "$rows_file"; fi
+  if ((json == 1)); then printf '],"errors":[]}\n'; fi
 }
 
 DRY_RUN=0
@@ -129,14 +144,16 @@ for ((index=keep_total; index<${#LINKS[@]}; index++)); do
 done
 
 if ((JSON == 1)); then
-  delete_json="$(printf '%s\n' "${DELETE[@]}" | jq -Rsc 'split("\n") | map(select(length > 0) | tonumber)')"
-  jq -n --argjson generationCount "${#LINKS[@]}" --argjson currentGeneration "$current_generation" \
-    --argjson latestGeneration "$latest_generation" --argjson keepBackups "$BACKUPS" \
-    --argjson deleteGenerations "$delete_json" \
-    '{schemaVersion:1, safe:true, generationCount:$generationCount,
-      currentGeneration:$currentGeneration, latestGeneration:$latestGeneration,
-      keepBackups:$keepBackups, deleteGenerations:$deleteGenerations,
-      errors:[]}'
+  printf '{"schemaVersion":1,"safe":true,"generationCount":%d,' "${#LINKS[@]}"
+  printf '"currentGeneration":%s,"latestGeneration":%s,' "$current_generation" "$latest_generation"
+  printf '"keepBackups":%s,"deleteGenerations":[' "$BACKUPS"
+  first=1
+  for generation in "${DELETE[@]}"; do
+    ((first == 1)) || printf ','
+    first=0
+    printf '%s' "$generation"
+  done
+  printf '],"errors":[]}\n'
   exit 0
 fi
 
