@@ -13,22 +13,51 @@ from types import ModuleType
 from typing import Any
 
 
-def load_backend() -> ModuleType:
-    path = Path(__file__).with_name("config-sync.py")
-    spec = importlib.util.spec_from_file_location("nix_config_sync_backend", path)
+def load_module(filename: str, name: str) -> ModuleType:
+    path = Path(__file__).with_name(filename)
+    spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load config-sync backend: {path}")
+        raise RuntimeError(f"cannot load backend: {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
 
+def load_backend() -> ModuleType:
+    return load_module("config-sync.py", "nix_config_sync_backend")
+
+
+def load_auth_backend() -> ModuleType:
+    return load_module("github-cli-auth.py", "nix_config_github_auth")
+
+
 def emit(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
-def status_payload(backend: ModuleType, args: argparse.Namespace) -> dict[str, Any]:
+def github_payload(auth_backend: ModuleType, repo: Path) -> dict[str, Any]:
+    value = auth_backend.status(repo)
+    return {
+        "ghInstalled": bool(value.gh_installed),
+        "authenticated": bool(value.authenticated),
+        "login": value.login,
+        "permission": value.permission,
+        "canPush": bool(value.can_push),
+        "remoteUrl": value.remote_url,
+        "remoteOk": bool(value.remote_ok),
+        "gitName": value.git_name,
+        "gitEmail": value.git_email,
+        "credentialHelperReady": bool(value.credential_helper_ready),
+        "error": value.error,
+    }
+
+
+def status_payload(
+    backend: ModuleType,
+    auth_backend: ModuleType,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
     repo = backend.find_repo(args.repo)
     backend.ensure_remote(repo)
     backend.fetch(repo, args.offline)
@@ -72,6 +101,7 @@ def status_payload(backend: ModuleType, args: argparse.Namespace) -> dict[str, A
     elif ahead or changes["local"] or local_changes:
         planned_action = "upload"
 
+    github = github_payload(auth_backend, repo)
     return {
         "schemaVersion": 1,
         "repositoryPath": str(repo),
@@ -90,6 +120,7 @@ def status_payload(backend: ModuleType, args: argparse.Namespace) -> dict[str, A
         "changes": changes,
         "plannedAction": planned_action,
         "backups": backup_entries,
+        "github": github,
         "errors": [],
     }
 
@@ -114,17 +145,28 @@ def paths_payload(backend: ModuleType, args: argparse.Namespace) -> dict[str, An
     }
 
 
-def doctor_payload(backend: ModuleType, args: argparse.Namespace) -> dict[str, Any]:
+def doctor_payload(
+    backend: ModuleType,
+    auth_backend: ModuleType,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     repo = backend.find_repo(args.repo)
 
-    def check(name: str, callback: Any) -> None:
+    def check(name: str, callback: Any, *, required: bool = True) -> None:
         try:
             callback()
         except Exception as exc:
-            checks.append({"id": name, "ok": False, "detail": str(exc)})
+            checks.append(
+                {
+                    "id": name,
+                    "ok": False,
+                    "required": required,
+                    "detail": str(exc),
+                }
+            )
         else:
-            checks.append({"id": name, "ok": True, "detail": None})
+            checks.append({"id": name, "ok": True, "required": required, "detail": None})
 
     check("remote", lambda: backend.ensure_remote(repo))
 
@@ -142,6 +184,36 @@ def doctor_payload(backend: ModuleType, args: argparse.Namespace) -> dict[str, A
         else None,
     )
     check("sync-state", lambda: backend.load_state(repo))
+
+    auth = auth_backend.status(repo)
+    check(
+        "github-cli",
+        lambda: (_ for _ in ()).throw(auth_backend.AuthError("GitHub CLI (gh) is not installed"))
+        if not auth.gh_installed
+        else None,
+        required=False,
+    )
+    check(
+        "github-login",
+        lambda: (_ for _ in ()).throw(
+            auth_backend.AuthError(auth.error or "Not signed in to GitHub CLI")
+        )
+        if not auth.authenticated
+        else None,
+        required=False,
+    )
+    check(
+        "github-write-permission",
+        lambda: (_ for _ in ()).throw(
+            auth_backend.AuthError(
+                f"GitHub account cannot push to {auth_backend.REPOSITORY} ({auth.permission or 'UNKNOWN'})"
+            )
+        )
+        if auth.authenticated and not auth.can_push
+        else None,
+        required=False,
+    )
+
     if not args.offline:
         check("remote-fetch", lambda: backend.fetch(repo, False))
         check(
@@ -151,12 +223,18 @@ def doctor_payload(backend: ModuleType, args: argparse.Namespace) -> dict[str, A
             else None,
         )
 
+    required_checks = [item for item in checks if item["required"]]
     return {
         "schemaVersion": 1,
         "repositoryPath": str(repo),
-        "ok": all(item["ok"] for item in checks),
+        "ok": all(item["ok"] for item in required_checks),
         "checks": checks,
-        "errors": [item["detail"] for item in checks if not item["ok"]],
+        "github": github_payload(auth_backend, repo),
+        "errors": [
+            item["detail"]
+            for item in required_checks
+            if not item["ok"] and item["detail"] is not None
+        ],
     }
 
 
@@ -173,11 +251,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         backend = load_backend()
+        auth_backend = load_auth_backend()
         payload = {
-            "status": status_payload,
-            "paths": paths_payload,
-            "doctor": doctor_payload,
-        }[args.command](backend, args)
+            "status": lambda: status_payload(backend, auth_backend, args),
+            "paths": lambda: paths_payload(backend, args),
+            "doctor": lambda: doctor_payload(backend, auth_backend, args),
+        }[args.command]()
     except Exception as exc:
         emit({"schemaVersion": 1, "errors": [str(exc)], "ok": False})
         return 1

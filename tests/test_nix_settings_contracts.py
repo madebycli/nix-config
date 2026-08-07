@@ -5,6 +5,7 @@ import importlib.util
 import sys
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from unittest import mock
@@ -71,19 +72,74 @@ class FakeSyncBackend:
         return "nyx"
 
 
+@dataclass(frozen=True)
+class FakeAuthStatus:
+    gh_installed: bool = True
+    authenticated: bool = True
+    login: str | None = "madebycli"
+    permission: str | None = "ADMIN"
+    can_push: bool = True
+    remote_url: str | None = "https://github.com/madebycli/nix-config.git"
+    remote_ok: bool = True
+    git_name: str | None = "madebycli"
+    git_email: str | None = "example@users.noreply.github.com"
+    credential_helper_ready: bool = True
+    error: str | None = None
+
+
+class FakeAuthBackend:
+    REPOSITORY = "madebycli/nix-config"
+
+    class AuthError(RuntimeError):
+        pass
+
+    @staticmethod
+    def status(_repo: Path) -> FakeAuthStatus:
+        return FakeAuthStatus()
+
+
+class FakeSignedOutAuthBackend(FakeAuthBackend):
+    @staticmethod
+    def status(_repo: Path) -> FakeAuthStatus:
+        return FakeAuthStatus(
+            authenticated=False,
+            login=None,
+            permission=None,
+            can_push=False,
+            credential_helper_ready=False,
+            error="Not signed in to GitHub CLI",
+        )
+
+
 class ContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.sync_json = load_script("nix_config_sync_json_test", "config-sync-json.py")
         cls.helper = load_script("nix_settings_helper_test", "nix-settings-helper.py")
 
-    def test_sync_status_serializes_staged_paths(self) -> None:
+    def test_sync_status_serializes_staged_paths_and_github_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             args = argparse.Namespace(repo=None, offline=True, scope="nixos")
-            payload = self.sync_json.status_payload(FakeSyncBackend(root), args)
+            payload = self.sync_json.status_payload(
+                FakeSyncBackend(root), FakeAuthBackend(), args
+            )
         self.assertEqual(payload["stagedChanges"], ["flake.nix", "modules/example.nix"])
         self.assertTrue(payload["dirty"])
+        self.assertEqual(payload["github"]["login"], "madebycli")
+        self.assertTrue(payload["github"]["canPush"])
+        self.assertNotIn("token", payload["github"])
+
+    def test_signed_out_github_state_is_not_a_global_sync_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = argparse.Namespace(repo=None, offline=True, scope="nixos")
+            payload = self.sync_json.status_payload(
+                FakeSyncBackend(root), FakeSignedOutAuthBackend(), args
+            )
+        self.assertEqual(payload["errors"], [])
+        self.assertFalse(payload["github"]["authenticated"])
+        self.assertEqual(payload["github"]["error"], "Not signed in to GitHub CLI")
 
     def test_helper_mode_mapping(self) -> None:
         self.assertEqual(

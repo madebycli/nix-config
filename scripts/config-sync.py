@@ -8,6 +8,7 @@ import datetime as dt
 import fcntl
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -17,6 +18,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Iterable, Mapping, Sequence
 
 EXPECTED_REMOTES = {
@@ -312,6 +314,45 @@ def print_changes(changes: ChangeSet, active: Mapping[str, str], mirror: Mapping
     )
 
 
+def resolve_dotfile_conflicts(
+    repo: Path,
+    changes: ChangeSet,
+    *,
+    policy: str | None,
+    assume_yes: bool,
+) -> None:
+    """Resolve only already-classified dotfile conflicts after an explicit choice."""
+    if not changes.conflicts:
+        return
+    if policy not in {"local", "repository"}:
+        raise SyncError(
+            "Dotconfig-Konflikte erkannt. Explizit lokale oder Repository-Version wählen."
+        )
+
+    print("\nKonfliktauflösung:")
+    for relative in changes.conflicts:
+        print(f"  {relative}")
+
+    if policy == "local":
+        if not confirm(
+            "Lokale Versionen für diese Konflikte übernehmen?",
+            assume_yes,
+        ):
+            raise SyncError("Konfliktauflösung abgebrochen.")
+        copy_local_to_mirror(repo, changes.conflicts)
+        print("\nLokale Versionen wurden für die ausgewählten Konflikte übernommen.")
+        return
+
+    backup_root = state_dir(repo) / "backups" / now_stamp()
+    apply_mirror_to_local(
+        repo,
+        changes.conflicts,
+        backup_root,
+        assume_yes=assume_yes,
+    )
+    print(f"\nLokale Konflikt-Backups: {backup_root}")
+
+
 def upstream(repo: Path) -> str | None:
     result = git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", check=False)
     if result:
@@ -354,6 +395,119 @@ def ensure_remote(repo: Path) -> None:
     remote = git(repo, "remote", "get-url", "origin", check=False)
     if remote and remote not in EXPECTED_REMOTES:
         raise SyncError(f"Unerwartetes Git-Remote: {remote}")
+
+
+def load_github_auth_backend() -> ModuleType | None:
+    candidates: list[Path] = []
+    explicit = os.environ.get("NIX_CONFIG_GITHUB_AUTH_BACKEND")
+    if explicit:
+        candidates.append(Path(explicit))
+    candidates.append(Path(__file__).with_name("github-cli-auth.py"))
+    for path in candidates:
+        if not path.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("nix_config_sync_github_auth", path)
+        if spec is None or spec.loader is None:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    return None
+
+
+def github_status_payload(repo: Path) -> dict[str, object]:
+    backend = load_github_auth_backend()
+    if backend is None:
+        return {
+            "ghInstalled": shutil.which("gh") is not None,
+            "authenticated": False,
+            "login": None,
+            "permission": None,
+            "canPush": False,
+            "remoteUrl": git(repo, "remote", "get-url", "origin", check=False) or None,
+            "remoteOk": False,
+            "gitName": git(repo, "config", "user.name", check=False) or None,
+            "gitEmail": git(repo, "config", "user.email", check=False) or None,
+            "credentialHelperReady": False,
+            "error": "GitHub authentication backend is unavailable",
+        }
+    value = backend.status(repo)
+    return {
+        "ghInstalled": bool(value.gh_installed),
+        "authenticated": bool(value.authenticated),
+        "login": value.login,
+        "permission": value.permission,
+        "canPush": bool(value.can_push),
+        "remoteUrl": value.remote_url,
+        "remoteOk": bool(value.remote_ok),
+        "gitName": value.git_name,
+        "gitEmail": value.git_email,
+        "credentialHelperReady": bool(value.credential_helper_ready),
+        "error": value.error,
+    }
+
+
+def status_payload(args: argparse.Namespace) -> dict[str, object]:
+    repo = find_repo(args.repo)
+    ensure_remote(repo)
+    fetch(repo, args.offline)
+    ahead, behind, target = relation(repo)
+    branch = git(repo, "branch", "--show-current")
+    state = load_state(repo)
+    local_changes = worktree_lines(repo)
+    staged_output = git(repo, "diff", "--cached", "--name-only")
+    staged_changes = staged_output.splitlines() if staged_output else []
+
+    changes: dict[str, list[str]] = {"local": [], "remote": [], "same": [], "conflicts": []}
+    if args.scope != "nixos":
+        active, mirror, baseline = manifests(repo)
+        classified = classify(active, mirror, baseline)
+        changes = {
+            "local": list(classified.local),
+            "remote": list(classified.remote),
+            "same": list(classified.same),
+            "conflicts": list(classified.conflicts),
+        }
+
+    backups = state_dir(repo) / "backups"
+    backup_entries: list[str] = []
+    if backups.is_dir():
+        backup_entries = sorted(
+            (str(path) for path in backups.iterdir() if path.is_dir()), reverse=True
+        )[:20]
+
+    planned_action = "none"
+    if changes["conflicts"] or (ahead and behind):
+        planned_action = "manual-resolution-required"
+    elif behind and (changes["local"] or local_changes):
+        planned_action = "safe-sync"
+    elif behind:
+        planned_action = "download"
+    elif ahead or changes["local"] or local_changes:
+        planned_action = "upload"
+
+    return {
+        "schemaVersion": 1,
+        "repositoryPath": str(repo),
+        "profile": profile_from_state(repo, None),
+        "host": socket.gethostname().split(".", 1)[0],
+        "scope": args.scope,
+        "branch": branch,
+        "upstream": target,
+        "ahead": ahead,
+        "behind": behind,
+        "dirty": bool(local_changes or staged_changes),
+        "lastSync": state.get("last_sync"),
+        "lastSyncedCommit": state.get("last_synced_commit"),
+        "localChanges": local_changes,
+        "stagedChanges": staged_changes,
+        "changes": changes,
+        "plannedAction": planned_action,
+        "backups": backup_entries,
+        "github": github_status_payload(repo),
+        "errors": [],
+    }
 
 
 def changed_repo_paths(repo: Path) -> list[str]:
@@ -518,7 +672,7 @@ def commit_and_push(
     run(["git", "--no-pager", "diff", "--cached", "--stat"], cwd=repo, capture=False)
 
     commit_message = message
-    if not commit_message:
+    if not commit_message and not assume_yes:
         commit_message = input("Commit-Nachricht (leer = Standard): ").strip()
     if not commit_message:
         commit_message = (
@@ -587,13 +741,25 @@ def fast_forward(repo: Path, offline: bool) -> tuple[str, list[str]]:
     if ahead and behind:
         raise SyncError("Lokale und entfernte Git-Historie sind divergiert. Manuelle Lösung erforderlich.")
     if behind:
-        if worktree_lines(repo):
-            raise SyncError(
-                "Remote ist neuer, aber das Repository enthält lokale Änderungen. "
-                "Zuerst pushen/committen oder Änderungen manuell sichern."
-            )
         if target is None:
             raise SyncError("Kein Upstream für Fast-Forward vorhanden.")
+        local_paths = changed_repo_paths(repo)
+        remote_output = git(repo, "diff", "--name-only", f"HEAD..{target}")
+        remote_paths = remote_output.splitlines() if remote_output else []
+        overlaps: list[str] = []
+        for local_path in local_paths:
+            for remote_path in remote_paths:
+                if (
+                    local_path == remote_path
+                    or local_path.startswith(remote_path + "/")
+                    or remote_path.startswith(local_path + "/")
+                ):
+                    overlaps.append(f"{local_path} / {remote_path}")
+        if overlaps:
+            raise SyncError(
+                "Lokale und entfernte Repository-Änderungen überschneiden sich:\n  "
+                + "\n  ".join(sorted(set(overlaps)))
+            )
         info(f"Repository wird per Fast-Forward auf {target} aktualisiert")
         run(["git", "merge", "--ff-only", target], cwd=repo, capture=False)
     new_head = git(repo, "rev-parse", "HEAD")
@@ -601,6 +767,9 @@ def fast_forward(repo: Path, offline: bool) -> tuple[str, list[str]]:
 
 
 def command_status(args: argparse.Namespace) -> None:
+    if args.json:
+        print(json.dumps(status_payload(args), ensure_ascii=False, sort_keys=True))
+        return
     repo = find_repo(args.repo)
     ensure_remote(repo)
     fetch(repo, args.offline)
@@ -631,10 +800,22 @@ def command_push(args: argparse.Namespace) -> None:
         active, mirror, baseline = manifests(repo)
         changes = classify(active, mirror, baseline)
         print_changes(changes, active, mirror)
-        if changes.conflicts:
-            raise SyncError("Dotconfig-Konflikte erkannt. Keine Datei wurde überschrieben.")
         if changes.remote:
             raise SyncError("Repository-Dotconfigs sind neuer. Zuerst pull oder sync ausführen.")
+        if changes.conflicts:
+            policy = getattr(args, "conflict_policy", None)
+            if policy not in {None, "local"}:
+                raise SyncError("Upload kann Konflikte nur explizit mit lokalen Versionen auflösen.")
+            resolve_dotfile_conflicts(
+                repo,
+                changes,
+                policy=policy,
+                assume_yes=args.yes,
+            )
+            active, mirror, baseline = manifests(repo)
+            changes = classify(active, mirror, baseline)
+            if changes.conflicts:
+                raise SyncError("Konflikte blieben nach lokaler Auflösung bestehen.")
         copy_local_to_mirror(repo, changes.local)
 
     changed = commit_and_push(
@@ -657,11 +838,19 @@ def command_pull(args: argparse.Namespace) -> None:
     ensure_remote(repo)
     if staged(repo):
         raise SyncError("Bereits vorgemerkte Änderungen gefunden. Pull abgebrochen.")
-    if worktree_lines(repo):
-        raise SyncError(
-            "Das Repository enthält lokale Änderungen. Für einen sicheren Pull "
-            "zuerst 'config-sync push' oder 'config-sync sync' verwenden."
-        )
+    local_repo_paths = changed_repo_paths(repo)
+    if args.scope != "nixos":
+        mirror_prefix = MIRROR_PREFIX.as_posix()
+        local_mirror_paths = [
+            path
+            for path in local_repo_paths
+            if path == mirror_prefix or path.startswith(f"{mirror_prefix}/")
+        ]
+        if local_mirror_paths:
+            raise SyncError(
+                "Lokale Änderungen im Dotfile-Spiegel können nicht als Download behandelt werden. "
+                "Upload oder Synchronize verwenden:\n  " + "\n  ".join(local_mirror_paths)
+            )
     _, pulled_paths = fast_forward(repo, args.offline)
 
     if args.scope != "nixos":
@@ -669,7 +858,19 @@ def command_pull(args: argparse.Namespace) -> None:
         changes = classify(active, mirror, baseline)
         print_changes(changes, active, mirror)
         if changes.conflicts:
-            raise SyncError("Lokale und entfernte Dotconfigs wurden gleichzeitig geändert.")
+            policy = getattr(args, "conflict_policy", None)
+            if policy not in {None, "repository"}:
+                raise SyncError("Download kann Konflikte nur explizit mit Repository-Versionen auflösen.")
+            resolve_dotfile_conflicts(
+                repo,
+                changes,
+                policy=policy,
+                assume_yes=args.yes,
+            )
+            active, mirror, baseline = manifests(repo)
+            changes = classify(active, mirror, baseline)
+            if changes.conflicts:
+                raise SyncError("Konflikte blieben nach Repository-Auflösung bestehen.")
         backup_root = state_dir(repo) / "backups" / now_stamp()
         apply_mirror_to_local(repo, changes.remote, backup_root, assume_yes=args.yes)
         new_active, new_mirror, _ = manifests(repo)
@@ -696,7 +897,16 @@ def command_sync(args: argparse.Namespace) -> None:
         changes = classify(active, mirror, baseline)
         print_changes(changes, active, mirror)
         if changes.conflicts:
-            raise SyncError("Konflikte erkannt. Keine automatische Gewinnerwahl nach Datum.")
+            resolve_dotfile_conflicts(
+                repo,
+                changes,
+                policy=getattr(args, "conflict_policy", None),
+                assume_yes=args.yes,
+            )
+            active, mirror, baseline = manifests(repo)
+            changes = classify(active, mirror, baseline)
+            if changes.conflicts:
+                raise SyncError("Konflikte blieben nach expliziter Auflösung bestehen.")
 
         backup_root = state_dir(repo) / "backups" / now_stamp()
         apply_mirror_to_local(repo, changes.remote, backup_root, assume_yes=args.yes)
@@ -828,6 +1038,7 @@ def parser() -> argparse.ArgumentParser:
     main = argparse.ArgumentParser(prog="config-sync")
     main.add_argument("--repo", help="Pfad zum NixOS-Repository")
     main.add_argument("--offline", action="store_true", help="Keine Netzwerkoperation")
+    main.add_argument("--json", action="store_true", help="Status als JSON ausgeben")
     main.add_argument("--yes", "-y", action="store_true", help="Bestätigungen automatisch bejahen")
     main.add_argument("--profile", help="NixOS-Flake-Profil, z. B. nyx-niri")
     main.add_argument(
@@ -843,14 +1054,17 @@ def parser() -> argparse.ArgumentParser:
     push = commands.add_parser("push", help="Lokale Änderungen committen und pushen")
     push.add_argument("--message", "-m")
     push.add_argument("--no-commit", action="store_true")
+    push.add_argument("--conflict-policy", choices=("local", "repository"))
 
     pull = commands.add_parser("pull", help="Fast-Forward-Pull und sichere Übernahme")
     pull.add_argument("--no-apply", action="store_true", help="Kein NixOS-Build/Switch")
+    pull.add_argument("--conflict-policy", choices=("local", "repository"))
 
     sync = commands.add_parser("sync", help="Sicherer kombinierter Pull/Push")
     sync.add_argument("--message", "-m")
     sync.add_argument("--no-commit", action="store_true")
     sync.add_argument("--no-apply", action="store_true")
+    sync.add_argument("--conflict-policy", choices=("local", "repository"))
 
     init = commands.add_parser("init", help="Lokalen Synchronisationszustand anlegen")
     init.add_argument("--from-repo", action="store_true", help="Repository nach HOME kopieren")
@@ -866,7 +1080,7 @@ def parser() -> argparse.ArgumentParser:
 def normalize_argv(argv: Sequence[str]) -> list[str]:
     """Erlaubt globale Optionen vor oder nach dem Unterbefehl."""
     value_options = {"--repo", "--profile", "--scope"}
-    flag_options = {"--offline", "--yes", "-y"}
+    flag_options = {"--offline", "--json", "--yes", "-y"}
     global_args: list[str] = []
     remaining: list[str] = []
     index = 0

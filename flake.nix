@@ -146,17 +146,21 @@
         name = "config-sync";
         inheritPath = true;
         runtimeInputs = with pkgs; [
-          coreutils diffutils findutils git gnugrep gnused jq nix python3 rsync util-linux
+          coreutils diffutils findutils gh git gnugrep gnused jq nix python3 rsync util-linux
         ];
         text = ''
           exec ${pkgs.bash}/bin/bash \
             ${./scripts/config-sync-wrapper.sh} \
+            ${./scripts/github-cli-auth.py} \
             ${./scripts/config-sync.py} \
             "$@"
         '';
         checkPhase = ''
           PYTHONPYCACHEPREFIX="$TMPDIR/pycache" \
-            ${pkgs.python3}/bin/python3 -m py_compile ${./scripts/config-sync.py}
+            ${pkgs.python3}/bin/python3 -m py_compile \
+              ${./scripts/config-sync.py} \
+              ${./scripts/config-sync-json.py} \
+              ${./scripts/github-cli-auth.py}
           ${pkgs.bash}/bin/bash -n ${./scripts/config-sync-wrapper.sh}
           ${pkgs.bash}/bin/bash -n "$target"
         '';
