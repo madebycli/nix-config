@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Bash syntax
+        run: |
+          bash -n scripts/config-sync-wrapper.sh
+          bash -n scripts/nix-status.sh
+          bash -n scripts/nix-updates.sh
+          bash -n scripts/nix-generations.sh
+          bash -n scripts/nix-clean.sh
+          bash scripts/nix-generations.sh --help >/dev/null
+          bash scripts/nix-clean.sh --help >/dev/null
+      - name: Compile Python adapters
+        run: |
+          python3 -m py_compile \
+            scripts/config-sync.py \
+            scripts/config-sync-json.py \
+            scripts/nix-settings-helper.py
+      - name: Run contract tests
+        run: python3 -m unittest discover -s tests -v

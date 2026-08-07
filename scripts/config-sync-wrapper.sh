@@ -7,6 +7,7 @@ ARGS=("$@")
 REPO=""
 SCOPE="all"
 COMMAND=""
+NONINTERACTIVE="${NIX_SETTINGS_NONINTERACTIVE:-0}"
 
 for ((i=0; i<${#ARGS[@]}; i++)); do
   case "${ARGS[$i]}" in
@@ -42,6 +43,10 @@ if [[ "$COMMAND" == push || "$COMMAND" == sync ]]; then
     for p in "${STAGED[@]}"; do
       in_scope "$p" || { printf 'Fehler: Vorgemerkte Datei außerhalb des Bereichs: %s\n' "$p" >&2; exit 1; }
     done
+    if [[ "$NONINTERACTIVE" == 1 ]]; then
+      printf 'Fehler: Vorgemerkte Dateien aus einem vorherigen Versuch gefunden. Manuell prüfen.\n' >&2
+      exit 1
+    fi
     printf '\nVom vorherigen Versuch sind Dateien vorgemerkt. Nur Vormerkung entfernen? [j/N] '
     read -r answer
     case "${answer,,}" in j|ja|y|yes) git -C "$REPO" reset -q HEAD -- "${STAGED[@]}" ;; *) exit 1 ;; esac
@@ -50,11 +55,19 @@ if [[ "$COMMAND" == push || "$COMMAND" == sync ]]; then
   name="$(git -C "$REPO" config user.name || true)"
   email="$(git -C "$REPO" config user.email || true)"
   if [[ -z "$name" ]]; then
+    if [[ "$NONINTERACTIVE" == 1 ]]; then
+      printf 'Fehler: Git user.name fehlt. Vor der GUI-Aktion konfigurieren.\n' >&2
+      exit 1
+    fi
     printf 'Git-Name [madebycli]: '
     read -r name
     git -C "$REPO" config user.name "${name:-madebycli}"
   fi
   if [[ -z "$email" ]]; then
+    if [[ "$NONINTERACTIVE" == 1 ]]; then
+      printf 'Fehler: Git user.email fehlt. Vor der GUI-Aktion konfigurieren.\n' >&2
+      exit 1
+    fi
     printf 'Git-E-Mail: '
     read -r email
     [[ -n "$email" ]] || { printf 'Fehler: Git-E-Mail erforderlich.\n' >&2; exit 1; }

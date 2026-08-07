@@ -8,16 +8,15 @@ readonly DEFAULT_BACKUPS=5
 usage() {
   cat <<'USAGE'
 Usage:
-  nix-clean                 keep current generation plus 5 backups
-  nix-clean COUNT           keep current generation plus 1 to 20 backups
-  nix-clean --dry-run [N]   show selected generations
-  nix-clean list            list generations
-  nix-clean --yes [N]       skip confirmation
+  nix-clean [COUNT] [--json]
+  nix-clean --dry-run [COUNT] [--json]
+  nix-clean list [--json]
+  nix-clean --yes [COUNT]
 USAGE
 }
 
 generation_links() {
-  find /nix/var/nix/profiles -maxdepth 1 -type l -name 'system-*-link' -printf '%p\n' \
+  find /nix/var/nix/profiles -maxdepth 1 -type l -name 'system-*-link' -printf '%p\n' 2>/dev/null \
     | sort -t- -k2,2nr
 }
 
@@ -28,40 +27,63 @@ generation_number() {
   printf '%s\n' "${name%-link}"
 }
 
-list_generations() {
-  local current_target boot_target link generation target status date
-  current_target="$(readlink -f /run/current-system)"
-  boot_target="$(readlink -f "$PROFILE")"
-  printf '%-7s %-19s %s\n' 'GEN' 'DATE' 'STATUS'
-  printf '%-7s %-19s %s\n' '-------' '-------------------' '------------------'
+json_string() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '"%s"' "$value"
+}
+
+emit_generation_list() {
+  local json="$1" current_target boot_target link generation target status date first=1
+  current_target="$(readlink -f /run/current-system 2>/dev/null || true)"
+  boot_target="$(readlink -f "$PROFILE" 2>/dev/null || true)"
+  if ((json == 0)); then
+    printf '%-7s %-19s %s\n' 'GEN' 'DATE' 'STATUS'
+    printf '%-7s %-19s %s\n' '-------' '-------------------' '------------------'
+  else
+    printf '{"schemaVersion":1,"generations":['
+  fi
   while IFS= read -r link; do
     [[ -n "$link" ]] || continue
     generation="$(generation_number "$link")"
-    target="$(readlink -f "$link")"
+    target="$(readlink -f "$link" 2>/dev/null || true)"
     status="backup"
-    [[ "$target" == "$boot_target" ]] && status="boot default"
+    [[ "$target" == "$boot_target" ]] && status="boot-default"
     [[ "$target" == "$current_target" ]] && status="running"
-    [[ "$target" == "$current_target" && "$target" == "$boot_target" ]] && status="running + boot"
+    [[ "$target" == "$current_target" && "$target" == "$boot_target" ]] && status="running-and-boot"
     date="$(stat -c '%y' "$link" 2>/dev/null | cut -d. -f1 || true)"
-    printf '%-7s %-19s %s\n' "$generation" "${date:-unknown}" "$status"
+    if ((json == 1)); then
+      ((first == 1)) || printf ','
+      first=0
+      printf '{"generation":%s,"createdAt":' "$generation"
+      if [[ -n "$date" ]]; then json_string "$date"; else printf 'null'; fi
+      printf ',"status":'
+      json_string "$status"
+      printf '}'
+    else
+      printf '%-7s %-19s %s\n' "$generation" "${date:-unknown}" "${status//-/ }"
+    fi
   done < <(generation_links)
+  if ((json == 1)); then printf '],"errors":[]}\n'; fi
 }
 
 DRY_RUN=0
 ASSUME_YES=0
+JSON=0
+LIST=0
 BACKUPS="$DEFAULT_BACKUPS"
 number_seen=0
 
-if [[ "${1:-}" == "list" ]]; then
-  [[ $# -eq 1 ]] || { usage; exit 2; }
-  list_generations
-  exit 0
-fi
-
 while (($#)); do
   case "$1" in
+    list) LIST=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --yes|-y) ASSUME_YES=1 ;;
+    --json) JSON=1 ;;
     --help|-h|help) usage; exit 0 ;;
     [0-9]*)
       ((number_seen == 0)) || { printf 'Error: only one backup count is allowed.\n' >&2; exit 2; }
@@ -73,8 +95,18 @@ while (($#)); do
   shift
 done
 
+if ((LIST == 1)); then
+  ((DRY_RUN == 0 && ASSUME_YES == 0 && number_seen == 0)) || { usage; exit 2; }
+  emit_generation_list "$JSON"
+  exit 0
+fi
+
 [[ "$BACKUPS" =~ ^([1-9]|1[0-9]|20)$ ]] || {
   printf 'Error: backup count must be between 1 and 20.\n' >&2
+  exit 2
+}
+((JSON == 0 || DRY_RUN == 1)) || {
+  printf 'Error: --json is only allowed with --dry-run or list.\n' >&2
   exit 2
 }
 [[ "$EUID" -ne 0 ]] || { printf 'Error: do not run as root; sudo is used internally.\n' >&2; exit 1; }
@@ -110,6 +142,20 @@ DELETE=()
 for ((index=keep_total; index<${#LINKS[@]}; index++)); do
   DELETE+=("$(generation_number "${LINKS[$index]}")")
 done
+
+if ((JSON == 1)); then
+  printf '{"schemaVersion":1,"safe":true,"generationCount":%d,' "${#LINKS[@]}"
+  printf '"currentGeneration":%s,"latestGeneration":%s,' "$current_generation" "$latest_generation"
+  printf '"keepBackups":%s,"deleteGenerations":[' "$BACKUPS"
+  first=1
+  for generation in "${DELETE[@]}"; do
+    ((first == 1)) || printf ','
+    first=0
+    printf '%s' "$generation"
+  done
+  printf '],"errors":[]}\n'
+  exit 0
+fi
 
 printf 'Generations: %d\n' "${#LINKS[@]}"
 printf 'Keep: current %s + %d backup(s)\n' "$current_generation" "$BACKUPS"
