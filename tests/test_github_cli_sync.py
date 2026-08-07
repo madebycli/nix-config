@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import builtins
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -213,6 +214,55 @@ class SyncBlackBoxTests(unittest.TestCase):
             self.assertEqual((local / "local-only.txt").read_text(), "keep me\n")
             self.assertEqual((local / "remote-only.txt").read_text(), "download me\n")
 
+    def test_dotfiles_upload_copies_home_commits_and_saves_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = root / "repo"
+            home = root / "home"
+            command("git", "init", str(repo))
+            configure_identity(repo)
+            (repo / "sync").mkdir(parents=True)
+            (repo / "config/home").mkdir(parents=True)
+            (repo / "flake.nix").write_text("initial\n", encoding="utf-8")
+            (repo / "sync/paths.conf").write_text(".config/example\n", encoding="utf-8")
+            (repo / "sync/excludes.conf").write_text("**/*.tmp\n", encoding="utf-8")
+            command("git", "add", ".", cwd=repo)
+            command("git", "commit", "-m", "initial", cwd=repo)
+
+            active_dir = home / ".config/example"
+            active_dir.mkdir(parents=True)
+            (active_dir / "settings.conf").write_text("enabled=true\n", encoding="utf-8")
+            args = argparse.Namespace(
+                repo=str(repo),
+                offline=True,
+                scope="dotfiles",
+                message=None,
+                no_commit=False,
+                profile=None,
+                yes=True,
+            )
+
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(home)}, clear=False),
+                mock.patch.object(self.sync, "ensure_remote"),
+                mock.patch.object(
+                    builtins,
+                    "input",
+                    side_effect=AssertionError("input must not be called"),
+                ),
+            ):
+                self.sync.command_push(args)
+                active, mirror, baseline = self.sync.manifests(repo)
+
+            mirror_file = repo / "config/home/.config/example/settings.conf"
+            self.assertEqual(mirror_file.read_text(encoding="utf-8"), "enabled=true\n")
+            self.assertEqual(active, mirror)
+            self.assertEqual(active, baseline)
+            self.assertEqual(command("git", "status", "--porcelain", cwd=repo), "")
+            self.assertTrue(
+                command("git", "log", "-1", "--format=%s", cwd=repo).startswith("config-sync(")
+            )
+
     def test_json_status_is_native_config_sync_contract(self) -> None:
         args = self.sync.parser().parse_args(
             self.sync.normalize_argv(["status", "--json", "--offline", "--scope", "nixos"])
@@ -244,7 +294,9 @@ class SyncBlackBoxTests(unittest.TestCase):
                 )
 
             self.assertTrue(changed)
-            self.assertTrue(command("git", "log", "-1", "--format=%s", cwd=repo).startswith("config-sync("))
+            self.assertTrue(
+                command("git", "log", "-1", "--format=%s", cwd=repo).startswith("config-sync(")
+            )
             self.assertEqual(command("git", "status", "--porcelain", cwd=repo), "")
 
 
