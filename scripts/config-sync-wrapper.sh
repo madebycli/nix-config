@@ -9,6 +9,7 @@ ARGS=("$@")
 REPO=""
 COMMAND=""
 OFFLINE=0
+JSON_MODE=0
 for ((i=0; i<${#ARGS[@]}; i++)); do
   case "${ARGS[$i]}" in
     --repo)
@@ -18,11 +19,38 @@ for ((i=0; i<${#ARGS[@]}; i++)); do
     --offline)
       OFFLINE=1
       ;;
+    --json)
+      JSON_MODE=1
+      ;;
     status|push|pull|sync|init|history|doctor)
       [[ -n "$COMMAND" ]] || COMMAND="${ARGS[$i]}"
       ;;
   esac
 done
+
+# The packaged JSON contract must emit JSON and nothing else on stdout. The
+# Python backend still shares human-facing helpers with the CLI, and a network
+# status refresh may print informational/fetch output before its final payload.
+# Keep stderr untouched for diagnostics, but normalize stdout to the last valid
+# JSON object so GUI clients never have to parse terminal prose.
+if ((JSON_MODE == 1)) && [[ "$COMMAND" == status ]]; then
+  export NIX_CONFIG_GITHUB_AUTH_BACKEND="$AUTH_BACKEND"
+  python3 "$SYNC_BACKEND" "${ARGS[@]}" | python3 -c '
+import json
+import sys
+
+lines = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
+for line in reversed(lines):
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    raise SystemExit(0)
+raise SystemExit("config-sync status did not emit a JSON payload")
+'
+  exit $?
+fi
 
 find_repo() {
   local p
