@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import builtins
 import importlib.util
 import subprocess
@@ -189,6 +190,36 @@ class SyncBlackBoxTests(unittest.TestCase):
             with self.assertRaises(self.sync.SyncError):
                 self.sync.fast_forward(local, offline=False)
             self.assertEqual((local / "flake.nix").read_text(), "local edit\n")
+
+    def test_command_pull_allows_disjoint_nixos_worktree_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            local, producer = self.make_remote_pair(root)
+            (local / "local-only.txt").write_text("keep me\n", encoding="utf-8")
+            (producer / "remote-only.txt").write_text("download me\n", encoding="utf-8")
+            command("git", "add", "remote-only.txt", cwd=producer)
+            command("git", "commit", "-m", "remote", cwd=producer)
+            command("git", "push", cwd=producer)
+            args = argparse.Namespace(
+                repo=str(local),
+                offline=False,
+                scope="nixos",
+                no_apply=True,
+                profile=None,
+                yes=True,
+            )
+            with mock.patch.object(self.sync, "ensure_remote"):
+                self.sync.command_pull(args)
+            self.assertEqual((local / "local-only.txt").read_text(), "keep me\n")
+            self.assertEqual((local / "remote-only.txt").read_text(), "download me\n")
+
+    def test_json_status_is_native_config_sync_contract(self) -> None:
+        args = self.sync.parser().parse_args(
+            self.sync.normalize_argv(["status", "--json", "--offline", "--scope", "nixos"])
+        )
+        self.assertTrue(args.json)
+        self.assertEqual(args.command, "status")
+        self.assertEqual(args.scope, "nixos")
 
     def test_yes_mode_commits_without_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -8,6 +8,7 @@ import datetime as dt
 import fcntl
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -17,6 +18,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Iterable, Mapping, Sequence
 
 EXPECTED_REMOTES = {
@@ -356,6 +358,119 @@ def ensure_remote(repo: Path) -> None:
         raise SyncError(f"Unerwartetes Git-Remote: {remote}")
 
 
+def load_github_auth_backend() -> ModuleType | None:
+    candidates: list[Path] = []
+    explicit = os.environ.get("NIX_CONFIG_GITHUB_AUTH_BACKEND")
+    if explicit:
+        candidates.append(Path(explicit))
+    candidates.append(Path(__file__).with_name("github-cli-auth.py"))
+    for path in candidates:
+        if not path.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("nix_config_sync_github_auth", path)
+        if spec is None or spec.loader is None:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    return None
+
+
+def github_status_payload(repo: Path) -> dict[str, object]:
+    backend = load_github_auth_backend()
+    if backend is None:
+        return {
+            "ghInstalled": shutil.which("gh") is not None,
+            "authenticated": False,
+            "login": None,
+            "permission": None,
+            "canPush": False,
+            "remoteUrl": git(repo, "remote", "get-url", "origin", check=False) or None,
+            "remoteOk": False,
+            "gitName": git(repo, "config", "user.name", check=False) or None,
+            "gitEmail": git(repo, "config", "user.email", check=False) or None,
+            "credentialHelperReady": False,
+            "error": "GitHub authentication backend is unavailable",
+        }
+    value = backend.status(repo)
+    return {
+        "ghInstalled": bool(value.gh_installed),
+        "authenticated": bool(value.authenticated),
+        "login": value.login,
+        "permission": value.permission,
+        "canPush": bool(value.can_push),
+        "remoteUrl": value.remote_url,
+        "remoteOk": bool(value.remote_ok),
+        "gitName": value.git_name,
+        "gitEmail": value.git_email,
+        "credentialHelperReady": bool(value.credential_helper_ready),
+        "error": value.error,
+    }
+
+
+def status_payload(args: argparse.Namespace) -> dict[str, object]:
+    repo = find_repo(args.repo)
+    ensure_remote(repo)
+    fetch(repo, args.offline)
+    ahead, behind, target = relation(repo)
+    branch = git(repo, "branch", "--show-current")
+    state = load_state(repo)
+    local_changes = worktree_lines(repo)
+    staged_output = git(repo, "diff", "--cached", "--name-only")
+    staged_changes = staged_output.splitlines() if staged_output else []
+
+    changes: dict[str, list[str]] = {"local": [], "remote": [], "same": [], "conflicts": []}
+    if args.scope != "nixos":
+        active, mirror, baseline = manifests(repo)
+        classified = classify(active, mirror, baseline)
+        changes = {
+            "local": list(classified.local),
+            "remote": list(classified.remote),
+            "same": list(classified.same),
+            "conflicts": list(classified.conflicts),
+        }
+
+    backups = state_dir(repo) / "backups"
+    backup_entries: list[str] = []
+    if backups.is_dir():
+        backup_entries = sorted(
+            (str(path) for path in backups.iterdir() if path.is_dir()), reverse=True
+        )[:20]
+
+    planned_action = "none"
+    if changes["conflicts"] or (ahead and behind):
+        planned_action = "manual-resolution-required"
+    elif behind and (changes["local"] or local_changes):
+        planned_action = "safe-sync"
+    elif behind:
+        planned_action = "download"
+    elif ahead or changes["local"] or local_changes:
+        planned_action = "upload"
+
+    return {
+        "schemaVersion": 1,
+        "repositoryPath": str(repo),
+        "profile": profile_from_state(repo, None),
+        "host": socket.gethostname().split(".", 1)[0],
+        "scope": args.scope,
+        "branch": branch,
+        "upstream": target,
+        "ahead": ahead,
+        "behind": behind,
+        "dirty": bool(local_changes or staged_changes),
+        "lastSync": state.get("last_sync"),
+        "lastSyncedCommit": state.get("last_synced_commit"),
+        "localChanges": local_changes,
+        "stagedChanges": staged_changes,
+        "changes": changes,
+        "plannedAction": planned_action,
+        "backups": backup_entries,
+        "github": github_status_payload(repo),
+        "errors": [],
+    }
+
+
 def changed_repo_paths(repo: Path) -> list[str]:
     paths: set[str] = set()
     for command in (
@@ -613,6 +728,9 @@ def fast_forward(repo: Path, offline: bool) -> tuple[str, list[str]]:
 
 
 def command_status(args: argparse.Namespace) -> None:
+    if args.json:
+        print(json.dumps(status_payload(args), ensure_ascii=False, sort_keys=True))
+        return
     repo = find_repo(args.repo)
     ensure_remote(repo)
     fetch(repo, args.offline)
@@ -669,11 +787,19 @@ def command_pull(args: argparse.Namespace) -> None:
     ensure_remote(repo)
     if staged(repo):
         raise SyncError("Bereits vorgemerkte Änderungen gefunden. Pull abgebrochen.")
-    if worktree_lines(repo):
-        raise SyncError(
-            "Das Repository enthält lokale Änderungen. Für einen sicheren Pull "
-            "zuerst 'config-sync push' oder 'config-sync sync' verwenden."
-        )
+    local_repo_paths = changed_repo_paths(repo)
+    if args.scope != "nixos":
+        mirror_prefix = MIRROR_PREFIX.as_posix()
+        local_mirror_paths = [
+            path
+            for path in local_repo_paths
+            if path == mirror_prefix or path.startswith(f"{mirror_prefix}/")
+        ]
+        if local_mirror_paths:
+            raise SyncError(
+                "Lokale Änderungen im Dotfile-Spiegel können nicht als Download behandelt werden. "
+                "Upload oder Synchronize verwenden:\n  " + "\n  ".join(local_mirror_paths)
+            )
     _, pulled_paths = fast_forward(repo, args.offline)
 
     if args.scope != "nixos":
@@ -840,6 +966,7 @@ def parser() -> argparse.ArgumentParser:
     main = argparse.ArgumentParser(prog="config-sync")
     main.add_argument("--repo", help="Pfad zum NixOS-Repository")
     main.add_argument("--offline", action="store_true", help="Keine Netzwerkoperation")
+    main.add_argument("--json", action="store_true", help="Status als JSON ausgeben")
     main.add_argument("--yes", "-y", action="store_true", help="Bestätigungen automatisch bejahen")
     main.add_argument("--profile", help="NixOS-Flake-Profil, z. B. nyx-niri")
     main.add_argument(
@@ -878,7 +1005,7 @@ def parser() -> argparse.ArgumentParser:
 def normalize_argv(argv: Sequence[str]) -> list[str]:
     """Erlaubt globale Optionen vor oder nach dem Unterbefehl."""
     value_options = {"--repo", "--profile", "--scope"}
-    flag_options = {"--offline", "--yes", "-y"}
+    flag_options = {"--offline", "--json", "--yes", "-y"}
     global_args: list[str] = []
     remaining: list[str] = []
     index = 0

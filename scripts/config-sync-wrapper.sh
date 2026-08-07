@@ -45,4 +45,5 @@ if ((OFFLINE == 0)) && [[ "$COMMAND" == push || "$COMMAND" == sync ]]; then
   python3 "$AUTH_BACKEND" prepare --repo "$REPO" --require-push
 fi
 
+export NIX_CONFIG_GITHUB_AUTH_BACKEND="$AUTH_BACKEND"
 exec python3 "$SYNC_BACKEND" "${ARGS[@]}"
