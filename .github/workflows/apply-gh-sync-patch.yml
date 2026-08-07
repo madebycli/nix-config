@@ -1,0 +1,70 @@
+name: Apply GitHub CLI sync patch once
+
+on:
+  push:
+    branches: [feat/github-cli-sync]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/github-cli-sync
+      - name: Apply guarded source transforms
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          flake = Path("flake.nix")
+          text = flake.read_text(encoding="utf-8")
+          old = "coreutils diffutils findutils git gnugrep gnused jq nix python3 rsync util-linux"
+          new = "coreutils diffutils findutils gh git gnugrep gnused jq nix python3 rsync util-linux"
+          if text.count(old) == 1:
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit("unexpected config-sync runtimeInputs")
+          old = '''            ${./scripts/config-sync-wrapper.sh} \\\n            ${./scripts/config-sync.py} \\\n            \"$@\"'''
+          new = '''            ${./scripts/config-sync-wrapper.sh} \\\n            ${./scripts/github-cli-auth.py} \\\n            ${./scripts/config-sync.py} \\\n            \"$@\"'''
+          if text.count(old) == 1:
+              text = text.replace(old, new)
+          elif "${./scripts/github-cli-auth.py}" not in text:
+              raise SystemExit("unexpected config-sync launcher")
+          old = '''          PYTHONPYCACHEPREFIX=\"$TMPDIR/pycache\" \\\n            ${pkgs.python3}/bin/python3 -m py_compile ${./scripts/config-sync.py}'''
+          new = '''          PYTHONPYCACHEPREFIX=\"$TMPDIR/pycache\" \\\n            ${pkgs.python3}/bin/python3 -m py_compile \\\n              ${./scripts/config-sync.py} \\\n              ${./scripts/config-sync-json.py} \\\n              ${./scripts/github-cli-auth.py}'''
+          if text.count(old) == 1:
+              text = text.replace(old, new)
+          elif "${./scripts/github-cli-auth.py}" not in text:
+              raise SystemExit("unexpected config-sync checkPhase")
+          flake.write_text(text, encoding="utf-8")
+
+          sync = Path("scripts/config-sync.py")
+          text = sync.read_text(encoding="utf-8")
+          old = '''    if not commit_message:\n        commit_message = input(\"Commit-Nachricht (leer = Standard): \").strip()\n    if not commit_message:\n'''
+          new = '''    if not commit_message and not assume_yes:\n        commit_message = input(\"Commit-Nachricht (leer = Standard): \").strip()\n    if not commit_message:\n'''
+          if text.count(old) == 1:
+              text = text.replace(old, new)
+          elif new not in text:
+              raise SystemExit("unexpected commit-message block")
+
+          old = '''        if worktree_lines(repo):\n            raise SyncError(\n                \"Remote ist neuer, aber das Repository enthält lokale Änderungen. \"\n                \"Zuerst pushen/committen oder Änderungen manuell sichern.\"\n            )\n        if target is None:\n            raise SyncError(\"Kein Upstream für Fast-Forward vorhanden.\")\n        info(f\"Repository wird per Fast-Forward auf {target} aktualisiert\")\n        run([\"git\", \"merge\", \"--ff-only\", target], cwd=repo, capture=False)\n'''
+          new = '''        if target is None:\n            raise SyncError(\"Kein Upstream für Fast-Forward vorhanden.\")\n        local_paths = changed_repo_paths(repo)\n        remote_output = git(repo, \"diff\", \"--name-only\", f\"HEAD..{target}\")\n        remote_paths = remote_output.splitlines() if remote_output else []\n        overlaps: list[str] = []\n        for local_path in local_paths:\n            for remote_path in remote_paths:\n                if (\n                    local_path == remote_path\n                    or local_path.startswith(remote_path + \"/\")\n                    or remote_path.startswith(local_path + \"/\")\n                ):\n                    overlaps.append(f\"{local_path} / {remote_path}\")\n        if overlaps:\n            raise SyncError(\n                \"Lokale und entfernte Repository-Änderungen überschneiden sich:\\n  \"\n                + \"\\n  \".join(sorted(set(overlaps)))\n            )\n        info(f\"Repository wird per Fast-Forward auf {target} aktualisiert\")\n        run([\"git\", \"merge\", \"--ff-only\", target], cwd=repo, capture=False)\n'''
+          if text.count(old) == 1:
+              text = text.replace(old, new)
+          elif "remote_paths = remote_output.splitlines()" not in text:
+              raise SystemExit("unexpected fast_forward block")
+          sync.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit guarded patch
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add flake.nix scripts/config-sync.py
+          git commit -m "refactor(sync): harden noninteractive and fast-forward flow"
+          git push origin HEAD:feat/github-cli-sync
