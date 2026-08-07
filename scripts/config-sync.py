@@ -518,7 +518,7 @@ def commit_and_push(
     run(["git", "--no-pager", "diff", "--cached", "--stat"], cwd=repo, capture=False)
 
     commit_message = message
-    if not commit_message:
+    if not commit_message and not assume_yes:
         commit_message = input("Commit-Nachricht (leer = Standard): ").strip()
     if not commit_message:
         commit_message = (
@@ -587,13 +587,25 @@ def fast_forward(repo: Path, offline: bool) -> tuple[str, list[str]]:
     if ahead and behind:
         raise SyncError("Lokale und entfernte Git-Historie sind divergiert. Manuelle Lösung erforderlich.")
     if behind:
-        if worktree_lines(repo):
-            raise SyncError(
-                "Remote ist neuer, aber das Repository enthält lokale Änderungen. "
-                "Zuerst pushen/committen oder Änderungen manuell sichern."
-            )
         if target is None:
             raise SyncError("Kein Upstream für Fast-Forward vorhanden.")
+        local_paths = changed_repo_paths(repo)
+        remote_output = git(repo, "diff", "--name-only", f"HEAD..{target}")
+        remote_paths = remote_output.splitlines() if remote_output else []
+        overlaps: list[str] = []
+        for local_path in local_paths:
+            for remote_path in remote_paths:
+                if (
+                    local_path == remote_path
+                    or local_path.startswith(remote_path + "/")
+                    or remote_path.startswith(local_path + "/")
+                ):
+                    overlaps.append(f"{local_path} / {remote_path}")
+        if overlaps:
+            raise SyncError(
+                "Lokale und entfernte Repository-Änderungen überschneiden sich:\n  "
+                + "\n  ".join(sorted(set(overlaps)))
+            )
         info(f"Repository wird per Fast-Forward auf {target} aktualisiert")
         run(["git", "merge", "--ff-only", target], cwd=repo, capture=False)
     new_head = git(repo, "rev-parse", "HEAD")
