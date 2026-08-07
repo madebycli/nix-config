@@ -1,0 +1,563 @@
+// ═══════════════════════════════════════════════════════════════════════
+//                    NIRI WINDOW MANAGER CONFIGURATION
+//                          Adrian's Custom Setup
+// ═══════════════════════════════════════════════════════════════════════
+// Niri Docs: https://niri-wm.github.io/niri/
+// Wiki:      https://github.com/YaLTeR/niri/wiki
+// ═══════════════════════════════════════════════════════════════════════
+
+// ───────────────────────── Noctalia Shell ─────────────────────────────
+// Bindet die Noctalia-Shell-Konfig ein (Bar, Launcher, Notifications…)
+include "./noctalia.kdl"
+
+// ════════════════════════════════════════════════════════════════════
+//  ALLGEMEIN (MISC)
+// ════════════════════════════════════════════════════════════════════
+
+// Bevorzugt Server-Side Decorations -> einheitlicher Look, weniger Bugs
+prefer-no-csd
+
+// Speicherpfad für Screenshots (Datum + Uhrzeit als Dateiname)
+screenshot-path "~/Bilder/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+// ────────────── Environment Variables ──────────────
+// Werden für ALLE von niri gestarteten Prozesse gesetzt
+environment {
+    ELECTRON_OZONE_PLATFORM_HINT "auto"      // Electron-Apps (Discord, VSCode) nutzen Wayland
+    //QT_QPA_PLATFORM "wayland"
+    QT_QPA_PLATFORMTHEME "gtk3"              // Qt-Apps verwenden GTK3-Theme (einheitlicher Look)
+    QT_WAYLAND_DISABLE_WINDOWDECORATION "1"  // Verhindert doppelte Rahmen bei Qt-Apps
+    XDG_CURRENT_DESKTOP "niri"               // Sagt Apps welche DE läuft (für Portals etc.)
+    //XDG_SESSION_TYPE "wayland"
+}
+
+// ────────────── Cursor ──────────────
+cursor {
+    xcursor-theme "Bibata-Modern-Classic"  // Custom Cursor-Theme
+    xcursor-size 22                // Cursor-Größe in Pixel (Standard wäre 24)
+    //hide-when-typing
+}
+
+// ────────────── Debug ──────────────
+debug {
+    // Erlaubt Noctalia, Notification-Aktionen + Window-Activation auszulösen
+    honor-xdg-activation-with-invalid-serial
+}
+
+// ────────────── Hotkey Overlay ──────────────
+hotkey-overlay {
+    skip-at-startup  // Zeigt das Hotkey-Overlay NICHT direkt nach dem Login
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  INPUT (Tastatur, Touchpad, Maus)
+// ════════════════════════════════════════════════════════════════════
+// https://github.com/YaLTeR/niri/wiki/Configuration:-Input
+
+input {
+    // ────────── Tastatur ──────────
+    keyboard {
+        xkb {
+            // Layout überschreiben (auskommentiert -> System-Default)
+            layout "de"
+        }
+        numlock  // Numlock automatisch beim Start aktivieren
+    }
+
+    // ────────── Touchpad ──────────
+    touchpad {
+        tap             // Tippen = Linksklick
+        natural-scroll  // macOS-Style Scrollen (Inhalt folgt dem Finger)
+    }
+
+    // ────────── Maus ──────────
+    mouse {
+        // Mausbeschleunigung deaktivieren (für Gaming sinnvoll)
+        //accel-profile "flat"
+        //accel-speed 0.0
+    }
+
+    // ────────── Fokus-Verhalten ──────────
+    //focus-follows-mouse                         // Reines Focus-Follows-Mouse
+    //workspace-auto-back-and-forth                 // Mod+1 zweimal -> springt zum vorherigen WS zurück
+    focus-follows-mouse max-scroll-amount="40%"   // FFM nur wenn dadurch max 40% gescrollt wird
+}
+xwayland-satellite {
+    // off
+    path "xwayland-satellite"
+}
+// ════════════════════════════════════════════════════════════════════
+//  DISPLAYS / OUTPUTS
+// ════════════════════════════════════════════════════════════════════
+// Tipp: `niri msg outputs` zeigt die korrekten Display-Namen
+
+output "LG Electronics LG ULTRAGEAR 310MAMBJ3L91" {
+    mode "2560x1440@143.973"  // 1440p @ 144 Hz
+    variable-refresh-rate on-demand=true
+    //scale 1                    // Keine HiDPI-Skalierung
+    position x=0 y=0        // Position im virtuellen Layout
+    focus-at-startup
+}
+output "Lenovo Group Limited T24i-2L VNA6F822" {
+    //mode "1920x1080@60.000"  // 1440p @ 144 Hz
+    //scale 0.9                 // Keine HiDPI-Skalierung
+    position x=-5080 y=0        // Position im virtuellen Layout
+ 
+
+}
+
+//output "HDMI-A-1" {
+//    mode "1920x1080@60" q
+//}
+
+// ════════════════════════════════════════════════════════════════════
+//  LAYOUT
+// ════════════════════════════════════════════════════════════════════
+
+layout {
+    gaps 12                              // Abstand zwischen Fenstern in Pixel
+    center-focused-column "never"        // Fokussierte Spalte NICHT auto-zentrieren
+    always-center-single-column          // …außer wenn nur 1 Spalte da ist -> zentrieren
+    background-color "transparent"       // Wichtig damit Noctalia Wallpaper setzen kann
+
+    // Voreingestellte Spaltenbreiten (mit Mod+R durchschaltbar)
+    preset-column-widths {
+        proportion 0.33333  // 1/3 Bildschirm
+        proportion 0.5      // 1/2 Bildschirm
+        proportion 0.66667  // 2/3 Bildschirm
+    }
+    default-column-width { proportion 0.5; }
+    // Struts -> reservierter Platz an Bildschirmrändern (für Bars etc.)
+    struts {}
+  
+
+}
+
+// ────────────── Overview (Mod+Tab) ──────────────
+overview {
+    workspace-shadow {
+        off // Schatten unter Workspace-Vorschauen
+    }
+    zoom 0.33
+    backdrop-color "#26233a"
+}
+
+// ────────────── Gestures ──────────────
+gestures {
+    hot-corners {
+        off  // Hot-Corners deaktiviert
+    }
+
+
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  AUTOSTART
+// ════════════════════════════════════════════════════════════════════
+
+// Noctalia-Shell beim Login starten (Bar, Notifications, Launcher…)
+//spawn-sh-at-startup "hdd-off"
+spawn-sh-at-startup "noctalia"
+spawn-sh-at-startup "arch-update --tray"
+//spawn-at-startup "python3" "/home/xxxxx/.config/niri/Scripts/niri_tile_to_n.py"
+spawn-sh-at-startup "oniri --tiling-layout"
+
+// ════════════════════════════════════════════════════════════════════
+//  ANIMATIONEN
+// ════════════════════════════════════════════════════════════════════
+
+animations {
+    // Uncomment to disable all animations globally.
+    // off
+
+    // Slow down every animation by this factor (useful for debugging).
+    // Values below 1.0 speed them up. Default: 1.0
+     slowdown 0.7
+
+    // ── Workspace transitions ───────────────────────────────────────────────
+    workspace-switch {
+        
+        spring damping-ratio=0.98 stiffness=300 epsilon=0.0001
+    }
+
+    // ── Window lifecycle ────────────────────────────────────────────────────
+    window-open {
+        spring damping-ratio=0.98 stiffness=300 epsilon=0.0001
+    }
+
+    // Low damping = windows "poof" away with a quick fade.
+    window-close {
+        spring damping-ratio=0.18 stiffness=300 epsilon=0.0001
+    }
+
+    // ── Layout movement ─────────────────────────────────────────────────────
+    // Scrolling the horizontal strip when you focus a different column.
+    horizontal-view-movement {
+        spring damping-ratio=0.98 stiffness=300 epsilon=0.0001
+    }
+
+    // Dragging or moving a window between columns/workspaces.
+    window-movement {
+        spring damping-ratio=0.98 stiffness=900 epsilon=0.0001
+    }
+
+    // Interactive column/window resize.
+    window-resize {
+        spring damping-ratio=0.98 stiffness=300 epsilon=0.0001
+    }
+
+    // ── UI chrome ───────────────────────────────────────────────────────────
+    // The "config saved" toast that appears after editing this file.
+    config-notification-open-close {
+        spring damping-ratio=0.98 stiffness=300 epsilon=0.0001
+    }
+
+    // Niri's built-in screenshot UI opening.
+    screenshot-ui-open {
+        spring damping-ratio=0.98 stiffness=300 epsilon=0.0001
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  WORKSPACES
+// ════════════════════════════════════════════════════════════════════
+//
+//  WS 1 │ 🖥️  MAIN     – Browser, allgemeine Apps
+//  WS 2 │ 💻  DEV      – VS Code, Terminals, Docs
+//  WS 3 │ 🎮  GAMING   – Game Launcher (Steam, Heroic, Lutris…)
+//  WS 4 │ 💬  KOMM     – Discord (Vesktop), Social
+//  WS 5 │ 🎬  MEDIA    – OBS, YouTube Music, Spotify
+//
+
+workspace "1" { }
+workspace "2" { }
+workspace "3" { }
+workspace "4" { }
+workspace "5" { }
+
+window-rule {
+    match app-id="vesktop"
+    open-maximized true
+    open-on-workspace "5"
+}
+window-rule {
+    //match app-id="twintaillauncher"
+    match app-id="steam_proton"
+    match app-id="steam_app_."
+    match app-id="steam_app_default"
+    open-on-workspace "4"
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  WORKSPACE RULES – App-Zuweisung
+// ════════════════════════════════════════════════════════════════════
+
+
+// ════════════════════════════════════════════════════════════════════
+//  WINDOW & LAYER RULES
+// ════════════════════════════════════════════════════════════════════
+
+// ────────────── Globale Regel ──────────────
+// Gilt für ALLE Fenster (sofern nicht überschrieben)
+window-rule {
+    geometry-corner-radius 6  // Abgerundete Ecken
+    clip-to-geometry true     // Inhalt wird an Form gecuttet -> saubere Rundungen
+}
+
+// ────────────── Steam ──────────────
+// Steam-Subwindows floaten lassen (außer Hauptfenster)
+window-rule {
+    match app-id="steam"
+    exclude title=r#"^[Ss]team$"#
+    open-floating true
+}
+
+// Steam-Notifications unten rechts positionieren
+window-rule {
+    match app-id="steam" title=r#"^notificationtoasts_\d+_desktop$"#
+    default-floating-position x=10 y=10 relative-to="bottom-right"
+    open-focused false  // Notification stiehlt nicht den Fokus
+}
+
+// ────────────── Noctalia / Quickshell Layer ──────────────
+//layer-rule {
+//    match namespace="^quickshell-overview$"
+//    place-within-backdrop true
+//}
+layer-rule {
+  match namespace="^noctalia-wallpaper*"
+  place-within-backdrop true
+}
+layer-rule {
+  match namespace="^noctalia-backdrop"
+  place-within-backdrop true
+}
+layer-rule {
+  match namespace="^noctalia-(bar-[^\"]+|notification|dock|panel|attached-panel|osd)$"
+  background-effect {
+    //xray false
+     blur false
+  }
+}
+//
+
+
+
+// ────────────── Pavucontrol ──────────────
+window-rule {
+    match app-id="pavucontrol"
+    opacity 0.95
+    open-floating true
+    default-column-width { fixed 900; }
+    default-window-height { fixed 1000; }
+}
+
+// ────────────── Authentifizierungs-Dialoge ──────────────
+window-rule {
+    match title="Authentication Required"
+    opacity 0.95
+    open-floating true
+}
+
+// ────────────── PiP / Zoom ──────────────
+window-rule {
+    match app-id=r#"firefox$"# title="^Picture-in-Picture$"
+    match app-id="zoom"
+    open-floating true
+}
+
+// ────────────── GNOME-Apps ──────────────
+window-rule {
+    match app-id=r#"^org\.gnome\."#
+    draw-border-with-background false
+}
+
+// System-Tools mittelgroß
+
+// Kleine Tools floaten
+window-rule {
+    match app-id=r#"^gnome-calculator$"#
+    match app-id=r#"^galculator$"#
+    match app-id=r#"^blueman-manager$"#
+    match app-id=r#"^xdg-desktop-portal$"#
+    match app-id="org.gnome.NautilusPreviewer"
+    open-floating true
+}
+
+// ────────────── Terminals & andere Apps ──────────────
+window-rule {
+    match app-id="Alacritty"
+    match app-id="vesktop"
+    match app-id="ghostty"
+    draw-border-with-background false
+}
+
+// Terminals mit Transparenz + Blur
+window-rule {
+    match app-id="kitty"
+    match app-id="ghostty"
+    opacity 0.8
+    background-effect {
+        blur true
+    }
+}
+window-rule {
+ match app-id="org.gnome.Nautilus"
+ opacity 0.9
+    background-effect {
+        blur true
+    }
+}
+// ════════════════════════════════════════════════════════════════════
+//  KEYBINDS
+// ════════════════════════════════════════════════════════════════════
+
+binds {
+    // ───────── Workspace-Fokus ─────────
+    Mod+1 { focus-workspace 1; }  // 🖥️  MAIN
+    Mod+2 { focus-workspace 2; }  // 💻  DEV
+    Mod+3 { focus-workspace 3; }  // 🎮  GAMING (Launcher)
+    Mod+4 { focus-workspace 4; }  // 💬  KOMM
+    Mod+5 { focus-workspace 5; }  // 🎬  MEDIA + Spiele
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+
+    // ───────── Workspace-Navigation (vertikal) ─────────
+    Mod+I         { focus-workspace-up; }
+    Mod+U         { focus-workspace-down; }
+    Mod+Page_Up   { focus-workspace-up; }
+    Mod+Page_Down { focus-workspace-down; }
+    Mod+WheelScrollUp   cooldown-ms=150 { focus-workspace-up; }
+    Mod+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
+
+    // ───────── Spalte direkt zu Workspace X bewegen ─────────
+    Mod+Shift+1 { move-column-to-workspace 1; }
+    Mod+Shift+2 { move-column-to-workspace 2; }
+    Mod+Shift+3 { move-column-to-workspace 3; }
+    Mod+Shift+4 { move-column-to-workspace 4; }
+    Mod+Shift+5 { move-column-to-workspace 5; }
+    Mod+Shift+6 { move-column-to-workspace 6; }
+    Mod+Shift+7 { move-column-to-workspace 7; }
+    Mod+Shift+8 { move-column-to-workspace 8; }
+    Mod+Shift+9 { move-column-to-workspace 9; }
+
+    // ───────── Workspace verschieben ─────────
+    Mod+Shift+I         { move-workspace-up; }
+    Mod+Shift+U         { move-workspace-down; }
+    Mod+Shift+Page_Up   { move-workspace-up; }
+    Mod+Shift+Page_Down { move-workspace-down; }
+
+    // ───────── Screenshots ─────────
+    Mod+Shift+S          { screenshot; }              // Interaktives Screenshot-Tool
+    XF86Launch1          { screenshot; }
+    Alt+Print            { screenshot-window; }       // Nur aktives Fenster
+    Alt+XF86Launch1      { screenshot-window; }
+    Mod+Shift+Ctrl+S     { screenshot-screen; }       // Ganzer Bildschirm
+    Ctrl+XF86Launch1     { screenshot-screen; }
+
+    // ───────── Spalten-Management ─────────
+    Mod+BracketLeft   { consume-or-expel-window-left; }
+    Mod+BracketRight  { consume-or-expel-window-right; }
+    Mod+C             { center-column; }
+    Mod+Ctrl+C        { center-visible-columns; }
+    Mod+Ctrl+End      { move-column-to-last; }
+    Mod+Ctrl+Home     { move-column-to-first; }
+    Mod+Ctrl+F        { expand-column-to-available-width; }
+    Mod+Ctrl+R        { reset-window-height; }
+    Mod+End           { focus-column-last; }
+    Mod+Home          { focus-column-first; }
+    Mod+R             { switch-preset-column-width; }
+    Mod+Period        { expel-window-from-column; }
+
+    // ───────── Monitor-Fokus ─────────
+    Mod+Ctrl+H     { focus-monitor-left; }
+    Mod+Ctrl+J     { focus-monitor-down; }
+    //Mod+Ctrl+K   { focus-monitor-up; }
+    Mod+Ctrl+L     { focus-monitor-right; }
+    Mod+Ctrl+Left  { focus-monitor-left; }
+    Mod+Ctrl+Right { focus-monitor-right; }
+
+    // ───────── Spalte zwischen Monitoren bewegen ─────────
+    Mod+Shift+Ctrl+H     { move-column-to-monitor-left; }
+    Mod+Shift+Ctrl+J     { move-column-to-monitor-down; }
+    Mod+Shift+Ctrl+K     { move-column-to-monitor-up; }
+    Mod+Shift+Ctrl+L     { move-column-to-monitor-right; }
+    Mod+Shift+Ctrl+Down  { move-column-to-monitor-down; }
+    Mod+Shift+Ctrl+Up    { move-column-to-monitor-up; }
+    Mod+Shift+Ctrl+Left  { move-column-to-monitor-left; }
+    Mod+Shift+Ctrl+Right { move-column-to-monitor-right; }
+
+    // ───────── Fenster-Navigation ─────────
+    Mod+Down  { focus-window-down; }
+    Mod+Up    { focus-window-up; }
+    Mod+Left  { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    Mod+H     { focus-column-left; }
+    //Mod+J { focus-window-down; }
+    //Mod+K { focus-window-up; }
+    //Mod+L { focus-column-right; }
+
+    // ───────── Fenster verschieben ─────────
+    Mod+Shift+Down  { move-window-down; }
+    Mod+Shift+Up    { move-window-up; }
+    Mod+Shift+Left  { move-column-left; }
+    Mod+Shift+Right { move-column-right; }
+    //Mod+Shift+H     { move-column-left; }
+    //Mod+Shift+J     { move-window-down; }
+    //Mod+Shift+K   { move-window-up; }
+    //Mod+Shift+L     { move-column-right; }
+
+    // ───────── Mausrad-Navigation ─────────
+    Mod+WheelScrollLeft        { focus-column-left; }
+    Mod+WheelScrollRight       { focus-column-right; }
+    Mod+Shift+WheelScrollUp    { focus-column-left; }
+    Mod+Shift+WheelScrollDown  { focus-column-right; }
+    Mod+Ctrl+WheelScrollLeft   { move-column-left; }
+    Mod+Ctrl+WheelScrollRight  { move-column-right; }
+    Mod+Ctrl+Shift+WheelScrollUp   { move-column-left; }
+    Mod+Ctrl+Shift+WheelScrollDown { move-column-right; }
+
+    // ───────── Fenstergröße anpassen ─────────
+    Mod+Minus       { set-column-width "-10%"; }
+    Mod+Plus        { set-column-width "+10%"; }
+    Mod+Shift+Minus { set-window-height "-10%"; }
+    Mod+Shift+Plus  { set-window-height "+10%"; }
+    Mod+Shift+R     { switch-preset-window-height; }
+
+    // ───────── Fenster-Aktionen ─────────
+    Mod+F                   { maximize-column; }
+    Mod+Shift+F             { fullscreen-window; }
+    Mod+Q repeat=false      { close-window; }
+    Mod+Alt+Q repeat=false { spawn-sh "/home/xxxxx/.config/niri/Scripts/kill-focus";}
+    Mod+Shift+T             { toggle-window-floating; }
+    Mod+Shift+V             { switch-focus-between-floating-and-tiling; }
+    Mod+W                   { toggle-column-tabbed-display; }
+
+    // ───────── System ─────────
+    Mod+Shift+P         { power-off-monitors; }
+    Mod+Shift+E         { quit; }
+    Mod+Escape          { toggle-keyboard-shortcuts-inhibit; }
+    Mod+Shift+Slash     { show-hotkey-overlay; }
+    Mod+Shift+Backspace { show-hotkey-overlay; }
+    Mod+Tab repeat=false { toggle-overview; }
+
+    // ───────── Apps starten ─────────
+    Mod+E  hotkey-overlay-title="File Manager: Nemo"    { spawn "nemo"; }
+    Mod+T  hotkey-overlay-title="Open Terminal"          { spawn "ghostty"; }
+    Mod+Z  hotkey-overlay-title="Open Pavucontrol"       { spawn "pavucontrol"; }
+    Mod+X  hotkey-overlay-title="Open Zen-Browser"       { spawn "zen-browser"; }
+    Mod+B  hotkey-overlay-title="Open Browser"   { spawn "brave-origin-nightly"; }
+    //Mod+Space repeat=false { spawn "vicinae" "toggle"; }
+    Mod+Space repeat=false { spawn "fuzzel"; }
+    //Mod+P repeat=false { spawn "vicinae" "vicinae://launch/clipboard/history"; }
+
+
+    // ───────── Workspace Quick-Launch ─────────
+    // Öffnet direkt die passende App auf dem richtigen Workspace
+    Mod+Ctrl+1  hotkey-overlay-title="WS1: Browser (Zen)"         { spawn "zen-browser"; }
+    Mod+Ctrl+2  hotkey-overlay-title="WS2: Editor (VS Code)"       { spawn "code"; }
+    Mod+Ctrl+3  hotkey-overlay-title="WS3: Steam"                  { spawn "steam"; }
+    Mod+Ctrl+4  hotkey-overlay-title="WS4: Discord (Vesktop)"      { spawn "vesktop"; }
+    Mod+Ctrl+5  hotkey-overlay-title="WS5: OBS Studio"             { spawn "obs"; }
+
+
+    // ─── Media Controls ───
+    XF86AudioRaiseVolume  allow-when-locked=true { spawn-sh "noctalia msg volume-up"; }
+    XF86AudioLowerVolume  allow-when-locked=true { spawn-sh "noctalia msg volume-down"; }
+    XF86AudioMute         allow-when-locked=true { spawn-sh "noctalia msg volume-mute"; }
+    XF86AudioMicMute      allow-when-locked=true { spawn-sh "qs -c noctalia-shell ipc call volume muteInput"; }
+    XF86AudioNext         allow-when-locked=true { spawn-sh "playerctl next"; }
+    XF86AudioPrev         allow-when-locked=true { spawn-sh "playerctl previous"; }
+    XF86AudioPlay         allow-when-locked=true { spawn-sh "playerctl play-pause"; }
+    XF86AudioPause        allow-when-locked=true { spawn-sh "playerctl play-pause"; }
+
+    // ───────── Noctalia Shell IPC ─────────
+    Mod+S      hotkey-overlay-title="Session Menu"   { spawn-sh "qs -c noctalia-shell ipc call sessionMenu toggle"; }
+    //Mod+Space  hotkey-overlay-title="App Launcher"   { spawn-sh "qs -c noctalia-shell ipc call launcher toggle"; }
+    Mod+D      hotkey-overlay-title="Wallpaper"      { spawn-sh "qs -c noctalia-shell ipc call wallpaper toggle"; }
+    Mod+A      hotkey-overlay-title="Wallcards"      { spawn-sh "qs -c noctalia-shell ipc call plugin:wallcards toggle"; }
+    Mod+L      hotkey-overlay-title="Lock Screen"    { spawn-sh "qs -c noctalia-shell ipc call lockScreen lock"; }
+
+    // ───────── Scripts ─────────
+    Mod+Shift+G        { spawn "~/Scripts/Gif-Overlay/gif-picker.py"; }            // ⭐ Picker
+    Mod+Y        { spawn-sh "python3 ~/Scripts/hdd-picker.py" ; }            // Termial Picker
+    Mod+Shift+H  { spawn-sh "~/Scripts/Gif-Overlay/gif-script.py edit"; }       // ⭐ Edit toggle
+    Mod+Shift+K  { spawn-sh "~/Scripts/Gif-Overlay/gif-script.py stop-all"; }   // Cleanup
+    Mod+Shift+J  { spawn-sh "~/Scripts/Gif-Overlay/gif-control.py"; }   // Cleanup
+    Alt+W { spawn-sh "noctalia msg window-switcher"; }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  RECENT WINDOWS (Alt+Tab)
+// ════════════════════════════════════════════════════════════════════
+
+recent-windows {
+    binds {
+        Alt+Tab         { next-window scope="output"; }
+        Alt+Shift+Tab   { previous-window scope="output"; }
+        Alt+O       { next-window filter="app-id"; }
+        Alt+Shift+O { previous-window filter="app-id"; }
+    }
+}
