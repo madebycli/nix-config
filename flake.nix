@@ -187,7 +187,7 @@
       configUpdateProgram = pkgs.writeShellApplication {
         name = "config-update";
         inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils git nix ];
+        runtimeInputs = with pkgs; [ coreutils findutils git jq nix ];
         text = builtins.readFile ./scripts/update.sh;
         checkPhase = ''
           ${pkgs.bash}/bin/bash -n "$target"
