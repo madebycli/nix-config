@@ -1,4 +1,4 @@
-{ inputs, ... }:
+{ inputs, shell, ... }:
 
 {
   imports = [
@@ -6,4 +6,5 @@
   ];
 
   programs.hyprland.enable = true;
+  programs.noctalia.systemd.enable = shell == "noctalia";
 }
