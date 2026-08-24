@@ -1,4 +1,4 @@
-{ inputs, pkgs, shell, ... }:
+{ inputs, pkgs, ... }:
 
 {
   imports = [
@@ -21,10 +21,6 @@
         kb_layout = "de";
         follow_mouse = 1;
       };
-
-      exec-once = if shell == "noctalia" then [
-        "noctalia --daemon"
-      ] else [ ];
 
       bind = [
         "$mod, Return, exec, ghostty"
