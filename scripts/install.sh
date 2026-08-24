@@ -9,7 +9,12 @@ readonly CACHYOS_CACHE_URL="https://attic.xuyh0120.win/lantian"
 readonly CACHYOS_CACHE_KEY="lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc="
 
 HOST=""
-MODE="both"
+MANGO=0
+NIRI=0
+HYPRLAND=0
+ALL_DESKTOPS=0
+SHELL_NAME=""
+SELECTION_EXPLICIT=0
 AUTO_YES=0
 USE_SSH=0
 
@@ -19,14 +24,30 @@ Neuinstallation nach einer normalen NixOS-Grundinstallation:
   nix run github:madebycli/nix-config#install -- --nyx
   nix run github:madebycli/nix-config#install -- --aether
 
-Optionen:
-  --nyx             Host nyx
-  --aether          Host aether
-  --mango           nur Mango
-  --niri            nur Niri
-  --both            Mango und Niri (Standard)
-  --ssh             Repository über SSH klonen (SSH-Key muss funktionieren)
-  --yes, -y         Bestätigungen automatisch bejahen
+Desktop-Auswahl (kombinierbar):
+  --mango              Mango aktivieren
+  --niri               Niri aktivieren
+  --hyprland           Hyprland aktivieren
+  --all                Mango + Niri + Hyprland mit Noctalia
+
+Shell-Auswahl:
+  --noctalia           Noctalia verwenden (Standard)
+  --caelestia-shell    Caelestia Shell verwenden; nur mit Hyprland allein
+
+Beispiele:
+  --niri --noctalia
+  --mango --niri --noctalia
+  --hyprland --noctalia
+  --hyprland --caelestia-shell
+  --all
+
+Ohne Desktop-/Shell-Option wird Mango + Noctalia verwendet.
+
+Weitere Optionen:
+  --nyx                Host nyx
+  --aether             Host aether
+  --ssh                Repository über SSH klonen
+  --yes, -y            Bestätigungen automatisch bejahen
 USAGE
 }
 
@@ -49,13 +70,25 @@ confirm() {
   esac
 }
 
+select_shell() {
+  local requested="$1"
+  if [[ -n "$SHELL_NAME" && "$SHELL_NAME" != "$requested" ]]; then
+    die "Noctalia und Caelestia Shell können nicht gleichzeitig aktiviert werden."
+  fi
+  SHELL_NAME="$requested"
+  SELECTION_EXPLICIT=1
+}
+
 while (($#)); do
   case "$1" in
     --nyx) HOST="nyx" ;;
     --aether) HOST="aether" ;;
-    --mango) MODE="mango" ;;
-    --niri) MODE="niri" ;;
-    --both) MODE="both" ;;
+    --mango) MANGO=1; SELECTION_EXPLICIT=1 ;;
+    --niri) NIRI=1; SELECTION_EXPLICIT=1 ;;
+    --hyprland) HYPRLAND=1; SELECTION_EXPLICIT=1 ;;
+    --all) ALL_DESKTOPS=1; SELECTION_EXPLICIT=1 ;;
+    --noctalia) select_shell noctalia ;;
+    --caelestia-shell) select_shell caelestia ;;
     --ssh) USE_SSH=1 ;;
     --yes|-y) AUTO_YES=1 ;;
     --help|-h) usage; exit 0 ;;
@@ -75,6 +108,44 @@ for command in git nix sudo rsync; do
   command -v "$command" >/dev/null 2>&1 || die "$command fehlt."
 done
 
+if ((ALL_DESKTOPS == 1)); then
+  ((MANGO == 0 && NIRI == 0 && HYPRLAND == 0)) || die "--all nicht mit einzelnen Desktop-Flags kombinieren."
+  [[ -z "$SHELL_NAME" || "$SHELL_NAME" == "noctalia" ]] || die "--all verwendet Noctalia als Shell."
+  MANGO=1
+  NIRI=1
+  HYPRLAND=1
+  SHELL_NAME="noctalia"
+else
+  if ((MANGO == 0 && NIRI == 0 && HYPRLAND == 0)); then
+    MANGO=1
+  fi
+  [[ -n "$SHELL_NAME" ]] || SHELL_NAME="noctalia"
+fi
+
+if [[ "$SHELL_NAME" == "caelestia" ]]; then
+  ((HYPRLAND == 1 && MANGO == 0 && NIRI == 0)) \
+    || die "Caelestia Shell ist nur mit --hyprland allein unterstützt."
+fi
+
+if [[ "$SHELL_NAME" == "caelestia" ]]; then
+  PROFILE="${HOST}-hyprland-caelestia"
+elif ((MANGO == 1 && NIRI == 1 && HYPRLAND == 1)); then
+  PROFILE="${HOST}-all"
+elif ((MANGO == 1 && NIRI == 1)); then
+  PROFILE="${HOST}-mango-niri"
+elif ((MANGO == 1 && HYPRLAND == 1)); then
+  PROFILE="${HOST}-mango-hyprland"
+elif ((NIRI == 1 && HYPRLAND == 1)); then
+  PROFILE="${HOST}-niri-hyprland"
+elif ((HYPRLAND == 1)); then
+  PROFILE="${HOST}-hyprland"
+elif ((NIRI == 1)); then
+  PROFILE="${HOST}-niri"
+else
+  PROFILE="$HOST"
+fi
+readonly PROFILE
+
 readonly TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 [[ -n "$TARGET_HOME" && -d "$TARGET_HOME" ]] || die "Home-Verzeichnis nicht gefunden: $TARGET_USER"
 readonly REPO_DIR="${TARGET_HOME}/${HOST}"
@@ -83,14 +154,6 @@ readonly TARGET_HARDWARE="${HOST_DIR}/hardware-configuration.nix"
 readonly HARDWARE_RELATIVE="hosts/${HOST}/hardware-configuration.nix"
 readonly TIMESTAMP="$(date '+%Y-%m-%d_%H-%M-%S')"
 readonly BACKUP_DIR="${TARGET_HOME}/.local/state/nixos-config/install-backups/${TIMESTAMP}"
-
-case "$MODE" in
-  both) PROFILE="$HOST" ;;
-  mango) PROFILE="${HOST}-mango" ;;
-  niri) PROFILE="${HOST}-niri" ;;
-  *) die "Ungültiges Desktopprofil." ;;
-esac
-readonly PROFILE
 
 if (( USE_SSH == 1 )); then
   CLONE_URL="$REPO_SSH"
@@ -135,8 +198,8 @@ fi
 info "Aktuelle lokale Hardwarekonfiguration wird für $HOST verwendet"
 install -m 0644 "$SOURCE_HARDWARE" "$TARGET_HARDWARE"
 
-# Die Hardwaredatei bleibt pro Rechner lokal. Sie wird von Nix als getrackte
-# Flake-Datei gelesen, aber von normalen Git-/Sync-Vorgängen nicht verändert.
+# The hardware file stays local to each machine. Nix reads it as a tracked Flake
+# file, while normal Git and sync operations leave the local copy untouched.
 git -C "$REPO_DIR" update-index --skip-worktree "$HARDWARE_RELATIVE"
 
 info "Flake-Ausgabe wird ausgewertet: $PROFILE"
