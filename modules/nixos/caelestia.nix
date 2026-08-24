@@ -1,4 +1,4 @@
-{ inputs, ... }:
+{ inputs, pkgs, ... }:
 
 {
   home-manager.users.xxxxx = {
@@ -8,6 +8,7 @@
 
     programs.caelestia = {
       enable = true;
+      package = inputs.caelestia-shell.packages.${pkgs.stdenv.hostPlatform.system}.with-cli;
       systemd.enable = true;
     };
   };
