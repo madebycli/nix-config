@@ -36,7 +36,9 @@ if [[ -d "$HOME/.local/state/nixos-config" ]]; then
     state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
     [[ "$state_repo" == "$repo" ]] || continue
     candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
-    case "$candidate" in "$host"|"$host-mango"|"$host-niri") profile="$candidate" ;; esac
+    case "$candidate" in
+      "$host"|"$host-mango"|"$host-niri"|"$host-hyprland"|"$host-hyprland-caelestia"|"$host-mango-niri"|"$host-mango-hyprland"|"$host-niri-hyprland"|"$host-all") profile="$candidate" ;;
+    esac
     break
   done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
 fi
