@@ -1,0 +1,66 @@
+name: Desktop feature check
+
+on:
+  push:
+    branches:
+      - feature/hyprland-caelestia
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate shell scripts
+        run: |
+          bash -n scripts/install.sh
+          bash -n scripts/update.sh
+          bash -n scripts/nix-help.sh
+          bash -n scripts/nix-status.sh
+          bash -n scripts/nix-updates.sh
+          bash -n scripts/nix-refresh.sh
+
+      - name: Resolve new desktop inputs
+        run: nix flake update hyprland caelestia-shell --refresh
+
+      - name: Evaluate all host profiles
+        run: |
+          profiles=(
+            nyx nyx-mango nyx-niri nyx-hyprland nyx-hyprland-caelestia
+            nyx-mango-niri nyx-mango-hyprland nyx-niri-hyprland nyx-all
+            aether aether-mango aether-niri aether-hyprland aether-hyprland-caelestia
+            aether-mango-niri aether-mango-hyprland aether-niri-hyprland aether-all
+          )
+          for profile in "${profiles[@]}"; do
+            echo "Evaluating $profile"
+            nix eval --raw ".#nixosConfigurations.${profile}.config.networking.hostName" >/dev/null
+          done
+
+      - name: Verify desktop selections
+        run: |
+          test "$(nix eval --raw .#nixosConfigurations.nyx.config.networking.hostName)" = nyx
+          test "$(nix eval --json .#nixosConfigurations.nyx.config.programs.mango.enable)" = true
+          test "$(nix eval --json .#nixosConfigurations.nyx.config.programs.niri.enable)" = false
+          test "$(nix eval --json .#nixosConfigurations.nyx-hyprland.config.programs.hyprland.enable)" = true
+          test "$(nix eval --json .#nixosConfigurations.nyx-hyprland.config.programs.noctalia.enable)" = true
+          test "$(nix eval --json .#nixosConfigurations.nyx-hyprland-caelestia.config.programs.hyprland.enable)" = true
+          test "$(nix eval --json .#nixosConfigurations.nyx-hyprland-caelestia.config.home-manager.users.xxxxx.programs.caelestia.enable)" = true
+          test "$(nix eval --json .#nixosConfigurations.nyx-all.config.programs.mango.enable)" = true
+          test "$(nix eval --json .#nixosConfigurations.nyx-all.config.programs.niri.enable)" = true
+          test "$(nix eval --json .#nixosConfigurations.nyx-all.config.programs.hyprland.enable)" = true
+          test "$(nix eval --json .#nixosConfigurations.nyx-all.config.programs.noctalia.enable)" = true
+
+      - name: Upload resolved lock file
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-flake-lock
+          path: flake.lock
+          if-no-files-found: error
