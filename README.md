@@ -6,26 +6,28 @@
   <img alt="NixOS unstable" src="https://img.shields.io/badge/NixOS-unstable-5277C3?logo=nixos&logoColor=white">
   <img alt="Nix flakes" src="https://img.shields.io/badge/Nix-Flakes-7EBAE4?logo=nixos&logoColor=white">
   <img alt="Home Manager" src="https://img.shields.io/badge/Home_Manager-enabled-4A90E2">
-  <img alt="Desktop" src="https://img.shields.io/badge/Desktop-Mango_%2B_Niri-8A2BE2">
+  <img alt="Desktop" src="https://img.shields.io/badge/Desktop-Mango_%2B_Niri_%2B_Hyprland-8A2BE2">
 </p>
 
 <p align="center">
-  Reproducible NixOS systems for two machines, with safe installation, transactional updates, shared desktop configuration, and local hardware protection.
+  Reproducible NixOS systems for two machines, with safe installation, transactional updates, selectable Wayland compositors and shells, and local hardware protection.
 </p>
 
 ## Systems
 
-| Host | Hardware | Optimization | Desktop profile |
+| Host | Hardware | Optimization | Default desktop |
 |---|---|---|---|
-| `nyx` | AMD desktop | `znver4` | Mango + Niri |
-| `aether` | Intel/NVIDIA laptop | `x86-64-v3` with NVIDIA PRIME | Mango + Niri |
+| `nyx` | AMD desktop | `znver4` | Mango + Noctalia |
+| `aether` | Intel/NVIDIA laptop | `x86-64-v3` with NVIDIA PRIME | Mango + Noctalia |
 
-Each host also provides dedicated Mango-only and Niri-only profiles.
+Mango, Niri, and Hyprland can be selected individually or combined. Noctalia is the default desktop shell. Caelestia Shell is an opt-in Hyprland-only shell profile.
 
 ## Highlights
 
 - Multi-host NixOS flake with shared modules and host-specific hardware definitions
-- Mango and Niri sessions with Noctalia, Noctalia Greeter, and Home Manager
+- Mango, Niri, and Hyprland compositor profiles
+- Noctalia as the default shell and Caelestia Shell as an optional Hyprland shell
+- Noctalia Greeter and Home Manager integration
 - CachyOS kernel integration with a configured binary cache
 - Native Flatpak integration
 - Safe local handling of `hardware-configuration.nix`
@@ -52,9 +54,61 @@ nix run --refresh github:madebycli/nix-config#install -- --nyx
 nix run --refresh github:madebycli/nix-config#install -- --aether
 ```
 
-The default profile enables both Mango and Niri. Add `--mango`, `--niri`, or `--both` to select a desktop profile explicitly.
+The default profile is **Mango + Noctalia**. Compositor flags can be combined, while the shell is selected separately:
+
+```text
+--mango
+--niri
+--hyprland
+--all
+--noctalia
+--caelestia-shell
+```
+
+Examples:
+
+```bash
+# Default: Mango + Noctalia
+nix run --refresh github:madebycli/nix-config#install -- --nyx
+
+# Niri + Noctalia
+nix run --refresh github:madebycli/nix-config#install -- --nyx --niri --noctalia
+
+# Mango + Niri + Noctalia
+nix run --refresh github:madebycli/nix-config#install -- --nyx --mango --niri --noctalia
+
+# Hyprland + Noctalia
+nix run --refresh github:madebycli/nix-config#install -- --nyx --hyprland --noctalia
+
+# Hyprland + Caelestia Shell
+nix run --refresh github:madebycli/nix-config#install -- --nyx --hyprland --caelestia-shell
+
+# Mango + Niri + Hyprland, using Noctalia
+nix run --refresh github:madebycli/nix-config#install -- --nyx --all
+```
+
+`--both` no longer exists. `--all` means all three compositors with Noctalia. Caelestia Shell is intentionally restricted to the Hyprland-only profile because Caelestia is designed around Hyprland.
 
 The installer clones or safely fast-forwards the correct repository, copies only the selected host's hardware configuration, protects it with `skip-worktree`, evaluates and builds before switching, initializes managed dotfiles, and schedules a one-time TRIM pass for the next boot.
+
+## Caelestia Shell
+
+Caelestia is integrated as a normal Flake input, not through `nix run`:
+
+```nix
+caelestia-shell = {
+  url = "github:caelestia-dots/shell";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+The Hyprland + Caelestia profile uses the upstream Home Manager module and explicitly selects:
+
+```nix
+inputs.caelestia-shell.packages.${system}.with-cli
+```
+
+This provides the full shell plus CLI from the same locked Flake input.
 
 ## Nix command suite
 
@@ -99,7 +153,7 @@ nix-rollback
 nix profile upgrade --all --refresh
 ```
 
-`nix-refresh desktop` updates Home Manager, Mango, Noctalia, and Noctalia Greeter. It does not update Nixpkgs, the CachyOS kernel, or personal profile packages. See [UPDATES.md](UPDATES.md) for the exact groups and safety behavior.
+`nix-refresh desktop` now updates Home Manager, Mango, Noctalia, Noctalia Greeter, Hyprland, and Caelestia Shell. It does not update Nixpkgs, the CachyOS kernel, or personal profile packages. See [UPDATES.md](UPDATES.md) for the exact groups and safety behavior.
 
 Pull newer configuration code from GitHub without changing the input set:
 
@@ -107,7 +161,7 @@ Pull newer configuration code from GitHub without changing the input set:
 config-update
 ```
 
-The former `system-update` and `system-rollback` programs were removed rather than retained as aliases.
+`config-update` accepts the same compositor and shell selection flags as the installer. Without selection flags it reuses the last saved profile when available.
 
 ## Application catalog
 
@@ -122,13 +176,20 @@ Profile-managed packages and system-managed Flake inputs remain separate Nix pro
 
 ## Desktop profiles
 
-| Profile | Nyx | Aether | Sessions |
-|---|---|---|---|
-| Default | `nyx` | `aether` | Mango + Niri |
-| Mango | `nyx-mango` | `aether-mango` | Mango only |
-| Niri | `nyx-niri` | `aether-niri` | Niri only |
+Noctalia is the standard shell for every compositor combination. Caelestia is available only with Hyprland alone.
 
-The most recently activated profile is remembered by the local tooling and reused by normal updates.
+| Selection | Nyx profile | Aether profile | Shell |
+|---|---|---|---|
+| Default / Mango | `nyx` | `aether` | Noctalia |
+| Niri | `nyx-niri` | `aether-niri` | Noctalia |
+| Hyprland | `nyx-hyprland` | `aether-hyprland` | Noctalia |
+| Hyprland + Caelestia | `nyx-hyprland-caelestia` | `aether-hyprland-caelestia` | Caelestia |
+| Mango + Niri | `nyx-mango-niri` | `aether-mango-niri` | Noctalia |
+| Mango + Hyprland | `nyx-mango-hyprland` | `aether-mango-hyprland` | Noctalia |
+| Niri + Hyprland | `nyx-niri-hyprland` | `aether-niri-hyprland` | Noctalia |
+| All compositors | `nyx-all` | `aether-all` | Noctalia |
+
+The explicit `nyx-mango` and `aether-mango` aliases remain available and are equivalent to the default Mango + Noctalia profile.
 
 ## Configuration tools
 
@@ -147,6 +208,8 @@ Managed user configuration currently covers:
 ~/.config/noctalia
 ```
 
+Hyprland's initial configuration is declarative through Home Manager. Caelestia uses its upstream Home Manager module and keeps its own runtime configuration under `~/.config/caelestia` when customized.
+
 ## Hardware and update safety
 
 Real hardware files are never sourced from GitHub during installation. The installer copies `/etc/nixos/hardware-configuration.nix` into the selected host directory and marks the tracked placeholder as `skip-worktree` locally.
@@ -155,15 +218,15 @@ System changes validate the expected repository and remote, refuse unsafe or div
 
 `nix-clean` changes only the NixOS system profile. By default it protects the running generation plus five rollback generations. It refuses to run when the running system and boot default differ or when a newer generation exists, and always supports `--dry-run`.
 
-Automatic weekly garbage collection now removes only already-unreachable store paths. Generation retention is controlled explicitly through `nix-clean`, while automatic weekly store optimization remains enabled.
+Automatic weekly garbage collection removes only already-unreachable store paths. Generation retention is controlled explicitly through `nix-clean`, while automatic weekly store optimization remains enabled.
 
 ## Repository layout
 
 ```text
 flake.nix                 host profiles, applications, and command suite
 hosts/                    nyx and aether definitions
-modules/nixos/            shared NixOS modules
-modules/home/             Home Manager configuration
+modules/nixos/            shared NixOS modules and compositor modules
+modules/home/             Home Manager and Hyprland user configuration
 modules/flatpak/          Flatpak integration
 scripts/                  installer, Nix tools, updater, and sync tools
 sync/                     managed path declarations
