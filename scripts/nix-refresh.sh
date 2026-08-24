@@ -14,7 +14,7 @@ Usage:
   nix-refresh base         Nixpkgs, CachyOS kernel, and profile packages
   nix-refresh packages     Nixpkgs and profile packages
   nix-refresh kernel       CachyOS kernel only
-  nix-refresh desktop      Home Manager, Mango, Noctalia, and Greeter
+  nix-refresh desktop      Home Manager, Mango, Noctalia, Greeter, Hyprland, and Caelestia
   nix-refresh profiles     personal Nix profile packages only
 USAGE
 }
@@ -22,7 +22,7 @@ USAGE
 MODE="${1:-all}"
 case "$MODE" in
   all)
-    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter)
+    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter hyprland caelestia-shell)
     UPDATE_PROFILE=1
     ;;
   base)
@@ -38,7 +38,7 @@ case "$MODE" in
     UPDATE_PROFILE=0
     ;;
   desktop)
-    INPUTS=(home-manager mango noctalia noctalia-greeter)
+    INPUTS=(home-manager mango noctalia noctalia-greeter hyprland caelestia-shell)
     UPDATE_PROFILE=0
     ;;
   profiles)
@@ -93,7 +93,9 @@ while IFS= read -r state_file; do
   state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
   [[ "$state_repo" == "$REPO" ]] || continue
   candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
-  case "$candidate" in "$HOST"|"$HOST-mango"|"$HOST-niri") PROFILE="$candidate" ;; esac
+  case "$candidate" in
+    "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all") PROFILE="$candidate" ;;
+  esac
   break
 done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
 readonly PROFILE
