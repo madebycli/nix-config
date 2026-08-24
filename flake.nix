@@ -1,5 +1,5 @@
 {
-  description = "Rolling multi-host NixOS configuration with Noctalia, Niri, Mango, and CachyOS kernels";
+  description = "Rolling multi-host NixOS configuration with Mango, Niri, Hyprland, Noctalia, Caelestia Shell, and CachyOS kernels";
 
   nixConfig = {
     extra-substituters = [ "https://attic.xuyh0120.win/lantian" ];
@@ -26,6 +26,16 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    hyprland = {
+      url = "github:hyprwm/Hyprland";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    caelestia-shell = {
+      url = "github:caelestia-dots/shell";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Keep this input's own nixpkgs revision: the pinned overlay is built against it.
     nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
 
@@ -43,6 +53,12 @@
       desktopModules = {
         mango = ./modules/nixos/mango.nix;
         niri = ./modules/nixos/niri.nix;
+        hyprland = ./modules/nixos/hyprland.nix;
+      };
+
+      shellModules = {
+        noctalia = ./modules/nixos/noctalia.nix;
+        caelestia = ./modules/nixos/caelestia.nix;
       };
 
       hostDefinitions = {
@@ -72,7 +88,6 @@
         ./modules/nixos/base.nix
         ./modules/nixos/storage-tuning.nix
         ./modules/nixos/desktop.nix
-        ./modules/nixos/noctalia.nix
         ./modules/nixos/greeter.nix
         ./modules/flatpak
 
@@ -96,26 +111,32 @@
         }
       ];
 
-      mkHost = { hostName, desktops, defaultSession }:
+      mkHost = { hostName, desktops, defaultSession, shell }:
         let
           host = hostDefinitions.${hostName} or (throw "Unknown host: ${hostName}");
           unknownDesktops = builtins.filter
             (desktop: !(builtins.hasAttr desktop desktopModules))
             desktops;
           hostSpecialArgs = host.specialArgs or { };
+          homeImports = [ ./modules/home ]
+            ++ nixpkgs.lib.optional (builtins.elem "hyprland" desktops) ./modules/home/hyprland.nix;
         in
         if desktops == [ ] then
           throw "Host ${hostName} must enable at least one desktop"
         else if unknownDesktops != [ ] then
           throw "Host ${hostName} contains unknown desktops: ${builtins.concatStringsSep ", " unknownDesktops}"
+        else if !(builtins.hasAttr shell shellModules) then
+          throw "Unknown desktop shell: ${shell}"
         else if !(builtins.elem defaultSession desktops) then
           throw "Default session ${defaultSession} is not enabled for host ${hostName}"
+        else if shell == "caelestia" && desktops != [ "hyprland" ] then
+          throw "Caelestia Shell is supported only with the Hyprland-only profile"
         else
           nixpkgs.lib.nixosSystem {
             inherit system;
 
             specialArgs = {
-              inherit inputs desktops defaultSession hostName;
+              inherit inputs desktops defaultSession hostName shell;
               cpuArch = host.cpuArch;
               hardwareConfigPath = host.hardwareConfigPath;
             } // hostSpecialArgs;
@@ -123,24 +144,25 @@
             modules = commonModules
               ++ [
                 host.module
+                shellModules.${shell}
                 {
                   home-manager = {
                     useGlobalPkgs = true;
                     useUserPackages = true;
                     backupFileExtension = "backup";
                     extraSpecialArgs = {
-                      inherit inputs desktops defaultSession;
+                      inherit inputs desktops defaultSession shell;
                       cpuArch = host.cpuArch;
                     } // hostSpecialArgs;
-                    users.xxxxx.imports = [ ./modules/home ];
+                    users.xxxxx.imports = homeImports;
                   };
                 }
               ]
               ++ map (desktop: desktopModules.${desktop}) desktops;
           };
 
-      mkProfile = hostName: desktops: defaultSession:
-        mkHost { inherit hostName desktops defaultSession; };
+      mkProfile = hostName: desktops: defaultSession: shell:
+        mkHost { inherit hostName desktops defaultSession shell; };
 
       configSyncProgram = pkgs.writeShellApplication {
         name = "config-sync";
@@ -284,13 +306,25 @@
     in
     {
       nixosConfigurations = {
-        nyx = mkProfile "nyx" [ "mango" "niri" ] "mango";
-        nyx-mango = mkProfile "nyx" [ "mango" ] "mango";
-        nyx-niri = mkProfile "nyx" [ "niri" ] "niri";
+        nyx = mkProfile "nyx" [ "mango" ] "mango" "noctalia";
+        nyx-mango = mkProfile "nyx" [ "mango" ] "mango" "noctalia";
+        nyx-niri = mkProfile "nyx" [ "niri" ] "niri" "noctalia";
+        nyx-hyprland = mkProfile "nyx" [ "hyprland" ] "hyprland" "noctalia";
+        nyx-hyprland-caelestia = mkProfile "nyx" [ "hyprland" ] "hyprland" "caelestia";
+        nyx-mango-niri = mkProfile "nyx" [ "mango" "niri" ] "mango" "noctalia";
+        nyx-mango-hyprland = mkProfile "nyx" [ "mango" "hyprland" ] "mango" "noctalia";
+        nyx-niri-hyprland = mkProfile "nyx" [ "niri" "hyprland" ] "niri" "noctalia";
+        nyx-all = mkProfile "nyx" [ "mango" "niri" "hyprland" ] "mango" "noctalia";
 
-        aether = mkProfile "aether" [ "mango" "niri" ] "mango";
-        aether-mango = mkProfile "aether" [ "mango" ] "mango";
-        aether-niri = mkProfile "aether" [ "niri" ] "niri";
+        aether = mkProfile "aether" [ "mango" ] "mango" "noctalia";
+        aether-mango = mkProfile "aether" [ "mango" ] "mango" "noctalia";
+        aether-niri = mkProfile "aether" [ "niri" ] "niri" "noctalia";
+        aether-hyprland = mkProfile "aether" [ "hyprland" ] "hyprland" "noctalia";
+        aether-hyprland-caelestia = mkProfile "aether" [ "hyprland" ] "hyprland" "caelestia";
+        aether-mango-niri = mkProfile "aether" [ "mango" "niri" ] "mango" "noctalia";
+        aether-mango-hyprland = mkProfile "aether" [ "mango" "hyprland" ] "mango" "noctalia";
+        aether-niri-hyprland = mkProfile "aether" [ "niri" "hyprland" ] "niri" "noctalia";
+        aether-all = mkProfile "aether" [ "mango" "niri" "hyprland" ] "mango" "noctalia";
       };
 
       packages.${system} = {
