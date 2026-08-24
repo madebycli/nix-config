@@ -29,11 +29,11 @@ for argument in "$@"; do
 done
 
 case "$MODE" in
-  all) INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter); CHECK_PROFILE=1 ;;
+  all) INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter hyprland caelestia-shell); CHECK_PROFILE=1 ;;
   base) INPUTS=(nixpkgs nix-cachyos-kernel); CHECK_PROFILE=1 ;;
   packages) INPUTS=(nixpkgs); CHECK_PROFILE=1 ;;
   kernel) INPUTS=(nix-cachyos-kernel); CHECK_PROFILE=0 ;;
-  desktop) INPUTS=(home-manager mango noctalia noctalia-greeter); CHECK_PROFILE=0 ;;
+  desktop) INPUTS=(home-manager mango noctalia noctalia-greeter hyprland caelestia-shell); CHECK_PROFILE=0 ;;
   profiles) INPUTS=(); CHECK_PROFILE=1 ;;
 esac
 
@@ -51,7 +51,9 @@ while IFS= read -r state_file; do
   state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
   [[ "$state_repo" == "$repo" ]] || continue
   candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
-  case "$candidate" in "$host"|"$host-mango"|"$host-niri") profile="$candidate" ;; esac
+  case "$candidate" in
+    "$host"|"$host-mango"|"$host-niri"|"$host-hyprland"|"$host-hyprland-caelestia"|"$host-mango-niri"|"$host-mango-hyprland"|"$host-niri-hyprland"|"$host-all") profile="$candidate" ;;
+  esac
   break
 done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
 
