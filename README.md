@@ -34,7 +34,7 @@ Mango, Niri, and Hyprland can be selected individually or combined. Noctalia is 
 - Build-before-switch installation and update flow
 - Automatic lock-file recovery when an input update or build fails
 - LUKS tuning and a one-time TRIM pass after successful system changes
-- Manual, versioned synchronization for Mango, Niri, and Noctalia dotfiles
+- Manual, versioned synchronization for Mango, Niri, Noctalia, and Caelestia dotfiles
 - Integrated status, update preview, generation cleanup, optimization, and rollback tools
 - Companion application catalog through [`madebycli/nix-pkgs`](https://github.com/madebycli/nix-pkgs)
 
@@ -206,6 +206,7 @@ Managed user configuration currently covers:
 ~/.config/mango
 ~/.config/niri
 ~/.config/noctalia
+~/.config/caelestia
 ```
 
 Hyprland's initial configuration is declarative through Home Manager. Caelestia uses its upstream Home Manager module and keeps its own runtime configuration under `~/.config/caelestia` when customized.
