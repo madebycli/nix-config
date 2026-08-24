@@ -21,7 +21,7 @@ NixOS command suite
   nix-updates base           Preview Nixpkgs and CachyOS kernel updates
   nix-updates packages       Preview Nixpkgs and profile updates
   nix-updates kernel         Preview only the CachyOS kernel input
-  nix-updates desktop        Preview Home Manager, Mango, Noctalia, and Greeter
+  nix-updates desktop        Preview Home Manager and all desktop/shell inputs
   nix-updates profiles       Preview only personal Nix profile updates
   nix-updates --full         Build the candidate system and compare packages
 
@@ -29,7 +29,7 @@ NixOS command suite
   nix-refresh base           Update Nixpkgs, CachyOS kernel, and personal profile
   nix-refresh packages       Update Nixpkgs and personal profile
   nix-refresh kernel         Update only the CachyOS kernel input
-  nix-refresh desktop        Update Home Manager, Mango, Noctalia, and Greeter
+  nix-refresh desktop        Update Home Manager and all desktop/shell inputs
   nix-refresh profiles       Update only personal Nix profile packages
 
   nix-generations            List all NixOS system generations
