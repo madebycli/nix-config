@@ -201,4 +201,19 @@ printf '\n==> Scheduling TRIM for the next boot\n'
 sudo install -d -m 0755 /var/lib/nixos-config
 sudo touch /var/lib/nixos-config/fstrim-pending
 
+if [[ -d "$HOME/.local/state/nixos-config" ]]; then
+  while IFS= read -r state_file; do
+    [[ -f "$state_file" ]] || continue
+    state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
+    [[ "$state_repo" == "$REPO" ]] || continue
+    state_tmp="${state_file}.profile.tmp"
+    if jq --arg profile "$PROFILE" '.profile = $profile' "$state_file" >"$state_tmp"; then
+      mv "$state_tmp" "$state_file"
+    else
+      rm -f "$state_tmp"
+    fi
+    break
+  done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
+fi
+
 printf '\nActive profile: %s#%s\n' "$REPO" "$PROFILE"
