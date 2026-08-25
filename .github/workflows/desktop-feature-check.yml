@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -30,8 +30,11 @@ jobs:
           bash -n scripts/nix-updates.sh
           bash -n scripts/nix-refresh.sh
 
-      - name: Resolve new desktop inputs
-        run: nix flake update hyprland caelestia-shell --refresh
+      - name: Verify locked desktop inputs
+        run: |
+          jq -e '.nodes.root.inputs.hyprland' flake.lock >/dev/null
+          jq -e '.nodes.root.inputs["caelestia-shell"]' flake.lock >/dev/null
+          nix flake metadata --no-write-lock-file >/dev/null
 
       - name: Evaluate all host profiles
         run: |
@@ -43,36 +46,19 @@ jobs:
           )
           for profile in "${profiles[@]}"; do
             echo "Evaluating $profile"
-            nix eval --raw ".#nixosConfigurations.${profile}.config.networking.hostName" >/dev/null
+            nix eval --no-write-lock-file --raw ".#nixosConfigurations.${profile}.config.networking.hostName" >/dev/null
           done
 
       - name: Verify desktop selections
         run: |
-          test "$(nix eval --raw .#nixosConfigurations.nyx.config.networking.hostName)" = nyx
-          test "$(nix eval --json .#nixosConfigurations.nyx.config.programs.mango.enable)" = true
-          test "$(nix eval --json .#nixosConfigurations.nyx.config.programs.niri.enable)" = false
-          test "$(nix eval --json .#nixosConfigurations.nyx-hyprland.config.programs.hyprland.enable)" = true
-          test "$(nix eval --json .#nixosConfigurations.nyx-hyprland.config.programs.noctalia.enable)" = true
-          test "$(nix eval --json .#nixosConfigurations.nyx-hyprland-caelestia.config.programs.hyprland.enable)" = true
-          test "$(nix eval --json .#nixosConfigurations.nyx-hyprland-caelestia.config.home-manager.users.xxxxx.programs.caelestia.enable)" = true
-          test "$(nix eval --json .#nixosConfigurations.nyx-all.config.programs.mango.enable)" = true
-          test "$(nix eval --json .#nixosConfigurations.nyx-all.config.programs.niri.enable)" = true
-          test "$(nix eval --json .#nixosConfigurations.nyx-all.config.programs.hyprland.enable)" = true
-          test "$(nix eval --json .#nixosConfigurations.nyx-all.config.programs.noctalia.enable)" = true
-
-      - name: Commit resolved lock file
-        run: |
-          if ! git diff --quiet -- flake.lock; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -- flake.lock
-            git commit -m "update(feature): lock Hyprland and Caelestia inputs"
-            git push origin HEAD:feature/hyprland-caelestia
-          fi
-
-      - name: Upload resolved lock file
-        uses: actions/upload-artifact@v4
-        with:
-          name: feature-flake-lock
-          path: flake.lock
-          if-no-files-found: error
+          test "$(nix eval --no-write-lock-file --raw .#nixosConfigurations.nyx.config.networking.hostName)" = nyx
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx.config.programs.mango.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx.config.programs.niri.enable)" = false
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland.config.programs.hyprland.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland.config.programs.noctalia.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland-caelestia.config.programs.hyprland.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland-caelestia.config.home-manager.users.xxxxx.programs.caelestia.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-all.config.programs.mango.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-all.config.programs.niri.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-all.config.programs.hyprland.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-all.config.programs.noctalia.enable)" = true
