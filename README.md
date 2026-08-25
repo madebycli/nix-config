@@ -91,6 +91,10 @@ nix run --refresh github:madebycli/nix-config#install -- --nyx --all
 
 The installer clones or safely fast-forwards the correct repository, copies only the selected host's hardware configuration, protects it with `skip-worktree`, evaluates and builds before switching, initializes managed dotfiles, and schedules a one-time TRIM pass for the next boot.
 
+## Hyprland
+
+Hyprland uses the native NixOS and Home Manager modules from the pinned Nixpkgs/Home Manager inputs. There is no separate Hyprland Flake input. The NixOS module installs Hyprland and its portal; Home Manager only writes the user configuration.
+
 ## Caelestia Shell
 
 Caelestia is integrated as a normal Flake input, not through `nix run`:
@@ -153,7 +157,7 @@ nix-rollback
 nix profile upgrade --all --refresh
 ```
 
-`nix-refresh desktop` now updates Home Manager, Mango, Noctalia, Noctalia Greeter, Hyprland, and Caelestia Shell. It does not update Nixpkgs, the CachyOS kernel, or personal profile packages. See [UPDATES.md](UPDATES.md) for the exact groups and safety behavior.
+`nix-refresh desktop` updates Home Manager, Mango, Noctalia, Noctalia Greeter, and Caelestia Shell. Hyprland comes from Nixpkgs and is therefore updated by `nix-refresh`, `nix-refresh base`, or `nix-refresh packages`. The desktop mode does not update Nixpkgs, the CachyOS kernel, or personal profile packages. See [UPDATES.md](UPDATES.md) for the exact groups and safety behavior.
 
 Pull newer configuration code from GitHub without changing the input set:
 

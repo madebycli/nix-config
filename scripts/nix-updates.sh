@@ -29,11 +29,11 @@ for argument in "$@"; do
 done
 
 case "$MODE" in
-  all) INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter hyprland caelestia-shell); CHECK_PROFILE=1 ;;
+  all) INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter caelestia-shell); CHECK_PROFILE=1 ;;
   base) INPUTS=(nixpkgs nix-cachyos-kernel); CHECK_PROFILE=1 ;;
   packages) INPUTS=(nixpkgs); CHECK_PROFILE=1 ;;
   kernel) INPUTS=(nix-cachyos-kernel); CHECK_PROFILE=0 ;;
-  desktop) INPUTS=(home-manager mango noctalia noctalia-greeter hyprland caelestia-shell); CHECK_PROFILE=0 ;;
+  desktop) INPUTS=(home-manager mango noctalia noctalia-greeter caelestia-shell); CHECK_PROFILE=0 ;;
   profiles) INPUTS=(); CHECK_PROFILE=1 ;;
 esac
 

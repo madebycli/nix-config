@@ -14,7 +14,7 @@ Usage:
   nix-refresh base         Nixpkgs, CachyOS kernel, and profile packages
   nix-refresh packages     Nixpkgs and profile packages
   nix-refresh kernel       CachyOS kernel only
-  nix-refresh desktop      Home Manager, Mango, Noctalia, Greeter, Hyprland, and Caelestia
+  nix-refresh desktop      Home Manager, Mango, Noctalia, Greeter, and Caelestia
   nix-refresh profiles     personal Nix profile packages only
 USAGE
 }
@@ -22,7 +22,7 @@ USAGE
 MODE="${1:-all}"
 case "$MODE" in
   all)
-    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter hyprland caelestia-shell)
+    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter caelestia-shell)
     UPDATE_PROFILE=1
     ;;
   base)
@@ -38,7 +38,7 @@ case "$MODE" in
     UPDATE_PROFILE=0
     ;;
   desktop)
-    INPUTS=(home-manager mango noctalia noctalia-greeter hyprland caelestia-shell)
+    INPUTS=(home-manager mango noctalia noctalia-greeter caelestia-shell)
     UPDATE_PROFILE=0
     ;;
   profiles)

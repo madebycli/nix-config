@@ -25,9 +25,10 @@ home-manager
 mango
 noctalia
 noctalia-greeter
-hyprland
 caelestia-shell
 ```
+
+Hyprland is provided directly by the pinned Nixpkgs input through `programs.hyprland.enable`; it has no dedicated Flake input.
 
 Caelestia Shell is integrated through the normal Flake input:
 
@@ -58,7 +59,6 @@ home-manager
 mango
 noctalia
 noctalia-greeter
-hyprland
 caelestia-shell
 ```
 
@@ -80,7 +80,7 @@ nix-updates --full
 
 Flake updates are resolved in a temporary repository copy. Personal profile updates are applied to a temporary copy of the profile and compared with the current profile. `--full` also builds the candidate NixOS system closure and runs `nix store diff-closures`.
 
-The `all` and `desktop` preview modes include both Hyprland and Caelestia Shell even when the currently active profile does not use them. This keeps every declared desktop source visible and updateable.
+Hyprland is supplied by Nixpkgs rather than a separate Flake input, so Hyprland changes are previewed through Nixpkgs in `all`, `base`, and `packages` modes. The `desktop` mode continues to preview Caelestia Shell and the other dedicated desktop inputs.
 
 ## Desktop profile selection
 
