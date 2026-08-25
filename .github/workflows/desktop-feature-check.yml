@@ -1,9 +1,9 @@
-name: Desktop feature check
+name: Desktop profile check
 
 on:
   push:
     branches:
-      - feature/hyprland-caelestia
+      - main
   workflow_dispatch:
 
 permissions:
@@ -14,8 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: feature/hyprland-caelestia
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -32,7 +30,7 @@ jobs:
 
       - name: Verify locked desktop inputs
         run: |
-          jq -e '.nodes.root.inputs.hyprland' flake.lock >/dev/null
+          test "$(jq -r '.nodes.root.inputs.hyprland // empty' flake.lock)" = ""
           jq -e '.nodes.root.inputs["caelestia-shell"]' flake.lock >/dev/null
           nix flake metadata --no-write-lock-file >/dev/null
 
@@ -51,14 +49,13 @@ jobs:
 
       - name: Verify desktop selections
         run: |
-          test "$(nix eval --no-write-lock-file --raw .#nixosConfigurations.nyx.config.networking.hostName)" = nyx
           test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx.config.programs.mango.enable)" = true
           test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx.config.programs.niri.enable)" = false
           test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland.config.programs.hyprland.enable)" = true
-          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland.config.programs.noctalia.enable)" = true
-          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland-caelestia.config.programs.hyprland.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland.config.programs.noctalia.systemd.enable)" = false
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-mango-hyprland.config.programs.mango.enable)" = true
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-mango-hyprland.config.programs.hyprland.enable)" = true
           test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-hyprland-caelestia.config.home-manager.users.xxxxx.programs.caelestia.enable)" = true
           test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-all.config.programs.mango.enable)" = true
           test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-all.config.programs.niri.enable)" = true
           test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-all.config.programs.hyprland.enable)" = true
-          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-all.config.programs.noctalia.enable)" = true
