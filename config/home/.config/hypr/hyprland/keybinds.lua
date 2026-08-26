@@ -36,8 +36,12 @@ end
 
 -- Window actions
 hl.bind("SUPER + Q", hl.dsp.window.close())
--- Native Scrolling toggle between the configured 0.5 and 1.0 widths.
-hl.bind("SUPER + A", hl.dsp.layout("colresize +conf"))
+-- Toggle 50% / 100%, then repack the visible columns so shrinking a full-width
+-- column brings its neighbour back into view instead of leaving empty desktop.
+hl.bind("SUPER + A", function()
+    hl.dispatch(hl.dsp.layout("colresize +conf"))
+    hl.dispatch(hl.dsp.layout("fit visible"))
+end)
 hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 hl.bind("SUPER + P", hl.dsp.window.float())
 
