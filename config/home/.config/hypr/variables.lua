@@ -33,7 +33,7 @@ return {
 
     -- Gaps
     workspaceGaps              = 0,
-    windowGapsIn               = 3,
+    windowGapsIn               = 6,
     windowGapsOut              = 6,
 
     -- Window styling

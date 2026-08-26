@@ -39,6 +39,9 @@ hl.window_rule({
     no_blur = true,
 })
 
+-- Match Mango's shadow_only_floating behavior so tiled gaps stay visually clean.
+hl.window_rule({ match = { float = false }, no_shadow = true })
+
 -- Ghostty and Nautilus are the only regular windows with transparency + blur.
 for _, class in ipairs({ "ghostty", "com.mitchellh.ghostty" }) do
     hl.window_rule({ match = { class = class }, no_blur = false })

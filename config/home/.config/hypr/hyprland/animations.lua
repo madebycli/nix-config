@@ -4,31 +4,38 @@ hl.config({
     },
 })
 
--- Fast, clean easing for normal window and layer motion.
-hl.curve("snappy", { type = "bezier", points = { { 0.2, 0.85 }, { 0.2, 1.0 } } })
-hl.curve("snappyOut", { type = "bezier", points = { { 0.25, 0.75 }, { 0.25, 1.0 } } })
+-- Window timing and easing mapped from the Mango reference config.
+hl.curve("mangoOpen", { type = "bezier", points = { { 0.4, 0.9 }, { 0.6, 1.0 } } })
+hl.curve("mangoClose", { type = "bezier", points = { { 0.08, 0.82 }, { 0.17, 1.0 } } })
+hl.curve("mangoMove", { type = "bezier", points = { { 0.46, 1.0 }, { 0.29, 1.0 } } })
+hl.curve("mangoFadeOut", { type = "bezier", points = { { 0.5, 0.5 }, { 0.5, 0.5 } } })
 
 -- Keep the workspace animation exactly as tuned before.
 hl.curve("workspaceBounce", { type = "bezier", points = { { 0.25, 1.25 }, { 0.5, 1 } } })
 
-hl.animation({ leaf = "layersIn", enabled = true, speed = 1.6, bezier = "snappy", style = "slide" })
-hl.animation({ leaf = "layersOut", enabled = true, speed = 1.2, bezier = "snappyOut", style = "slide" })
-hl.animation({ leaf = "fadeLayers", enabled = true, speed = 1.4, bezier = "snappy" })
+-- Mango has layer animations disabled. Fuzzel and Noctalia therefore stay instant.
+hl.animation({ leaf = "layersIn", enabled = false })
+hl.animation({ leaf = "layersOut", enabled = false })
+hl.animation({ leaf = "fadeLayers", enabled = false })
 
-hl.animation({ leaf = "windowsIn", enabled = true, speed = 1.6, bezier = "snappy" })
-hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.2, bezier = "snappyOut" })
-hl.animation({ leaf = "windowsMove", enabled = true, speed = 1.4, bezier = "snappy" })
+-- Mango timings: open 300 ms, close 200 ms, move/resize 500 ms.
+hl.animation({ leaf = "windowsIn", enabled = true, speed = 3, bezier = "mangoOpen", style = "popin 80%" })
+hl.animation({ leaf = "windowsOut", enabled = true, speed = 2, bezier = "mangoClose", style = "popin 80%" })
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "mangoMove" })
 
+-- Do not touch the workspace switch animation.
 hl.animation({ leaf = "workspaces", enabled = true, speed = 4, bezier = "workspaceBounce", style = "slidevert" })
 
 hl.animation({
-    leaf = "specialWorkspace",
+    leaf    = "specialWorkspace",
     enabled = true,
-    speed = 1.8,
-    bezier = "snappy",
-    style = "slidefadevert 12%"
+    speed   = 3,
+    bezier  = "mangoMove",
+    style   = "slidefadevert 15%"
 })
 
-hl.animation({ leaf = "fade", enabled = true, speed = 1.4, bezier = "snappy" })
-hl.animation({ leaf = "fadeDim", enabled = true, speed = 1.4, bezier = "snappy" })
-hl.animation({ leaf = "border", enabled = true, speed = 1.2, bezier = "snappy" })
+hl.animation({ leaf = "fadeIn", enabled = true, speed = 3, bezier = "mangoMove" })
+hl.animation({ leaf = "fadeOut", enabled = true, speed = 2, bezier = "mangoFadeOut" })
+hl.animation({ leaf = "fadeSwitch", enabled = false })
+hl.animation({ leaf = "fadeDim", enabled = true, speed = 3, bezier = "mangoMove" })
+hl.animation({ leaf = "border", enabled = false })
