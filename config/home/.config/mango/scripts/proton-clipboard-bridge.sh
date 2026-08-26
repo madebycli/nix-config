@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 
 # Security: X11 has no Wayland-style clipboard isolation. This bridge only
-# mirrors text while a Steam Proton XWayland client is focused, but the current
-# clipboard becomes readable by other X11 clients during that window.
+# exposes the current text clipboard to X11 while a Steam Proton XWayland
+# client is focused. If Proton did not replace that clipboard, the previous
+# X11 clipboard is restored when leaving the game.
 
 set -u
 
 poll_interval="${MANGO_PROTON_CLIPBOARD_INTERVAL:-0.15}"
 last_x11=""
+saved_x11=""
+forwarded_wayland=""
 was_proton=0
 
 read_wayland_clipboard() {
@@ -33,10 +36,12 @@ focused_proton_client() {
 sync_wayland_to_x11() {
   local wayland
 
+  saved_x11="$(read_x11_clipboard 2>/dev/null || true)"
   wayland="$(read_wayland_clipboard)" || return 0
   [[ -n "$wayland" ]] || return 0
 
   printf '%s' "$wayland" | xclip -selection clipboard -in 2>/dev/null
+  forwarded_wayland="$wayland"
   last_x11="$wayland"
 }
 
@@ -59,6 +64,21 @@ sync_x11_to_wayland() {
   last_x11="$current"
 }
 
+restore_forwarded_x11() {
+  local current
+
+  [[ -n "$forwarded_wayland" ]] || return 0
+  current="$(read_x11_clipboard 2>/dev/null || true)"
+
+  if [[ "$current" == "$forwarded_wayland" ]]; then
+    printf '%s' "$saved_x11" | xclip -selection clipboard -in 2>/dev/null
+    last_x11="$saved_x11"
+  fi
+
+  saved_x11=""
+  forwarded_wayland=""
+}
+
 while true; do
   if focused_proton_client; then
     if (( was_proton == 0 )); then
@@ -75,6 +95,7 @@ while true; do
     if (( was_proton == 1 )); then
       # Catch a copy followed immediately by switching away from the game.
       sync_x11_to_wayland
+      restore_forwarded_x11
       was_proton=0
     fi
   fi
