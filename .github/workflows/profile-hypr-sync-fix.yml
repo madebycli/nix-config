@@ -23,7 +23,7 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Apply fixes
-        run: python3 scripts/.profile-hypr-sync-migration-v3.py
+        run: python3 scripts/.profile-hypr-sync-migration-v4.py
 
       - name: Validate scripts
         run: |
