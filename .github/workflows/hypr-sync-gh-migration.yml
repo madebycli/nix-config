@@ -1,0 +1,47 @@
+name: Apply Hyprland sync and GitHub auth migration
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply migration
+        run: python3 scripts/.hypr-sync-gh-migration.py
+
+      - name: Validate
+        run: |
+          git diff --check
+          bash -n scripts/nix-refresh.sh
+          PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" python3 -m py_compile scripts/config-sync.py
+          test ! -e modules/home/hyprland.nix
+          test ! -e config/home/.config/hypr/hyprland.conf
+          grep -Fx '.config/hypr' sync/paths.conf
+          grep -q 'coreutils diffutils findutils gh git' flake.nix
+          nix eval --no-write-lock-file --raw .#nixosConfigurations.nyx-mango-hyprland.config.networking.hostName >/dev/null
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx-mango-hyprland.config.programs.hyprland.enable)" = true
+          test "$(nix eval --no-write-lock-file --raw '.#nixosConfigurations.nyx-mango-hyprland.config.environment.etc."nixos-config/profile".text')" = "nyx-mango-hyprland"
+
+      - name: Commit migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A flake.nix scripts/nix-refresh.sh scripts/config-sync.py modules/home/hyprland.nix config/home/.config/hypr/hyprland.conf
+          git commit -m "fix: sync full Hyprland config and bootstrap GitHub auth"
+          git push origin HEAD:main
