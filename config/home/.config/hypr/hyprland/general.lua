@@ -22,6 +22,7 @@ hl.config({
         follow_focus             = true,
         follow_min_visible       = 0.0,
         explicit_column_widths   = "0.5, 0.7, 1.0",
+        wrap_focus               = false,
         direction                = "right",
     },
 })
