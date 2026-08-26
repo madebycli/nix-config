@@ -107,6 +107,12 @@
       enable = true;
       gamescopeSession.enable = true;
     };
+
+    gamescope = {
+      enable = true;
+      capSysNice = true;
+    };
+
     gamemode.enable = true;
 
     localsend = {
