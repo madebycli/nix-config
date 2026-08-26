@@ -36,11 +36,12 @@ end
 
 -- Window actions
 hl.bind("SUPER + Q", hl.dsp.window.close())
--- Toggle 50% / 100%, then repack the visible columns so shrinking a full-width
--- column brings its neighbour back into view instead of leaving empty desktop.
+-- Toggle only the active Scrolling column between 50% and 100%, then move the
+-- viewport just enough to keep that same column fully visible. Unlike `fit visible`,
+-- this does not resize neighboring columns.
 hl.bind("SUPER + A", function()
     hl.dispatch(hl.dsp.layout("colresize +conf"))
-    hl.dispatch(hl.dsp.layout("fit visible"))
+    hl.dispatch(hl.dsp.layout("fit_into_view"))
 end)
 hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 hl.bind("SUPER + P", hl.dsp.window.float())
