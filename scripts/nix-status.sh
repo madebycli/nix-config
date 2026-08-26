@@ -31,7 +31,14 @@ host="$(hostname -s)"
 case "$host" in nyx|aether) ;; *) host="unknown" ;; esac
 repo="$HOME/$host"
 profile="$host"
-if [[ -d "$HOME/.local/state/nixos-config" ]]; then
+profile_from_system=0
+if [[ -r /etc/nixos-config/profile ]]; then
+  candidate="$(tr -d '\r\n' </etc/nixos-config/profile)"
+  case "$candidate" in
+    "$host"|"$host-mango"|"$host-niri"|"$host-hyprland"|"$host-hyprland-caelestia"|"$host-mango-niri"|"$host-mango-hyprland"|"$host-niri-hyprland"|"$host-all") profile="$candidate"; profile_from_system=1 ;;
+  esac
+fi
+if ((profile_from_system == 0)) && [[ -d "$HOME/.local/state/nixos-config" ]]; then
   while IFS= read -r state_file; do
     state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
     [[ "$state_repo" == "$repo" ]] || continue

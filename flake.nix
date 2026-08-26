@@ -113,6 +113,11 @@
             (desktop: !(builtins.hasAttr desktop desktopModules))
             desktops;
           hostSpecialArgs = host.specialArgs or { };
+          profileName =
+            if shell == "caelestia" then "${hostName}-hyprland-caelestia"
+            else if desktops == [ "mango" ] then hostName
+            else if desktops == [ "mango" "niri" "hyprland" ] then "${hostName}-all"
+            else "${hostName}-${builtins.concatStringsSep "-" desktops}";
           homeImports = [ ./modules/home ]
             ++ nixpkgs.lib.optional (builtins.elem "hyprland" desktops) ./modules/home/hyprland.nix;
         in
@@ -141,6 +146,8 @@
                 host.module
                 shellModules.${shell}
                 {
+                  environment.etc."nixos-config/profile".text = "${profileName}\n";
+
                   home-manager = {
                     useGlobalPkgs = true;
                     useUserPackages = true;
@@ -222,7 +229,7 @@
       nixRefreshProgram = pkgs.writeShellApplication {
         name = "nix-refresh";
         inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils git jq nix ];
+        runtimeInputs = with pkgs; [ coreutils findutils gh git jq nix ];
         text = builtins.readFile ./scripts/nix-refresh.sh;
         checkPhase = ''
           ${pkgs.bash}/bin/bash -n "$target"

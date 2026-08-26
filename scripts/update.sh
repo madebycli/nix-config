@@ -89,18 +89,30 @@ REMOTE="$(git -C "$REPO" remote get-url origin)"
 
 if ((SELECTION_EXPLICIT == 0)); then
   PROFILE="$HOST"
-  while IFS= read -r state_file; do
-    [[ -f "$state_file" ]] || continue
-    state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
-    [[ "$state_repo" == "$REPO" ]] || continue
-    candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
+  PROFILE_FROM_SYSTEM=0
+  if [[ -r /etc/nixos-config/profile ]]; then
+    candidate="$(tr -d '\r\n' </etc/nixos-config/profile)"
     case "$candidate" in
       "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all")
         PROFILE="$candidate"
-        break
+        PROFILE_FROM_SYSTEM=1
         ;;
     esac
-  done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
+  fi
+  if ((PROFILE_FROM_SYSTEM == 0)); then
+    while IFS= read -r state_file; do
+      [[ -f "$state_file" ]] || continue
+      state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
+      [[ "$state_repo" == "$REPO" ]] || continue
+      candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
+      case "$candidate" in
+        "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all")
+          PROFILE="$candidate"
+          break
+          ;;
+      esac
+    done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
+  fi
 else
   if ((ALL_DESKTOPS == 1)); then
     ((MANGO == 0 && NIRI == 0 && HYPRLAND == 0)) || die "Do not combine --all with individual compositor flags."
@@ -143,7 +155,33 @@ readonly PROFILE
 git -C "$REPO" fetch --prune origin
 UPSTREAM="origin/$(git -C "$REPO" branch --show-current)"
 read -r AHEAD BEHIND < <(git -C "$REPO" rev-list --left-right --count "HEAD...$UPSTREAM")
-((AHEAD == 0 || BEHIND == 0)) || die "Git history diverged."
+
+if ((AHEAD > 0 && BEHIND > 0)); then
+  AUTO_LOCK_ONLY=1
+  while IFS= read -r commit; do
+    subject="$(git -C "$REPO" show -s --format=%s "$commit")"
+    case "$subject" in
+      update\(*\):\ refresh\ Flake\ inputs) ;;
+      *) AUTO_LOCK_ONLY=0; break ;;
+    esac
+    mapfile -t commit_paths < <(git -C "$REPO" diff-tree --root --no-commit-id --name-only -r "$commit")
+    if ((${#commit_paths[@]} != 1)) || [[ "${commit_paths[0]}" != "flake.lock" ]]; then
+      AUTO_LOCK_ONLY=0
+      break
+    fi
+  done < <(git -C "$REPO" rev-list "$UPSTREAM..HEAD")
+
+  if ((AUTO_LOCK_ONLY == 1)); then
+    printf '\n==> Rebasing local automatic Flake update commit(s)\n'
+    if ! git -C "$REPO" rebase "$UPSTREAM"; then
+      git -C "$REPO" rebase --abort >/dev/null 2>&1 || true
+      die "Automatic rebase of local Flake update commit(s) failed."
+    fi
+    read -r AHEAD BEHIND < <(git -C "$REPO" rev-list --left-right --count "HEAD...$UPSTREAM")
+  else
+    die "Git history diverged."
+  fi
+fi
 
 STASHED=0
 if ((BEHIND > 0)); then

@@ -562,6 +562,11 @@ def needs_system_apply(paths: Iterable[str]) -> bool:
 def profile_from_state(repo: Path, explicit: str | None) -> str:
     if explicit:
         return explicit
+    system_profile = Path("/etc/nixos-config/profile")
+    if system_profile.is_file():
+        value = system_profile.read_text(encoding="utf-8").strip()
+        if value:
+            return value
     state = load_state(repo)
     if state.get("profile"):
         return str(state["profile"])
@@ -741,11 +746,11 @@ def command_init(args: argparse.Namespace) -> None:
         apply_mirror_to_local(repo, paths, backup_root, assume_yes=args.yes)
         active = scan_tree(Path.home(), roots, patterns)
         common = {path: value for path, value in active.items() if mirror.get(path) == value}
-        save_state(repo, common, args.profile or socket.gethostname().split(".", 1)[0])
+        save_state(repo, common, profile_from_state(repo, args.profile))
         print(f"\nSynchronisation initialisiert. Backups bei Bedarf: {backup_root}")
     else:
         common = {path: value for path, value in active.items() if mirror.get(path) == value}
-        save_state(repo, common, args.profile or socket.gethostname().split(".", 1)[0])
+        save_state(repo, common, profile_from_state(repo, args.profile))
         print("\nSynchronisationszustand ohne Kopiervorgang initialisiert.")
 
 

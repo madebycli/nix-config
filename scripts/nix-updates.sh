@@ -46,16 +46,25 @@ host="$(hostname -s)"
 case "$host" in nyx|aether) ;; *) printf 'Error: hostname must be nyx or aether.\n' >&2; exit 1 ;; esac
 repo="$HOME/$host"
 profile="$host"
-while IFS= read -r state_file; do
-  [[ -f "$state_file" ]] || continue
-  state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
-  [[ "$state_repo" == "$repo" ]] || continue
-  candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
+PROFILE_FROM_SYSTEM=0
+if [[ -r /etc/nixos-config/profile ]]; then
+  candidate="$(tr -d '\r\n' </etc/nixos-config/profile)"
   case "$candidate" in
-    "$host"|"$host-mango"|"$host-niri"|"$host-hyprland"|"$host-hyprland-caelestia"|"$host-mango-niri"|"$host-mango-hyprland"|"$host-niri-hyprland"|"$host-all") profile="$candidate" ;;
+    "$host"|"$host-mango"|"$host-niri"|"$host-hyprland"|"$host-hyprland-caelestia"|"$host-mango-niri"|"$host-mango-hyprland"|"$host-niri-hyprland"|"$host-all") profile="$candidate"; PROFILE_FROM_SYSTEM=1 ;;
   esac
-  break
-done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
+fi
+if ((PROFILE_FROM_SYSTEM == 0)); then
+  while IFS= read -r state_file; do
+    [[ -f "$state_file" ]] || continue
+    state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
+    [[ "$state_repo" == "$repo" ]] || continue
+    candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
+    case "$candidate" in
+      "$host"|"$host-mango"|"$host-niri"|"$host-hyprland"|"$host-hyprland-caelestia"|"$host-mango-niri"|"$host-mango-hyprland"|"$host-niri-hyprland"|"$host-all") profile="$candidate" ;;
+    esac
+    break
+  done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
+fi
 
 temp_root="$(mktemp -d -t nix-updates.XXXXXXXX)"
 trap 'rm -rf "$temp_root"' EXIT INT TERM

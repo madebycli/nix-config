@@ -88,16 +88,26 @@ if ! git -C "$REPO" diff --cached --quiet; then
 fi
 
 PROFILE="$HOST"
-while IFS= read -r state_file; do
-  [[ -f "$state_file" ]] || continue
-  state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
-  [[ "$state_repo" == "$REPO" ]] || continue
-  candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
+PROFILE_FROM_SYSTEM=0
+if [[ -r /etc/nixos-config/profile ]]; then
+  candidate="$(tr -d '\r\n' </etc/nixos-config/profile)"
   case "$candidate" in
-    "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all") PROFILE="$candidate" ;;
+    "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all") PROFILE="$candidate"; PROFILE_FROM_SYSTEM=1 ;;
   esac
-  break
-done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
+fi
+if ((PROFILE_FROM_SYSTEM == 0)); then
+  while IFS= read -r state_file; do
+    [[ -f "$state_file" ]] || continue
+    state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
+    [[ "$state_repo" == "$REPO" ]] || continue
+    candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
+    case "$candidate" in
+      "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all") PROFILE="$candidate" ;;
+    esac
+    break
+  done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
+fi
+
 readonly PROFILE
 
 git -C "$REPO" fetch --prune origin
@@ -120,7 +130,20 @@ if ((BEHIND > 0)); then
 fi
 
 PUBLISH=1
-((AHEAD == 0)) || PUBLISH=0
+if ((AHEAD > 0)); then
+  while IFS= read -r commit; do
+    subject="$(git -C "$REPO" show -s --format=%s "$commit")"
+    case "$subject" in
+      update\(*\):\ refresh\ Flake\ inputs) ;;
+      *) PUBLISH=0; break ;;
+    esac
+    mapfile -t commit_paths < <(git -C "$REPO" diff-tree --root --no-commit-id --name-only -r "$commit")
+    if ((${#commit_paths[@]} != 1)) || [[ "${commit_paths[0]}" != "flake.lock" ]]; then
+      PUBLISH=0
+      break
+    fi
+  done < <(git -C "$REPO" rev-list "$UPSTREAM..HEAD")
+fi
 [[ -n "$(git -C "$REPO" config user.name || true)" ]] || PUBLISH=0
 [[ -n "$(git -C "$REPO" config user.email || true)" ]] || PUBLISH=0
 
@@ -191,20 +214,30 @@ fi
 if ! git -C "$REPO" diff --quiet -- flake.lock; then
   if ((PUBLISH == 1)); then
     git -C "$REPO" add -- flake.lock
-    if git -C "$REPO" commit -m "update($MODE): refresh Flake inputs"; then
-      git -C "$REPO" fetch --prune origin
-      read -r PUSH_AHEAD PUSH_BEHIND < <(git -C "$REPO" rev-list --left-right --count "HEAD...$UPSTREAM")
-      if ((PUSH_BEHIND == 0)); then
-        git -C "$REPO" push origin "$BRANCH" || printf 'Git push failed; commit remains local.\n' >&2
-      else
-        printf 'Remote advanced; commit remains local.\n' >&2
-      fi
-    else
+    if ! git -C "$REPO" commit -m "update($MODE): refresh Flake inputs"; then
       git -C "$REPO" reset -q HEAD -- flake.lock || true
       printf 'Lock-file commit failed.\n' >&2
+      PUBLISH=0
     fi
   else
     printf 'flake.lock remains modified locally.\n' >&2
+  fi
+fi
+
+if ((PUBLISH == 1)); then
+  git -C "$REPO" fetch --prune origin
+  read -r PUSH_AHEAD PUSH_BEHIND < <(git -C "$REPO" rev-list --left-right --count "HEAD...$UPSTREAM")
+  if ((PUSH_BEHIND > 0)); then
+    printf 'Remote advanced; local Flake update commit remains local.\n' >&2
+  elif ((PUSH_AHEAD > 0)); then
+    if gh auth status --hostname github.com >/dev/null 2>&1; then
+      gh auth setup-git --hostname github.com >/dev/null 2>&1 || true
+      if ! GIT_TERMINAL_PROMPT=0 git -C "$REPO" push origin "$BRANCH"; then
+        printf 'GitHub push failed; commit remains local.\n' >&2
+      fi
+    else
+      printf 'GitHub push skipped; authenticate once with: gh auth login --hostname github.com --git-protocol https --web\n' >&2
+    fi
   fi
 fi
 
