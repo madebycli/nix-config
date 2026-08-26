@@ -7,9 +7,9 @@ hl.config({
         repeat_delay            = 250,
         repeat_rate             = 35,
         follow_mouse            = 1,
-        follow_mouse_threshold  = 2.0,
+        follow_mouse_threshold  = 0.0,
         focus_on_close          = 1,
-        mouse_refocus           = true,
+        mouse_refocus           = false,
 
         touchpad = {
             natural_scroll       = true,
