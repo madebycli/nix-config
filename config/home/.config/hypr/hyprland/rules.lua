@@ -32,23 +32,22 @@ local xwl_popup_tag = "xwl_popup"
 ---- Window rules ----
 ----------------------
 
--- Window appearance is opt-in: everything is fully opaque and unblurred by default.
-hl.window_rule({
-    match = { class = ".*" },
-    opacity = vars.windowOpacity .. " override",
-    no_blur = true,
-})
-
 -- Match Mango's shadow_only_floating behavior so tiled gaps stay visually clean.
 hl.window_rule({ match = { float = false }, no_shadow = true })
 
 -- Ghostty and Nautilus are the only regular windows with transparency + blur.
 for _, class in ipairs({ "ghostty", "com.mitchellh.ghostty" }) do
-    hl.window_rule({ match = { class = class }, no_blur = false })
-    hl.window_rule({ match = { class = class, fullscreen = false }, opacity = "0.92 override" })
+    hl.window_rule({
+        match = { class = class },
+        opacity = "0.92 override",
+        no_blur = false,
+    })
 end
-hl.window_rule({ match = { class = "org.gnome.Nautilus" }, no_blur = false })
-hl.window_rule({ match = { class = "org.gnome.Nautilus", fullscreen = false }, opacity = "0.92 override" })
+hl.window_rule({
+    match = { class = "org.gnome.Nautilus" },
+    opacity = "0.92 override",
+    no_blur = false,
+})
 
 -- Center all floating Wayland windows. XWayland popups count as windows.
 hl.window_rule({ match = { float = true, xwayland = false }, center = true })
