@@ -6,6 +6,7 @@ hl.config({
         numlock_by_default = false,
         repeat_delay       = 250,
         repeat_rate        = 35,
+        follow_mouse       = 1,
         focus_on_close     = 1,
 
         touchpad           = {
@@ -23,4 +24,3 @@ hl.config({
         hotspot_padding = 1,
     },
 })
-
