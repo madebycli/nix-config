@@ -59,7 +59,7 @@ hl.window_rule({
     keep_aspect_ratio = true,
 })
 
--- Games open on the next empty workspace on the current monitor and use real fullscreen.
+-- Games open on the next empty workspace without stealing the current workspace.
 for _, class in ipairs({
     "steam_app_[0-9]+",
     "steam_app_default",
@@ -67,11 +67,12 @@ for _, class in ipairs({
     "gamescope",
 }) do
     hl.window_rule({
-        match        = { class = class },
-        workspace    = "emptynm",
-        fullscreen   = true,
-        opaque       = true,
-        idle_inhibit = "fullscreen",
+        match             = { class = class },
+        workspace         = "emptynm silent",
+        fullscreen        = true,
+        opaque            = true,
+        idle_inhibit      = "fullscreen",
+        focus_on_activate = false,
     })
 end
 
@@ -192,16 +193,6 @@ hl.layer_rule({ match = { namespace = "logout_dialog" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "selection" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "wayfreeze" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "launcher" }, no_anim = true })
-
--- Disable Hyprland blur and layer animations for every Noctalia surface.
--- The broad match also covers new Noctalia namespaces that are not in the
--- compositor documentation's example list yet.
-hl.layer_rule({
-    match = { namespace = "^noctalia-.*$" },
-    no_anim = true,
-    blur = false,
-    blur_popups = false,
-})
 
 -- Caelestia fallback shell
 hl.layer_rule({ match = { namespace = "caelestia-(border-exclusion|area-picker)" }, no_anim = true })

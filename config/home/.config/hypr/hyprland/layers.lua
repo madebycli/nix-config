@@ -6,11 +6,14 @@ hl.layer_rule({
     blur_popups = false,
 })
 
--- Let Noctalia render its own shell animations without additional Hyprland
--- layer enter/exit animation on top.
+-- Explicitly override Noctalia's Hyprland blur recipe. ignore_alpha = 1.0 is
+-- an additional guard: even if another Noctalia rule enables layer blur, every
+-- pixel is ignored by the blur pass.
 hl.layer_rule({
+    name = "noctalia",
     match = { namespace = "^noctalia.*$" },
     no_anim = true,
     blur = false,
     blur_popups = false,
+    ignore_alpha = 1.0,
 })

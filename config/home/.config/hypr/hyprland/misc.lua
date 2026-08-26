@@ -8,10 +8,11 @@ hl.config({
         disable_hyprland_logo        = true,
         force_default_wallpaper      = 0,
 
-        on_focus_under_fullscreen    = 2,
+        on_focus_under_fullscreen    = 1,
         allow_session_lock_restore   = true,
         middle_click_paste           = false,
-        focus_on_activate            = true,
+        focus_on_activate            = false,
+        initial_workspace_tracking   = 2,
         session_lock_xray            = true,
 
         mouse_move_enables_dpms      = true,

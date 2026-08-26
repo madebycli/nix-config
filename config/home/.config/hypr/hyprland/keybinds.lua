@@ -5,6 +5,10 @@ local repeating        = { repeating = true }
 local locked_repeating = { locked = true, repeating = true }
 local mouse            = { mouse = true }
 
+-- Track the Scrolling width toggle per live window. Weak keys let closed windows
+-- disappear from the table without manual cleanup.
+local expandedColumns = setmetatable({}, { __mode = "k" })
+
 -- Apps
 hl.bind("SUPER + Return", hl.dsp.exec_cmd(vars.terminal))
 hl.bind("SUPER + Space", hl.dsp.exec_cmd("fuzzel"))
@@ -36,7 +40,13 @@ end
 
 -- Window actions
 hl.bind("SUPER + Q", hl.dsp.window.close())
-hl.bind("SUPER + A", hl.dsp.window.fullscreen({ mode = "maximized" }))
+hl.bind("SUPER + A", function()
+    local w = hl.get_active_window()
+    if w == nil then return end
+
+    expandedColumns[w] = not expandedColumns[w]
+    hl.dispatch(hl.dsp.layout(expandedColumns[w] and "colresize 1.0" or "colresize 0.5"))
+end)
 hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 hl.bind("SUPER + P", hl.dsp.window.float())
 
