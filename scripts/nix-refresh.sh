@@ -230,13 +230,13 @@ if ((PUBLISH == 1)); then
   if ((PUSH_BEHIND > 0)); then
     printf 'Remote advanced; local Flake update commit remains local.\n' >&2
   elif ((PUSH_AHEAD > 0)); then
-    if gh auth status --hostname github.com >/dev/null 2>&1; then
-      gh auth setup-git --hostname github.com >/dev/null 2>&1 || true
-      if ! GIT_TERMINAL_PROMPT=0 git -C "$REPO" push origin "$BRANCH"; then
-        printf 'GitHub push failed; commit remains local.\n' >&2
-      fi
-    else
-      printf 'GitHub push skipped; authenticate once with: gh auth login --hostname github.com --git-protocol https --web\n' >&2
+    if ! gh auth status --hostname github.com >/dev/null 2>&1; then
+      printf '\n==> GitHub authentication required\n'
+      gh auth login --hostname github.com --git-protocol https --web
+    fi
+    gh auth setup-git --hostname github.com >/dev/null 2>&1
+    if ! GIT_TERMINAL_PROMPT=0 git -C "$REPO" push origin "$BRANCH"; then
+      printf 'GitHub push failed; commit remains local.\n' >&2
     fi
   fi
 fi

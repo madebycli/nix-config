@@ -356,6 +356,18 @@ def ensure_remote(repo: Path) -> None:
         raise SyncError(f"Unerwartetes Git-Remote: {remote}")
 
 
+def ensure_github_auth(repo: Path) -> None:
+    status = run(["gh", "auth", "status", "--hostname", "github.com"], cwd=repo, check=False)
+    if status.returncode != 0:
+        info("GitHub-Anmeldung wird einmalig eingerichtet")
+        run(
+            ["gh", "auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"],
+            cwd=repo,
+            capture=False,
+        )
+    run(["gh", "auth", "setup-git", "--hostname", "github.com"], cwd=repo, capture=False)
+
+
 def changed_repo_paths(repo: Path) -> list[str]:
     paths: set[str] = set()
     for command in (
@@ -538,6 +550,7 @@ def commit_and_push(
             "Remote wurde während des Vorgangs geändert. Commit bleibt lokal; "
             "es wurde nicht gepusht."
         )
+    ensure_github_auth(repo)
     branch = git(repo, "branch", "--show-current")
     if target is None:
         run(["git", "push", "-u", "origin", branch], cwd=repo, capture=False)

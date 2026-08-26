@@ -118,8 +118,7 @@
             else if desktops == [ "mango" ] then hostName
             else if desktops == [ "mango" "niri" "hyprland" ] then "${hostName}-all"
             else "${hostName}-${builtins.concatStringsSep "-" desktops}";
-          homeImports = [ ./modules/home ]
-            ++ nixpkgs.lib.optional (builtins.elem "hyprland" desktops) ./modules/home/hyprland.nix;
+          homeImports = [ ./modules/home ];
         in
         if desktops == [ ] then
           throw "Host ${hostName} must enable at least one desktop"
@@ -170,7 +169,7 @@
         name = "config-sync";
         inheritPath = true;
         runtimeInputs = with pkgs; [
-          coreutils diffutils findutils git gnugrep gnused jq nix python3 rsync util-linux
+          coreutils diffutils findutils gh git gnugrep gnused jq nix python3 rsync util-linux
         ];
         text = ''
           exec ${pkgs.bash}/bin/bash \
