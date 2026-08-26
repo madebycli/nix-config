@@ -37,7 +37,7 @@ return {
     windowGapsOut              = 6,
 
     -- Window styling
-    windowOpacity              = 0.95,
+    windowOpacity              = 1.0,
     windowRounding             = 6,
     windowBorderSize           = 2,
     activeWindowBorderColour   = "rgba(" .. scheme.primary .. "e6)",
