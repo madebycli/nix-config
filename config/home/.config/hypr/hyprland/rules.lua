@@ -32,13 +32,18 @@ local xwl_popup_tag = "xwl_popup"
 ---- Window rules ----
 ----------------------
 
--- Apply default opacity to all windows except fullscreen.
-hl.window_rule({ match = { fullscreen = false }, opacity = vars.windowOpacity .. " override" })
+-- Window appearance is opt-in: everything is fully opaque and unblurred by default.
+hl.window_rule({
+    match = { class = ".*" },
+    opacity = vars.windowOpacity .. " override",
+    no_blur = true,
+})
 
--- Blur is opt-in. Ghostty and Nautilus are slightly more transparent and keep blur enabled.
-hl.window_rule({ match = { class = ".*" }, no_blur = true })
-hl.window_rule({ match = { class = "ghostty" }, no_blur = false })
-hl.window_rule({ match = { class = "ghostty", fullscreen = false }, opacity = "0.92 override" })
+-- Ghostty and Nautilus are the only regular windows with transparency + blur.
+for _, class in ipairs({ "ghostty", "com.mitchellh.ghostty" }) do
+    hl.window_rule({ match = { class = class }, no_blur = false })
+    hl.window_rule({ match = { class = class, fullscreen = false }, opacity = "0.92 override" })
+end
 hl.window_rule({ match = { class = "org.gnome.Nautilus" }, no_blur = false })
 hl.window_rule({ match = { class = "org.gnome.Nautilus", fullscreen = false }, opacity = "0.92 override" })
 
@@ -188,10 +193,11 @@ hl.layer_rule({ match = { namespace = "selection" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "wayfreeze" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "launcher" }, no_anim = true })
 
--- Keep Noctalia's pill-style bar transparent instead of compositor-blurred.
+-- Noctalia stays transparent without compositor blur. This matcher mirrors Noctalia's documented surfaces.
 hl.layer_rule({
-    name = "noctalia-bar-no-blur",
-    match = { namespace = "^noctalia-bar-.+$" },
+    match = {
+        namespace = "^noctalia-(bar-.+|notification|dock|panel|attached-panel|osd|window-switcher)$",
+    },
     no_anim = true,
     blur = false,
     blur_popups = false,
