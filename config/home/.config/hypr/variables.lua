@@ -32,8 +32,11 @@ return {
     shadowColour               = "rgba(" .. scheme.inversePrimary .. "10)",
 
     -- Gaps
+    -- In Scrolling, the rendered seam between two adjacent tiled windows is
+    -- visually wider than the monitor-edge gap at the same numeric value.
+    -- Keep 6px outside and use 3px inside so the visible spacing matches.
     workspaceGaps              = 0,
-    windowGapsIn               = 6,
+    windowGapsIn               = 3,
     windowGapsOut              = 6,
 
     -- Window styling
