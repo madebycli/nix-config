@@ -28,6 +28,16 @@ jobs:
           bash -n scripts/nix-updates.sh
           bash -n scripts/nix-refresh.sh
 
+      - name: Validate config sync integration
+        run: |
+          PYTHONPYCACHEPREFIX="$RUNNER_TEMP/pycache" python3 -m py_compile scripts/config-sync.py
+          grep -Fx '.config/hypr' sync/paths.conf
+          test ! -e modules/home/hyprland.nix
+          test ! -e config/home/.config/hypr/hyprland.conf
+          grep -q 'coreutils diffutils findutils gh git' flake.nix
+          grep -q 'gh auth login --hostname github.com --git-protocol https --web' scripts/nix-refresh.sh
+          grep -q '"gh", "auth", "login"' scripts/config-sync.py
+
       - name: Verify locked desktop inputs
         run: |
           test "$(jq -r '.nodes.root.inputs.hyprland // empty' flake.lock)" = ""
