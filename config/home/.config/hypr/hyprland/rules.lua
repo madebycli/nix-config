@@ -193,11 +193,11 @@ hl.layer_rule({ match = { namespace = "selection" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "wayfreeze" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "launcher" }, no_anim = true })
 
--- Noctalia stays transparent without compositor blur. This matcher mirrors Noctalia's documented surfaces.
+-- Disable Hyprland blur and layer animations for every Noctalia surface.
+-- The broad match also covers new Noctalia namespaces that are not in the
+-- compositor documentation's example list yet.
 hl.layer_rule({
-    match = {
-        namespace = "^noctalia-(bar-.+|notification|dock|panel|attached-panel|osd|window-switcher)$",
-    },
+    match = { namespace = "^noctalia-.*$" },
     no_anim = true,
     blur = false,
     blur_popups = false,
