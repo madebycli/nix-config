@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Security: X11 has no Wayland-style clipboard isolation. This bridge only
+# mirrors text while a Steam Proton XWayland client is focused, but the current
+# clipboard becomes readable by other X11 clients during that window.
+
 set -u
 
 poll_interval="${MANGO_PROTON_CLIPBOARD_INTERVAL:-0.15}"
