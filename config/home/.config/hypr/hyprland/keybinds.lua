@@ -40,6 +40,16 @@ hl.bind("SUPER + A", hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 hl.bind("SUPER + P", hl.dsp.window.float())
 
+-- Screenshots through Noctalia's compositor-native screencopy support
+hl.bind("SUPER + SHIFT + S", hl.dsp.exec_cmd("noctalia msg screenshot-region"))
+hl.bind("Print", hl.dsp.exec_cmd("noctalia msg screenshot-fullscreen"))
+
+-- GIF workflow carried over from Mango. These commands are external helper scripts.
+hl.bind("SUPER + SHIFT + G", hl.dsp.exec_cmd("gif-picker"))
+hl.bind("SUPER + SHIFT + H", hl.dsp.exec_cmd("gif-player edit"))
+hl.bind("SUPER + SHIFT + K", hl.dsp.exec_cmd("gif-player stop-all"))
+hl.bind("SUPER + SHIFT + J", hl.dsp.exec_cmd("gif-control"))
+
 -- Mouse move and resize
 hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), mouse)
 hl.bind("SUPER + mouse:273", hl.dsp.window.resize(), mouse)

@@ -188,6 +188,15 @@ hl.layer_rule({ match = { namespace = "selection" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "wayfreeze" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "launcher" }, animation = "popin 80%" })
 
--- Shell
+-- Keep Noctalia's pill-style bar transparent instead of compositor-blurred.
+hl.layer_rule({
+    name = "noctalia-bar-no-blur",
+    match = { namespace = "^noctalia-bar-.+$" },
+    no_anim = true,
+    blur = false,
+    blur_popups = false,
+})
+
+-- Caelestia fallback shell
 hl.layer_rule({ match = { namespace = "caelestia-(border-exclusion|area-picker)" }, no_anim = true })
 hl.layer_rule({ match = { namespace = "caelestia-(drawers|background)" }, animation = "fade" })
