@@ -1,4 +1,4 @@
-{ inputs, ... }:
+{ inputs, pkgs, ... }:
 
 {
   # Neuere Nixpkgs-Versionen enthalten selbst ein programs.mango-Modul.
@@ -18,4 +18,11 @@
     enable = true;
     addLoginEntry = true;
   };
+
+  # Workaround dependencies for Mango/wlroots clipboard interoperability
+  # with Steam Proton XWayland clients.
+  environment.systemPackages = with pkgs; [
+    wl-clipboard
+    xclip
+  ];
 }
