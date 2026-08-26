@@ -186,7 +186,7 @@ hl.layer_rule({ match = { namespace = "hyprpicker" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "logout_dialog" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "selection" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "wayfreeze" }, animation = "fade" })
-hl.layer_rule({ match = { namespace = "launcher" }, animation = "popin 80%" })
+hl.layer_rule({ match = { namespace = "launcher" }, no_anim = true })
 
 -- Keep Noctalia's pill-style bar transparent instead of compositor-blurred.
 hl.layer_rule({
