@@ -35,6 +35,13 @@ local xwl_popup_tag = "xwl_popup"
 -- Apply default opacity to all windows except fullscreen.
 hl.window_rule({ match = { fullscreen = false }, opacity = vars.windowOpacity .. " override" })
 
+-- Blur is opt-in. Ghostty and Nautilus are slightly more transparent and keep blur enabled.
+hl.window_rule({ match = { class = ".*" }, no_blur = true })
+hl.window_rule({ match = { class = "ghostty" }, no_blur = false })
+hl.window_rule({ match = { class = "ghostty", fullscreen = false }, opacity = "0.92 override" })
+hl.window_rule({ match = { class = "org.gnome.Nautilus" }, no_blur = false })
+hl.window_rule({ match = { class = "org.gnome.Nautilus", fullscreen = false }, opacity = "0.92 override" })
+
 -- Center all floating Wayland windows. XWayland popups count as windows.
 hl.window_rule({ match = { float = true, xwayland = false }, center = true })
 
@@ -179,7 +186,7 @@ hl.layer_rule({ match = { namespace = "hyprpicker" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "logout_dialog" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "selection" }, animation = "fade" })
 hl.layer_rule({ match = { namespace = "wayfreeze" }, animation = "fade" })
-hl.layer_rule({ match = { namespace = "launcher" }, animation = "popin 80%", blur = true })
+hl.layer_rule({ match = { namespace = "launcher" }, animation = "popin 80%" })
 
 -- Shell
 hl.layer_rule({ match = { namespace = "caelestia-(border-exclusion|area-picker)" }, no_anim = true })
