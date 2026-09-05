@@ -6,7 +6,8 @@ default_file=${PLMF_DEFAULT_FILE:-/etc/plmf/default-theme}
 metadata_file=${PLMF_METADATA_FILE:-/etc/plmf/theme-metadata}
 efi_mount_file=${PLMF_EFI_MOUNT_FILE:-/etc/plmf/efi-mount-point}
 selector_relative_file=${PLMF_SELECTOR_RELATIVE_FILE:-/etc/plmf/selector-relative-path}
-test_nix=${PLMF_TEST_NIX:-}
+theme_root=${PLMF_THEME_ROOT:-/etc/plymouth/themes}
+plugin_root=${PLMF_PLUGIN_ROOT:-/etc/plymouth/plugins}
 
 fail() {
   printf 'plmf: %s\n' "$*" >&2
@@ -195,24 +196,33 @@ reset_theme() {
 
 test_theme() {
   local name=$1
-  local vm_path
-  local runner
+  local theme_dir
+  local descriptor
+  local module_name
+  local script_file
+  local script_name
 
   is_allowed "$name" || fail "theme is not bundled: $name"
-  [[ -n "$test_nix" ]] || fail "test VM source is not configured in this build"
-  [[ -f "$test_nix" ]] || fail "test VM expression is missing: $test_nix"
 
-  vm_path=$(PLMF_TEST_THEME="$name" nix build \
-    --impure \
-    --no-link \
-    --print-out-paths \
-    -f "$test_nix")
+  theme_dir="$theme_root/$name"
+  descriptor="$theme_dir/$name.plymouth"
+  require_file "$descriptor"
 
-  runner=$(find "$vm_path/bin" -maxdepth 1 -type f -o -type l 2>/dev/null | head -n 1 || true)
-  [[ -n "$runner" && -x "$runner" ]] || fail "could not find QEMU VM runner in $vm_path/bin"
+  module_name=$(awk -F '=' '/^[[:space:]]*ModuleName[[:space:]]*=/ { sub(/^[^=]*=/, ""); gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit }' "$descriptor")
+  [[ -n "$module_name" ]] || fail "theme descriptor has no ModuleName: $descriptor"
+  [[ "$module_name" =~ ^[A-Za-z0-9._-]+$ ]] || fail "theme descriptor has an unsafe ModuleName"
+  [[ -r "$plugin_root/$module_name.so" ]] || fail "Plymouth plugin is missing: $plugin_root/$module_name.so"
 
-  printf 'Launching isolated QEMU test VM with theme %s.\n' "$name"
-  exec "$runner"
+  if [[ "$module_name" == 'script' ]]; then
+    script_file=$(awk -F '=' '/^[[:space:]]*ScriptFile[[:space:]]*=/ { sub(/^[^=]*=/, ""); gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit }' "$descriptor")
+    [[ -n "$script_file" ]] || fail "script theme has no ScriptFile: $descriptor"
+    script_name=${script_file##*/}
+    [[ "$script_name" =~ ^[A-Za-z0-9._-]+$ ]] || fail "theme descriptor has an unsafe ScriptFile"
+    require_file "$theme_dir/$script_name"
+  fi
+
+  printf 'Theme %s passed local static validation.\n' "$name"
+  printf 'No VM was started. Full UEFI boot validation runs in the beta branch CI.\n'
 }
 
 usage() {
@@ -224,6 +234,9 @@ Usage:
   sudo plmf theme set <name>
   sudo plmf theme reset
   plmf theme test <name>
+
+Notes:
+  theme test only performs safe local static validation. It never launches QEMU.
 EOF
 }
 
