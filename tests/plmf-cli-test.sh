@@ -40,6 +40,10 @@ run_plmf_root() {
   sudo env "${env_args[@]}" bash "$repo_root/scripts/plmf.sh" "$@"
 }
 
+write_selector() {
+  printf '%s\n' "$1" | sudo tee "$selector" >/dev/null
+}
+
 assert_contains() {
   local haystack=$1
   local needle=$2
@@ -82,24 +86,24 @@ if run_plmf_root theme set 'x;reboot'; then
   exit 1
 fi
 
-printf '../foo\n' > "$selector"
+write_selector '../foo'
 output=$(run_plmf theme current)
 assert_contains "$output" 'Runtime override:   invalid, ignored'
 assert_contains "$output" 'Next boot theme:    minimal'
 
-: > "$selector"
+sudo truncate -s 0 "$selector"
 output=$(run_plmf theme current)
 assert_contains "$output" 'Runtime override:   invalid, ignored'
 
-printf 'removed-theme\n' > "$selector"
+write_selector 'removed-theme'
 output=$(run_plmf theme current)
 assert_contains "$output" 'Runtime override:   invalid, ignored'
 
-printf 'x;reboot\n' > "$selector"
+write_selector 'x;reboot'
 output=$(run_plmf theme current)
 assert_contains "$output" 'Runtime override:   invalid, ignored'
 
-rm -f "$selector"
+sudo rm -f "$selector"
 output=$(run_plmf theme current)
 assert_contains "$output" 'Runtime override:   none'
 assert_contains "$output" 'Next boot theme:    minimal'
