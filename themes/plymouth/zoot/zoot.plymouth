@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=PLMF ZOOT
+Description=Responsive ZOOT-inspired terminal boot sequence for PLMF
+ModuleName=script
+
+[script]
+ImageDir=/etc/plymouth/themes/zoot
+ScriptFile=/etc/plymouth/themes/zoot/zoot.script
