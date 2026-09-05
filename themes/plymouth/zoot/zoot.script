@@ -8,7 +8,7 @@ screen.cy = screen.h / 2;
 
 state.frame = 0;
 state.password = 0;
-state.started = 0;
+state.started = 1;
 
 header.image = Image.Text("ZOOT // TERMINAL LINK", 0.40, 0.90, 0.82, 1.0, "Monospace 14");
 header.sprite = Sprite(header.image);
@@ -78,9 +78,9 @@ fun display_password(prompt_text, bullet_count) {
 fun display_normal() {
   if (state.password == 1) {
     state.frame = 0;
-    state.started = 1;
   }
   state.password = 0;
+  state.started = 1;
   clear_password();
   phase.sprite.SetOpacity(1);
   detail.sprite.SetOpacity(1);
@@ -159,4 +159,3 @@ Plymouth.SetDisplayPasswordFunction(display_password);
 Plymouth.SetDisplayNormalFunction(display_normal);
 
 display_normal();
-state.started = 0;
