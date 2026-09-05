@@ -156,6 +156,13 @@ in
         supportedFilesystems = lib.optional (efiFsType != "") efiFsType;
 
         systemd = {
+          # Keep the real LUKS prompt on the initrd console. Plymouth is started
+          # only once the encrypted root is available and switch-root begins.
+          suppressedUnits = [
+            "systemd-ask-password-plymouth.path"
+            "systemd-ask-password-plymouth.service"
+          ];
+
           contents = {
             "/etc/plmf/allowed-themes".source = allowedThemesFile;
             "/etc/plmf/default-theme".source = defaultThemeFile;
@@ -231,8 +238,15 @@ in
             };
 
             plymouth-start = {
+              # NixOS normally starts Plymouth at sysinit.target, before LUKS.
+              # Force it to the switch-root boundary so the console password
+              # agent owns the complete LUKS interaction first.
+              wantedBy = lib.mkForce [ "initrd-switch-root.target" ];
               wants = [ "plmf-select-theme.service" ];
-              after = [ "plmf-select-theme.service" ];
+              after = [
+                "plmf-select-theme.service"
+                "initrd-root-fs.target"
+              ];
             };
           };
         };
