@@ -6,7 +6,7 @@ let
     let
       value = builtins.getEnv "PLMF_TEST_THEME";
     in
-    if value == "" then "bgrt" else value;
+    if value == "" then "minimal" else value;
 
   testSystem = nixpkgs.lib.nixosSystem {
     system = "x86_64-linux";
