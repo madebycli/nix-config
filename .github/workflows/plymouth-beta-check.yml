@@ -1,0 +1,42 @@
+name: Plymouth beta check
+
+on:
+  push:
+    branches:
+      - feature/plymouth-boot-splash-beta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate shell scripts
+        run: |
+          set -euo pipefail
+          for script in scripts/*.sh; do
+            bash -n "$script"
+          done
+
+      - name: Check flake
+        run: nix flake check --no-write-lock-file --print-build-logs
+
+      - name: Evaluate primary hosts
+        run: |
+          set -euo pipefail
+          nix eval --no-write-lock-file --raw .#nixosConfigurations.nyx.config.networking.hostName
+          nix eval --no-write-lock-file --raw .#nixosConfigurations.aether.config.networking.hostName
+
+      - name: Build nyx
+        run: nix build --no-link --no-write-lock-file --print-build-logs .#nixosConfigurations.nyx.config.system.build.toplevel
+
+      - name: Build aether
+        run: nix build --no-link --no-write-lock-file --print-build-logs .#nixosConfigurations.aether.config.system.build.toplevel
