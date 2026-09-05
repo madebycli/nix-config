@@ -73,9 +73,16 @@ let
               TimeoutStartSec = "8s";
             };
             script = ''
+              set -eu
+
+              ${config.boot.plymouth.package}/bin/plymouth --ping
+              printf 'active\n' > /run/plmf/plymouth-active
+
               ${config.boot.initrd.systemd.package}/bin/systemd-ask-password \
                 --timeout=5 \
                 "PLMF VM password phase" >/dev/null || true
+
+              ${config.boot.plymouth.package}/bin/plymouth --ping
             '';
           };
 
@@ -112,6 +119,10 @@ let
                 echo "PLMF effective-theme marker did not survive switch-root" >&2
                 exit 1
               fi
+              if [ ! -r /run/plmf/plymouth-active ]; then
+                echo "Plymouth was not confirmed active in initrd" >&2
+                exit 1
+              fi
 
               actual=$(cat /run/plmf/effective-theme)
               if [ "$actual" != "$expected" ]; then
@@ -136,6 +147,7 @@ let
               {
                 printf 'expected=%s\n' "$expected"
                 printf 'actual=%s\n' "$actual"
+                printf 'plymouth=active\n'
                 printf 'greetd=active\n'
                 printf 'noctalia=active\n'
               } > /tmp/xchg/plmf-ready
