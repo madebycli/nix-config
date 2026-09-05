@@ -13,8 +13,9 @@ let
 
     modules = [
       ../modules/nixos/boot-splash.nix
+      flake.inputs.noctalia-greeter.nixosModules.default
 
-      ({ config, modulesPath, pkgs, ... }:
+      ({ config, modulesPath, ... }:
         {
           imports = [ (modulesPath + "/virtualisation/qemu-vm.nix") ];
 
@@ -40,18 +41,9 @@ let
             defaultTheme = requestedTheme;
           };
 
-          fileSystems."/" = {
-            device = "/dev/disk/by-label/nixos";
-            fsType = "ext4";
-          };
-
-          fileSystems."/boot" = {
-            device = "/dev/disk/by-label/ESP";
-            fsType = "vfat";
-          };
-
           virtualisation = {
             useBootLoader = true;
+            useEFIBoot = true;
             memorySize = 2048;
             cores = 2;
             graphics = true;
@@ -76,11 +68,11 @@ let
             '';
           };
 
-          services.greetd = {
+          programs.noctalia-greeter = {
             enable = true;
-            settings.default_session = {
-              user = "greeter";
-              command = "${pkgs.tuigreet}/bin/tuigreet --remember --cmd ${pkgs.bashInteractive}/bin/bash";
+            settings = {
+              keyboard.layout = "de";
+              user.default = "plmf";
             };
           };
 
