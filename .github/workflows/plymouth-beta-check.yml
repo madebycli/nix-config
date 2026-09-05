@@ -26,6 +26,32 @@ jobs:
             bash -n "$script"
           done
 
+      - name: Provide synthetic CI hardware configuration
+        run: |
+          cat > /tmp/hardware-configuration.nix <<'EOF'
+          { lib, modulesPath, ... }:
+
+          {
+            imports = [ (modulesPath + "/profiles/qemu-guest.nix") ];
+
+            boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_blk" "xhci_pci" ];
+
+            fileSystems."/" = {
+              device = "/dev/disk/by-label/nixos";
+              fsType = "ext4";
+            };
+
+            fileSystems."/boot" = {
+              device = "/dev/disk/by-label/ESP";
+              fsType = "vfat";
+            };
+
+            swapDevices = [ ];
+          }
+          EOF
+          cp /tmp/hardware-configuration.nix hosts/nyx/hardware-configuration.nix
+          cp /tmp/hardware-configuration.nix hosts/aether/hardware-configuration.nix
+
       - name: Check flake
         run: nix flake check --no-write-lock-file --print-build-logs
 
