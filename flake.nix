@@ -84,11 +84,14 @@
         ./modules/nixos/storage-tuning.nix
         ./modules/nixos/desktop.nix
         ./modules/nixos/greeter.nix
+        ./modules/nixos/boot-splash.nix
         ./modules/flatpak
 
         home-manager.nixosModules.home-manager
 
         {
+          plmf.bootSplash.enable = true;
+
           environment.systemPackages = [
             configSyncProgram
             configUpdateProgram
