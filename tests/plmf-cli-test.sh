@@ -5,6 +5,8 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmp=$(mktemp -d)
 esp="$tmp/esp"
 config_dir="$tmp/config"
+theme_root="$tmp/themes"
+plugin_root="$tmp/plugins"
 selector_rel='EFI/PLMF/theme'
 selector="$esp/$selector_rel"
 
@@ -14,7 +16,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$esp" "$config_dir"
+mkdir -p "$esp" "$config_dir" "$theme_root/minimal" "$theme_root/zoot" "$plugin_root"
 sudo mount -t tmpfs -o nosuid,nodev,noexec tmpfs "$esp"
 sudo chown "$(id -u):$(id -g)" "$esp"
 
@@ -24,12 +26,27 @@ printf 'minimal\tMinimal PLMF boot splash\nzoot\tZOOT terminal boot sequence\n' 
 printf '%s\n' "$esp" > "$config_dir/efi-mount-point"
 printf '%s\n' "$selector_rel" > "$config_dir/selector-relative-path"
 
+for theme in minimal zoot; do
+  cat > "$theme_root/$theme/$theme.plymouth" <<EOF
+[Plymouth Theme]
+Name=$theme
+ModuleName=script
+
+[script]
+ScriptFile=/etc/plymouth/themes/$theme/$theme.script
+EOF
+  printf '# static test fixture\n' > "$theme_root/$theme/$theme.script"
+done
+printf 'fixture\n' > "$plugin_root/script.so"
+
 env_args=(
   "PLMF_ALLOWED_FILE=$config_dir/allowed-themes"
   "PLMF_DEFAULT_FILE=$config_dir/default-theme"
   "PLMF_METADATA_FILE=$config_dir/theme-metadata"
   "PLMF_EFI_MOUNT_FILE=$config_dir/efi-mount-point"
   "PLMF_SELECTOR_RELATIVE_FILE=$config_dir/selector-relative-path"
+  "PLMF_THEME_ROOT=$theme_root"
+  "PLMF_PLUGIN_ROOT=$plugin_root"
 )
 
 run_plmf() {
@@ -64,6 +81,17 @@ assert_contains "$output" 'zoot'
 
 output=$(run_plmf theme search zOoT)
 assert_contains "$output" 'zoot'
+
+output=$(run_plmf theme test zoot)
+assert_contains "$output" 'Theme zoot passed local static validation.'
+assert_contains "$output" 'No VM was started.'
+
+rm -f "$plugin_root/script.so"
+if run_plmf theme test minimal; then
+  printf 'static test accepted a missing Plymouth plugin\n' >&2
+  exit 1
+fi
+printf 'fixture\n' > "$plugin_root/script.so"
 
 run_plmf_root theme set zoot
 [[ $(cat "$selector") == 'zoot' ]]
