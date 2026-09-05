@@ -1,0 +1,162 @@
+Window.SetBackgroundTopColor(0.002, 0.006, 0.008);
+Window.SetBackgroundBottomColor(0.006, 0.012, 0.014);
+
+screen.w = Window.GetWidth(0);
+screen.h = Window.GetHeight(0);
+screen.cx = screen.w / 2;
+screen.cy = screen.h / 2;
+
+state.frame = 0;
+state.password = 0;
+state.started = 0;
+
+header.image = Image.Text("ZOOT // TERMINAL LINK", 0.40, 0.90, 0.82, 1.0, "Monospace 14");
+header.sprite = Sprite(header.image);
+header.sprite.SetPosition(screen.w * 0.06, screen.h * 0.08, 5);
+
+right.image = Image.Text("ARKNIGHTS // PLMF", 0.34, 0.54, 0.52, 1.0, "Monospace 11");
+right.sprite = Sprite(right.image);
+right.sprite.SetPosition(screen.w * 0.76, screen.h * 0.08, 5);
+
+logo.sprite = Sprite();
+phase.sprite = Sprite();
+detail.sprite = Sprite();
+progress.sprite = Sprite();
+ready.sprite = Sprite();
+prompt.sprite = Sprite();
+bullets.sprite = Sprite();
+scan.sprite = Sprite();
+
+fun center_sprite(sprite, image, y, z) {
+  sprite.SetImage(image);
+  sprite.SetPosition(screen.cx - image.GetWidth() / 2, y, z);
+}
+
+fun render_phase(title, detail_text, progress_text) {
+  phase.image = Image.Text(title, 0.76, 0.96, 0.90, 1.0, "Monospace 18");
+  center_sprite(phase.sprite, phase.image, screen.h * 0.43, 10);
+
+  detail.image = Image.Text(detail_text, 0.38, 0.66, 0.62, 1.0, "Monospace 12");
+  center_sprite(detail.sprite, detail.image, screen.h * 0.49, 10);
+
+  progress.image = Image.Text(progress_text, 0.46, 0.92, 0.82, 1.0, "Monospace 14");
+  center_sprite(progress.sprite, progress.image, screen.h * 0.55, 10);
+}
+
+fun clear_password() {
+  prompt.sprite.SetOpacity(0);
+  bullets.sprite.SetOpacity(0);
+}
+
+fun render_password(prompt_text, bullet_count) {
+  phase.sprite.SetOpacity(0);
+  detail.sprite.SetOpacity(0);
+  progress.sprite.SetOpacity(0);
+  ready.sprite.SetOpacity(0);
+  logo.sprite.SetOpacity(0);
+
+  prompt.image = Image.Text(prompt_text, 0.76, 0.96, 0.90, 1.0, "Monospace 15");
+  center_sprite(prompt.sprite, prompt.image, screen.h * 0.46, 20);
+
+  dots = "";
+  index = 0;
+  while (index < bullet_count) {
+    dots += "*";
+    index++;
+  }
+  bullets.image = Image.Text(dots, 0.88, 1.0, 0.94, 1.0, "Monospace 20");
+  center_sprite(bullets.sprite, bullets.image, screen.h * 0.53, 20);
+  prompt.sprite.SetOpacity(1);
+  bullets.sprite.SetOpacity(1);
+}
+
+fun display_password(prompt_text, bullet_count) {
+  state.password = 1;
+  render_password(prompt_text, bullet_count);
+}
+
+fun display_normal() {
+  if (state.password == 1) {
+    state.frame = 0;
+    state.started = 1;
+  }
+  state.password = 0;
+  clear_password();
+  phase.sprite.SetOpacity(1);
+  detail.sprite.SetOpacity(1);
+  progress.sprite.SetOpacity(1);
+}
+
+fun refresh() {
+  if (state.password == 1) {
+    return;
+  }
+
+  if (state.started == 0) {
+    render_phase("ZOOT LINK // WAITING AUTH", "SECURE CHANNEL STANDBY", "[..........]");
+    return;
+  }
+
+  state.frame++;
+  frame = state.frame;
+
+  if (frame < 55) {
+    logo.sprite.SetOpacity(0);
+    ready.sprite.SetOpacity(0);
+    render_phase("ZOOT LINK // CONNECTING", "NEGOTIATING LOCAL BOOT CHANNEL", "[##........]");
+  } else if (frame < 105) {
+    render_phase("SYSTEM INITIALIZATION", "VERIFYING LOCAL MODULE BUNDLE", "[####......]");
+  } else if (frame < 155) {
+    render_phase("SYSTEM INITIALIZATION", "SYNCHRONIZING DISPLAY PIPELINE", "[######....]");
+  } else if (frame < 205) {
+    render_phase("SYSTEM INITIALIZATION", "HANDSHAKE COMPLETE", "[########..]");
+  } else if (frame < 275) {
+    phase.sprite.SetOpacity(0);
+    detail.sprite.SetOpacity(0);
+    progress.sprite.SetOpacity(0);
+
+    logo.image = Image.Text("Z O O T", 0.70, 0.98, 0.88, 1.0, "Monospace 38");
+    center_sprite(logo.sprite, logo.image, screen.h * 0.39, 12);
+    logo.sprite.SetOpacity(1);
+
+    ready.image = Image.Text("WELCOME, DOCTOR", 0.48, 0.86, 0.78, 1.0, "Monospace 17");
+    center_sprite(ready.sprite, ready.image, screen.h * 0.52, 12);
+    ready.sprite.SetOpacity(1);
+  } else {
+    phase.sprite.SetOpacity(0);
+    detail.sprite.SetOpacity(0);
+    progress.sprite.SetOpacity(0);
+
+    logo.image = Image.Text("Z O O T", 0.70, 0.98, 0.88, 1.0, "Monospace 38");
+    center_sprite(logo.sprite, logo.image, screen.h * 0.39, 12);
+    logo.sprite.SetOpacity(1);
+
+    ready.image = Image.Text("READY // WELCOME, DOCTOR", 0.52, 0.96, 0.84, 1.0, "Monospace 16");
+    center_sprite(ready.sprite, ready.image, screen.h * 0.52, 12);
+
+    pulse = frame % 100;
+    if (pulse < 50) {
+      ready.sprite.SetOpacity(0.72);
+    } else {
+      ready.sprite.SetOpacity(1.0);
+    }
+
+    flicker = frame % 233;
+    if (flicker < 2) {
+      logo.sprite.SetOpacity(0.58);
+    }
+
+    scan.image = Image.Text("------------------------------------------------", 0.10, 0.28, 0.26, 0.42, "Monospace 10");
+    scan.sprite.SetImage(scan.image);
+    scan_y = screen.h * 0.24 + ((frame % 180) / 180.0) * (screen.h * 0.52);
+    scan.sprite.SetPosition(screen.cx - scan.image.GetWidth() / 2, scan_y, 2);
+    scan.sprite.SetOpacity(0.42);
+  }
+}
+
+Plymouth.SetRefreshFunction(refresh);
+Plymouth.SetDisplayPasswordFunction(display_password);
+Plymouth.SetDisplayNormalFunction(display_normal);
+
+display_normal();
+state.started = 0;
