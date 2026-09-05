@@ -64,22 +64,16 @@ let
     rm -f "$out/renderers/x11.so"
   '';
 
-  testSource = lib.cleanSource ../..;
   plmfProgram = pkgs.writeShellApplication {
     name = "plmf";
     runtimeInputs = with pkgs; [
       coreutils
       diffutils
-      findutils
       gawk
       gnugrep
-      nix
       util-linux
     ];
-    text = ''
-      export PLMF_TEST_NIX=${lib.escapeShellArg "${testSource}/tests/boot-splash-vm.nix"}
-      ${builtins.readFile ../../scripts/plmf.sh}
-    '';
+    text = builtins.readFile ../../scripts/plmf.sh;
   };
 
 in
