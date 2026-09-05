@@ -255,10 +255,11 @@ in
       };
     };
 
-    # greetd normally waits for NixOS' generic Plymouth quit unit. PLMF owns the
-    # handoff instead: keep the splash alive through userspace startup, retain
-    # its last frame, and release DRM immediately before greetd starts. Noctalia
-    # then replaces that retained frame with its first rendered frame.
+    # PLMF owns the stage-2 handoff. Tell greetd not to wait for NixOS' generic
+    # Plymouth quit unit, then start the handoff as a non-blocking Wants=
+    # dependency. The helper itself is ordered after greetd, so greetd startup
+    # never waits for Plymouth. The retained frame remains visible while greetd
+    # starts and Plymouth releases DRM for Noctalia.
     services.greetd.greeterManagesPlymouth = lib.mkIf config.services.greetd.enable true;
 
     systemd.services = lib.mkIf config.services.greetd.enable {
@@ -266,9 +267,8 @@ in
       plymouth-quit-wait.wantedBy = lib.mkForce [ ];
 
       plmf-plymouth-greeter-handoff = {
-        description = "Hand PLMF Plymouth directly to greetd";
-        before = [ "greetd.service" ];
-        after = [ "systemd-user-sessions.service" ];
+        description = "Release PLMF Plymouth after greetd starts";
+        after = [ "greetd.service" ];
         path = with pkgs; [ coreutils config.boot.plymouth.package ];
         serviceConfig = {
           Type = "oneshot";
@@ -292,7 +292,6 @@ in
 
       greetd = {
         wants = [ "plmf-plymouth-greeter-handoff.service" ];
-        after = [ "plmf-plymouth-greeter-handoff.service" ];
       };
     };
 
