@@ -61,13 +61,50 @@ let
             diskSize = 8192;
           };
 
-          # Exercise the normal systemd/Plymouth ask-password path in the initrd.
-          # The entered value is intentionally discarded and never parsed or logged.
-          boot.initrd.systemd.services.plmf-test-password = {
-            description = "PLMF Plymouth ask-password test";
-            wantedBy = [ "initrd.target" ];
-            after = [ "plymouth-start.service" ];
-            before = [ "initrd-switch-root.target" ];
+          # Model the real machine's password phase before Plymouth. The request
+          # deliberately times out in CI, but Plymouth must remain inactive for
+          # the whole request so the console ask-password agent owns the prompt.
+          boot.initrd.systemd.services.plmf-test-password-before-plymouth = {
+            description = "PLMF pre-Plymouth password phase";
+            wantedBy = [ "sysinit.target" ];
+            after = [ "systemd-udev-trigger.service" ];
+            before = [ "plymouth-start.service" ];
+            serviceConfig = {
+              Type = "oneshot";
+              TimeoutStartSec = "8s";
+            };
+            script = ''
+              set -eu
+
+              mkdir -p /run/plmf
+
+              if ${config.boot.plymouth.package}/bin/plymouth --ping >/dev/null 2>&1; then
+                echo "Plymouth became active before the password phase" >&2
+                exit 1
+              fi
+              printf 'inactive\n' > /run/plmf/plymouth-before-unlock
+
+              ${config.boot.initrd.systemd.package}/bin/systemd-ask-password \
+                --timeout=2 \
+                "PLMF VM pre-Plymouth password phase" >/dev/null || true
+
+              if ${config.boot.plymouth.package}/bin/plymouth --ping >/dev/null 2>&1; then
+                echo "Plymouth became active during the password phase" >&2
+                exit 1
+              fi
+            '';
+          };
+
+          # Plymouth must become active only at the switch-root boundary, after
+          # the password phase has completed.
+          boot.initrd.systemd.services.plmf-test-plymouth-late = {
+            description = "Confirm late PLMF Plymouth start";
+            wantedBy = [ "initrd-switch-root.target" ];
+            after = [
+              "plmf-test-password-before-plymouth.service"
+              "plymouth-start.service"
+            ];
+            before = [ "initrd-switch-root.service" ];
             serviceConfig = {
               Type = "oneshot";
               TimeoutStartSec = "8s";
@@ -77,12 +114,6 @@ let
 
               ${config.boot.plymouth.package}/bin/plymouth --ping
               printf 'active\n' > /run/plmf/plymouth-active
-
-              ${config.boot.initrd.systemd.package}/bin/systemd-ask-password \
-                --timeout=5 \
-                "PLMF VM password phase" >/dev/null || true
-
-              ${config.boot.plymouth.package}/bin/plymouth --ping
             '';
           };
 
@@ -119,8 +150,16 @@ let
                 echo "PLMF effective-theme marker did not survive switch-root" >&2
                 exit 1
               fi
+              if [ ! -r /run/plmf/plymouth-before-unlock ]; then
+                echo "Pre-Plymouth password phase marker is missing" >&2
+                exit 1
+              fi
+              if [ "$(cat /run/plmf/plymouth-before-unlock)" != "inactive" ]; then
+                echo "Plymouth was unexpectedly active before unlock" >&2
+                exit 1
+              fi
               if [ ! -r /run/plmf/plymouth-active ]; then
-                echo "Plymouth was not confirmed active in initrd" >&2
+                echo "Plymouth was not confirmed active after the password phase" >&2
                 exit 1
               fi
 
@@ -147,6 +186,7 @@ let
               {
                 printf 'expected=%s\n' "$expected"
                 printf 'actual=%s\n' "$actual"
+                printf 'pre-plymouth=inactive\n'
                 printf 'plymouth=active\n'
                 printf 'greetd=active\n'
                 printf 'noctalia=active\n'
