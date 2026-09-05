@@ -156,8 +156,9 @@ in
         supportedFilesystems = lib.optional (efiFsType != "") efiFsType;
 
         systemd = {
-          # Keep the real LUKS prompt on the initrd console. Plymouth is started
-          # only once the encrypted root is available and switch-root begins.
+          # The real LUKS prompt stays on the initrd console. Plymouth never owns
+          # password entry, so a failed splash cannot make the encrypted system
+          # inaccessible.
           suppressedUnits = [
             "systemd-ask-password-plymouth.path"
             "systemd-ask-password-plymouth.service"
@@ -238,18 +239,60 @@ in
             };
 
             plymouth-start = {
-              # NixOS normally starts Plymouth at sysinit.target, before LUKS.
-              # Force it to the switch-root boundary so the console password
-              # agent owns the complete LUKS interaction first.
-              wantedBy = lib.mkForce [ "initrd-switch-root.target" ];
+              # cryptsetup.target is reached only after the generated LUKS jobs
+              # have completed. Start Plymouth immediately afterwards, before
+              # root fsck/mount work, instead of waiting for switch-root.
+              wantedBy = lib.mkForce [ "initrd-root-device.target" ];
               wants = [ "plmf-select-theme.service" ];
               after = [
                 "plmf-select-theme.service"
-                "initrd-root-fs.target"
+                "cryptsetup.target"
               ];
+              before = [ "initrd-root-fs.target" ];
             };
           };
         };
+      };
+    };
+
+    # greetd normally waits for NixOS' generic Plymouth quit unit. PLMF owns the
+    # handoff instead: keep the splash alive through userspace startup, retain
+    # its last frame, and release DRM immediately before greetd starts. Noctalia
+    # then replaces that retained frame with its first rendered frame.
+    services.greetd.greeterManagesPlymouth = lib.mkIf config.services.greetd.enable true;
+
+    systemd.services = lib.mkIf config.services.greetd.enable {
+      plymouth-quit.wantedBy = lib.mkForce [ ];
+      plymouth-quit-wait.wantedBy = lib.mkForce [ ];
+
+      plmf-plymouth-greeter-handoff = {
+        description = "Hand PLMF Plymouth directly to greetd";
+        before = [ "greetd.service" ];
+        after = [ "systemd-user-sessions.service" ];
+        path = with pkgs; [ coreutils config.boot.plymouth.package ];
+        serviceConfig = {
+          Type = "oneshot";
+          TimeoutStartSec = "5s";
+        };
+        script = ''
+          mkdir -p /run/plmf
+
+          if plymouth --ping >/dev/null 2>&1; then
+            if plymouth quit --retain-splash; then
+              printf 'retain-splash\n' > /run/plmf/greeter-handoff
+            else
+              printf 'quit-failed\n' > /run/plmf/greeter-handoff
+              plymouth quit >/dev/null 2>&1 || true
+            fi
+          else
+            printf 'plymouth-inactive\n' > /run/plmf/greeter-handoff
+          fi
+        '';
+      };
+
+      greetd = {
+        wants = [ "plmf-plymouth-greeter-handoff.service" ];
+        after = [ "plmf-plymouth-greeter-handoff.service" ];
       };
     };
 
