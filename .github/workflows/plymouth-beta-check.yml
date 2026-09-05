@@ -198,6 +198,7 @@ jobs:
           cat "$marker"
           grep -Fxq "expected=$PLMF_EXPECT_THEME" "$marker"
           grep -Fxq "actual=$PLMF_EXPECT_THEME" "$marker"
+          grep -Fxq 'pre-plymouth=inactive' "$marker"
           grep -Fxq 'plymouth=active' "$marker"
           grep -Fxq 'greetd=active' "$marker"
           grep -Fxq 'noctalia=active' "$marker"
