@@ -126,11 +126,23 @@ jobs:
       - name: Build ${{ matrix.host }}
         run: nix build --accept-flake-config --no-link --no-write-lock-file --print-build-logs .#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel
 
-  vm-build:
+  vm-smoke:
     strategy:
       fail-fast: false
       matrix:
-        theme: [minimal, zoot]
+        include:
+          - case: minimal-default
+            theme: minimal
+            selector: ""
+            expected: minimal
+          - case: zoot-runtime-override
+            theme: minimal
+            selector: zoot
+            expected: zoot
+          - case: invalid-selector-fallback
+            theme: minimal
+            selector: ../foo
+            expected: minimal
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -139,7 +151,71 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Plymouth QEMU VM for ${{ matrix.theme }}
+      - name: Build and boot ${{ matrix.case }}
         env:
           PLMF_TEST_THEME: ${{ matrix.theme }}
-        run: nix build --accept-flake-config --impure --no-link --print-build-logs -f ./tests/boot-splash-vm.nix
+          PLMF_TEST_SELECTOR: ${{ matrix.selector }}
+          PLMF_EXPECT_THEME: ${{ matrix.expected }}
+        run: |
+          set -euo pipefail
+
+          vm_path=$(nix build \
+            --accept-flake-config \
+            --impure \
+            --no-link \
+            --print-out-paths \
+            --print-build-logs \
+            -f ./tests/boot-splash-vm.nix)
+
+          runner=$(find "$vm_path/bin" -maxdepth 1 \( -type f -o -type l \) -name 'run-*-vm' -print -quit)
+          test -n "$runner"
+          test -x "$runner"
+
+          export TMPDIR="$RUNNER_TEMP/plmf-${{ matrix.case }}"
+          export USE_TMPDIR=1
+          export NIX_DISK_IMAGE="$TMPDIR/disk.qcow2"
+          export NIX_EFI_VARS="$TMPDIR/efi-vars.fd"
+          rm -rf "$TMPDIR"
+          mkdir -p "$TMPDIR"
+
+          serial_log="$TMPDIR/serial.log"
+          runner_log="$TMPDIR/runner.log"
+          marker="$TMPDIR/xchg/plmf-ready"
+          export QEMU_OPTS="-display none -serial file:$serial_log -monitor none"
+
+          timeout --signal=TERM 120s "$runner" >"$runner_log" 2>&1 &
+          vm_pid=$!
+
+          cleanup() {
+            kill "$vm_pid" >/dev/null 2>&1 || true
+            wait "$vm_pid" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          passed=0
+          for _ in $(seq 1 120); do
+            if [ -s "$marker" ]; then
+              passed=1
+              break
+            fi
+            if ! kill -0 "$vm_pid" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$passed" -ne 1 ]; then
+            echo 'PLMF VM smoke test did not reach the Noctalia readiness marker.' >&2
+            echo '--- runner log ---' >&2
+            cat "$runner_log" >&2 || true
+            echo '--- serial log ---' >&2
+            cat "$serial_log" >&2 || true
+            exit 1
+          fi
+
+          cat "$marker"
+          grep -Fxq "expected=$PLMF_EXPECT_THEME" "$marker"
+          grep -Fxq "actual=$PLMF_EXPECT_THEME" "$marker"
+          grep -Fxq 'plymouth=active' "$marker"
+          grep -Fxq 'greetd=active' "$marker"
+          grep -Fxq 'noctalia=active' "$marker"
