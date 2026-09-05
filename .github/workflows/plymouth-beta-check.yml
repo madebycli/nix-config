@@ -6,6 +6,10 @@ on:
       - feature/plymouth-boot-splash-beta
   workflow_dispatch:
 
+concurrency:
+  group: plymouth-beta-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -22,9 +26,15 @@ jobs:
       - name: Validate shell scripts
         run: |
           set -euo pipefail
-          for script in scripts/*.sh; do
+          for script in scripts/*.sh tests/*.sh; do
             bash -n "$script"
           done
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck scripts/plmf.sh tests/plmf-cli-test.sh
+          fi
+
+      - name: Run PLMF selector tests
+        run: bash tests/plmf-cli-test.sh
 
       - name: Provide synthetic CI hardware configuration
         run: |
@@ -58,7 +68,34 @@ jobs:
           nix eval --accept-flake-config --no-write-lock-file --raw .#nixosConfigurations.nyx.config.networking.hostName
           nix eval --accept-flake-config --no-write-lock-file --raw .#nixosConfigurations.aether.config.networking.hostName
 
-  baseline-build:
+  flake-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Provide synthetic CI hardware configuration
+        run: |
+          cat > /tmp/hardware-configuration.nix <<'EOF'
+          { modulesPath, ... }:
+          {
+            imports = [ (modulesPath + "/profiles/qemu-guest.nix") ];
+            boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_blk" "xhci_pci" ];
+            fileSystems."/" = { device = "/dev/disk/by-label/nixos"; fsType = "ext4"; };
+            fileSystems."/boot" = { device = "/dev/disk/by-label/ESP"; fsType = "vfat"; };
+            swapDevices = [ ];
+          }
+          EOF
+          cp /tmp/hardware-configuration.nix hosts/nyx/hardware-configuration.nix
+          cp /tmp/hardware-configuration.nix hosts/aether/hardware-configuration.nix
+
+      - name: Check flake
+        run: nix flake check --accept-flake-config --no-write-lock-file --no-build --print-build-logs
+
+  host-build:
     strategy:
       fail-fast: false
       matrix:
@@ -75,22 +112,11 @@ jobs:
         run: |
           cat > /tmp/hardware-configuration.nix <<'EOF'
           { modulesPath, ... }:
-
           {
             imports = [ (modulesPath + "/profiles/qemu-guest.nix") ];
-
             boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_blk" "xhci_pci" ];
-
-            fileSystems."/" = {
-              device = "/dev/disk/by-label/nixos";
-              fsType = "ext4";
-            };
-
-            fileSystems."/boot" = {
-              device = "/dev/disk/by-label/ESP";
-              fsType = "vfat";
-            };
-
+            fileSystems."/" = { device = "/dev/disk/by-label/nixos"; fsType = "ext4"; };
+            fileSystems."/boot" = { device = "/dev/disk/by-label/ESP"; fsType = "vfat"; };
             swapDevices = [ ];
           }
           EOF
@@ -99,3 +125,21 @@ jobs:
 
       - name: Build ${{ matrix.host }}
         run: nix build --accept-flake-config --no-link --no-write-lock-file --print-build-logs .#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel
+
+  vm-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [minimal, zoot]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Plymouth QEMU VM for ${{ matrix.theme }}
+        env:
+          PLMF_TEST_THEME: ${{ matrix.theme }}
+        run: nix build --accept-flake-config --impure --no-link --print-build-logs -f ./tests/boot-splash-vm.nix
