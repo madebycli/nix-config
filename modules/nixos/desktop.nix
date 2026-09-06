@@ -42,7 +42,7 @@
     xwayland-satellite
     ghostty
     bazaar
-
+    filen-desktop
     mangohud
     protonup-ng
     umu-launcher
