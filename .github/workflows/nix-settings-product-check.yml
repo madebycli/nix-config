@@ -1,0 +1,59 @@
+name: Nix Settings product check
+
+on:
+  push:
+    branches:
+      - feature/nix-settings-tui
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate Rust workspace
+        run: |
+          cd nix-settings
+          cargo fmt --all --check
+          cargo check --workspace --locked
+
+      - name: Verify Linutil licensing and exact vendor provenance
+        run: |
+          test -f LICENSE
+          test -f THIRD_PARTY_NOTICES.md
+          test -f nix-settings/vendor/linutil-tui/LICENSE
+          test -f nix-settings/vendor/linutil-tui/UPSTREAM.md
+          grep -q 'Copyright (c) 2025 Chris Titus' nix-settings/vendor/linutil-tui/LICENSE
+          grep -q '0b0f7449e79275a7ad5cd1c0dee48c6d71f1f7f1' nix-settings/vendor/linutil-tui/UPSTREAM.md
+          grep -q 'Chris Titus' THIRD_PARTY_NOTICES.md
+
+      - name: Verify managed state
+        run: |
+          jq -e '.schema == 1' state/nyx.json >/dev/null
+          jq -e '.schema == 1' state/aether.json >/dev/null
+          jq -e '.desktops | length > 0' state/nyx.json >/dev/null
+          jq -e '.desktops | length > 0' state/aether.json >/dev/null
+
+      - name: Evaluate NixOS hosts
+        run: |
+          nix flake metadata --no-write-lock-file >/dev/null
+          test "$(nix eval --no-write-lock-file --raw .#nixosConfigurations.nyx.config.networking.hostName)" = nyx
+          test "$(nix eval --no-write-lock-file --raw .#nixosConfigurations.aether.config.networking.hostName)" = aether
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx.config.programs.hyprland.enable)" = true
+          test "$(nix eval --no-write-lock-file --raw '.#nixosConfigurations.nyx.config.environment.etc."nixos-config/profile".text')" = nyx
+
+      - name: Build Nix Settings
+        run: nix build --no-link .#nix-settings
