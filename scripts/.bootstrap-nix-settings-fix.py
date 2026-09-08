@@ -17,3 +17,8 @@ state.write_text(text)
 core = root / "nix-settings/crates/core/src/lib.rs"
 core_text = core.read_text().replace("    let host = &snapshot.host;\n", "", 1)
 core.write_text(core_text)
+
+# The bootstrap job validates the generated product itself. The permanent CI
+# workflow is created afterwards through the GitHub API, because Actions' job
+# token cannot create workflow files.
+(root / ".github/workflows/nix-settings-product-check.yml").unlink(missing_ok=True)
