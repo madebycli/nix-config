@@ -1,0 +1,48 @@
+name: Bootstrap Nix Settings product
+
+on:
+  push:
+    branches:
+      - feature/nix-settings-tui
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/nix-settings-tui
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate product tree
+        run: python3 scripts/.bootstrap-nix-settings-product.py
+
+      - name: Validate generated tree
+        run: |
+          git diff --check
+          cd nix-settings
+          cargo check --workspace --locked
+          cd ..
+          nix flake metadata --no-write-lock-file >/dev/null
+          nix eval --no-write-lock-file --raw .#nixosConfigurations.nyx.config.networking.hostName | grep -qx nyx
+          nix eval --no-write-lock-file --raw .#nixosConfigurations.aether.config.networking.hostName | grep -qx aether
+          test "$(nix eval --no-write-lock-file --json .#nixosConfigurations.nyx.config.programs.hyprland.enable)" = true
+          nix build --no-link .#nix-settings
+
+      - name: Commit generated product
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add Nix Settings product TUI and managed state"
+          git push origin HEAD:feature/nix-settings-tui
