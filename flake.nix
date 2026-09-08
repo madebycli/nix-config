@@ -84,12 +84,14 @@
         ./modules/nixos/storage-tuning.nix
         ./modules/nixos/desktop.nix
         ./modules/nixos/greeter.nix
+        ./modules/nixos/product-features.nix
         ./modules/flatpak
 
         home-manager.nixosModules.home-manager
 
         {
           environment.systemPackages = [
+            nixSettingsProgram
             configSyncProgram
             configUpdateProgram
             nixHelpProgram
@@ -106,18 +108,14 @@
         }
       ];
 
-      mkHost = { hostName, desktops, defaultSession, shell }:
+      mkHost = { hostName, desktops, defaultSession, shell, settings ? { } }:
         let
           host = hostDefinitions.${hostName} or (throw "Unknown host: ${hostName}");
           unknownDesktops = builtins.filter
             (desktop: !(builtins.hasAttr desktop desktopModules))
             desktops;
           hostSpecialArgs = host.specialArgs or { };
-          profileName =
-            if shell == "caelestia" then "${hostName}-hyprland-caelestia"
-            else if desktops == [ "mango" ] then hostName
-            else if desktops == [ "mango" "niri" "hyprland" ] then "${hostName}-all"
-            else "${hostName}-${builtins.concatStringsSep "-" desktops}";
+          profileName = hostName;
           homeImports = [ ./modules/home ];
         in
         if desktops == [ ] then
@@ -135,7 +133,7 @@
             inherit system;
 
             specialArgs = {
-              inherit inputs desktops defaultSession hostName shell;
+              inherit inputs desktops defaultSession hostName shell settings;
               cpuArch = host.cpuArch;
               hardwareConfigPath = host.hardwareConfigPath;
             } // hostSpecialArgs;
@@ -162,8 +160,37 @@
               ++ map (desktop: desktopModules.${desktop}) desktops;
           };
 
-      mkProfile = hostName: desktops: defaultSession: shell:
-        mkHost { inherit hostName desktops defaultSession shell; };
+      managedState = hostName:
+        builtins.fromJSON (builtins.readFile (./state + "/${hostName}.json"));
+
+      mkManagedProfile = hostName:
+        let selected = managedState hostName;
+        in mkHost {
+          inherit hostName;
+          desktops = selected.desktops;
+          defaultSession = selected.defaultSession;
+          shell = selected.shell;
+          settings = selected;
+        };
+
+      nixSettingsProgram = pkgs.rustPlatform.buildRustPackage {
+        pname = "nix-settings";
+        version = "0.1.0";
+        src = ./nix-settings;
+        cargoLock.lockFile = ./nix-settings/Cargo.lock;
+        nativeBuildInputs = [ pkgs.makeWrapper ];
+        postInstall = ''
+          wrapProgram "$out/bin/nix-settings" \
+            --prefix PATH : ${nixpkgs.lib.makeBinPath [
+              pkgs.coreutils pkgs.fastfetch pkgs.findutils pkgs.gh pkgs.git pkgs.nix pkgs.sudo
+            ]}
+        '';
+        meta = {
+          description = "Nix Settings system manager and TUI";
+          license = nixpkgs.lib.licenses.mit;
+          mainProgram = "nix-settings";
+        };
+      };
 
       configSyncProgram = pkgs.writeShellApplication {
         name = "config-sync";
@@ -307,28 +334,12 @@
     in
     {
       nixosConfigurations = {
-        nyx = mkProfile "nyx" [ "mango" ] "mango" "noctalia";
-        nyx-mango = mkProfile "nyx" [ "mango" ] "mango" "noctalia";
-        nyx-niri = mkProfile "nyx" [ "niri" ] "niri" "noctalia";
-        nyx-hyprland = mkProfile "nyx" [ "hyprland" ] "hyprland" "noctalia";
-        nyx-hyprland-caelestia = mkProfile "nyx" [ "hyprland" ] "hyprland" "caelestia";
-        nyx-mango-niri = mkProfile "nyx" [ "mango" "niri" ] "mango" "noctalia";
-        nyx-mango-hyprland = mkProfile "nyx" [ "mango" "hyprland" ] "mango" "noctalia";
-        nyx-niri-hyprland = mkProfile "nyx" [ "niri" "hyprland" ] "niri" "noctalia";
-        nyx-all = mkProfile "nyx" [ "mango" "niri" "hyprland" ] "mango" "noctalia";
-
-        aether = mkProfile "aether" [ "mango" ] "mango" "noctalia";
-        aether-mango = mkProfile "aether" [ "mango" ] "mango" "noctalia";
-        aether-niri = mkProfile "aether" [ "niri" ] "niri" "noctalia";
-        aether-hyprland = mkProfile "aether" [ "hyprland" ] "hyprland" "noctalia";
-        aether-hyprland-caelestia = mkProfile "aether" [ "hyprland" ] "hyprland" "caelestia";
-        aether-mango-niri = mkProfile "aether" [ "mango" "niri" ] "mango" "noctalia";
-        aether-mango-hyprland = mkProfile "aether" [ "mango" "hyprland" ] "mango" "noctalia";
-        aether-niri-hyprland = mkProfile "aether" [ "niri" "hyprland" ] "niri" "noctalia";
-        aether-all = mkProfile "aether" [ "mango" "niri" "hyprland" ] "mango" "noctalia";
+        nyx = mkManagedProfile "nyx";
+        aether = mkManagedProfile "aether";
       };
 
       packages.${system} = {
+        nix-settings = nixSettingsProgram;
         install = installProgram;
         update = configUpdateProgram;
         nix-help = nixHelpProgram;
@@ -345,6 +356,7 @@
       };
 
       apps.${system} = {
+        nix-settings = { type = "app"; program = "${nixSettingsProgram}/bin/nix-settings"; };
         install = { type = "app"; program = "${installProgram}/bin/nixos-config-install"; };
         update = { type = "app"; program = "${configUpdateProgram}/bin/config-update"; };
         nix-help = { type = "app"; program = "${nixHelpProgram}/bin/nix-help"; };
