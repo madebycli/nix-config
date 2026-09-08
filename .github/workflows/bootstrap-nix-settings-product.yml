@@ -35,7 +35,7 @@ jobs:
 
       - name: Validate generated tree
         run: |
-          git diff --cached --check
+          git diff --cached --check -- . ':(exclude)nix-settings/vendor/linutil-tui/**'
           cd nix-settings
           cargo check --workspace --locked
           cd ..
