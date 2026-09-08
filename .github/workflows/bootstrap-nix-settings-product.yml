@@ -30,10 +30,12 @@ jobs:
           python3 scripts/.bootstrap-nix-settings-fix.py
           cd nix-settings
           cargo fmt --all
+          cd ..
+          git add -A
 
       - name: Validate generated tree
         run: |
-          git diff --check
+          git diff --cached --check
           cd nix-settings
           cargo check --workspace --locked
           cd ..
@@ -47,6 +49,5 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
           git commit -m "feat: add Nix Settings product TUI and managed state"
           git push origin HEAD:feature/nix-settings-tui
