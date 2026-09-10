@@ -11,10 +11,6 @@ brand_sprite = Sprite(brand_image);
 brand_sprite.SetX(center_x - brand_image.GetWidth() / 2);
 brand_sprite.SetY(center_y - 70);
 
-header_sprite = Sprite(Image.Text("ZOOT // TERMINAL LINK", 0.40, 0.90, 0.82, 1.0, "Sans 13"));
-header_sprite.SetX(screen_width * 0.06);
-header_sprite.SetY(screen_height * 0.08);
-
 status_sprite = Sprite();
 prompt_sprite = Sprite();
 bullets_sprite = Sprite();
