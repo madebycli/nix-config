@@ -30,10 +30,10 @@ let
           boot = {
             loader = {
               # The UEFI smoke test has no interactive boot-menu input. Boot the
-              # Select the generated entry quickly so the test measures the
-              # initrd and greeter handoff instead of waiting at systemd-boot.
+              # generated entry directly so the test measures the initrd and
+              # greeter handoff instead of waiting at systemd-boot.
               # This setting exists only in the CI VM fixture, not on Aether.
-              timeout = 1;
+              timeout = 0;
               systemd-boot = {
                 enable = true;
               };
