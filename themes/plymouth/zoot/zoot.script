@@ -6,42 +6,28 @@ screen_height = Window.GetHeight(0);
 center_x = screen_width / 2;
 center_y = screen_height / 2;
 
-header_image = Image.Text("ZOOT // TERMINAL LINK", 0.40, 0.90, 0.82, 1.0, "Monospace 14");
-header_sprite = Sprite(header_image);
+brand_image = Image.Text("Z O O T", 0.88, 0.92, 0.96, 1.0, "Sans 34");
+brand_sprite = Sprite(brand_image);
+brand_sprite.SetX(center_x - brand_image.GetWidth() / 2);
+brand_sprite.SetY(center_y - 70);
+
+header_sprite = Sprite(Image.Text("ZOOT // TERMINAL LINK", 0.40, 0.90, 0.82, 1.0, "Sans 13"));
 header_sprite.SetX(screen_width * 0.06);
 header_sprite.SetY(screen_height * 0.08);
 
-right_image = Image.Text("ARKNIGHTS // PLMF", 0.34, 0.54, 0.52, 1.0, "Monospace 11");
-right_sprite = Sprite(right_image);
-right_sprite.SetX(screen_width * 0.76);
-right_sprite.SetY(screen_height * 0.08);
-
-brand_image = Image.Text("Z O O T", 0.70, 0.98, 0.88, 1.0, "Monospace 38");
-brand_sprite = Sprite(brand_image);
-brand_sprite.SetX(center_x - brand_image.GetWidth() / 2);
-brand_sprite.SetY(center_y - 105);
-
 status_sprite = Sprite();
-detail_sprite = Sprite();
 prompt_sprite = Sprite();
 bullets_sprite = Sprite();
 
 fun set_status(text) {
-  image = Image.Text(text, 0.76, 0.96, 0.90, 1.0, "Monospace 18");
+  image = Image.Text(text, 0.58, 0.66, 0.72, 1.0, "Sans 13");
   status_sprite.SetImage(image);
   status_sprite.SetX(center_x - image.GetWidth() / 2);
-  status_sprite.SetY(center_y - 20);
-}
-
-fun set_detail(text) {
-  image = Image.Text(text, 0.38, 0.66, 0.62, 1.0, "Monospace 12");
-  detail_sprite.SetImage(image);
-  detail_sprite.SetX(center_x - image.GetWidth() / 2);
-  detail_sprite.SetY(center_y + 32);
+  status_sprite.SetY(center_y + 10);
 }
 
 fun set_prompt(text) {
-  image = Image.Text(text, 0.76, 0.96, 0.90, 1.0, "Monospace 15");
+  image = Image.Text(text, 0.82, 0.88, 0.92, 1.0, "Sans 14");
   prompt_sprite.SetImage(image);
   prompt_sprite.SetX(center_x - image.GetWidth() / 2);
   prompt_sprite.SetY(center_y + 48);
@@ -54,26 +40,20 @@ fun set_bullets(count) {
     dots += "*";
     index++;
   }
-  image = Image.Text(dots, 0.88, 1.0, 0.94, 1.0, "Monospace 20");
+  image = Image.Text(dots, 0.96, 0.98, 1.0, 1.0, "Monospace 18");
   bullets_sprite.SetImage(image);
   bullets_sprite.SetX(center_x - image.GetWidth() / 2);
   bullets_sprite.SetY(center_y + 82);
 }
 
-fun clear_password() {
+fun display_normal() {
+  set_status("SYSTEM INITIALIZATION");
   prompt_sprite.SetOpacity(0);
   bullets_sprite.SetOpacity(0);
 }
 
-fun display_normal() {
-  set_status("SYSTEM INITIALIZATION");
-  set_detail("PLMF // BOOT CHANNEL ACTIVE");
-  clear_password();
-}
-
 fun display_password(prompt, bullets) {
   set_status("AUTHENTICATION REQUIRED");
-  set_detail("SECURE CHANNEL STANDBY");
   set_prompt(prompt);
   set_bullets(bullets);
   prompt_sprite.SetOpacity(1);
