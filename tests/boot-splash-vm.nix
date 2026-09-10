@@ -146,12 +146,25 @@ let
             '';
           };
 
+          # Pull the fixture-only selector into the real theme-selection chain.
+          # A wantedBy=sysinit link alone does not guarantee that it has finished
+          # before the production selector service is scheduled.
+          boot.initrd.systemd.services.plmf-select-theme = lib.mkIf (selectorValue != "") {
+            wants = [ "plmf-test-selector.service" ];
+            after = [ "plmf-test-selector.service" ];
+          };
+
           # Plymouth should start as soon as cryptsetup.target has completed and
           # before root filesystem work finishes, not at the later switch-root
           # boundary.
           boot.initrd.systemd.services.plmf-test-plymouth-after-unlock = {
             description = "Confirm PLMF Plymouth starts after unlock";
             wantedBy = [ "initrd-root-device.target" ];
+            wants = [
+              "cryptsetup.target"
+              "plmf-select-theme.service"
+              "plymouth-start.service"
+            ];
             after = [
               "cryptsetup.target"
               "plmf-test-password-before-plymouth.service"
