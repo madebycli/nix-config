@@ -40,7 +40,8 @@ jobs:
       - name: Verify MangoWM launcher data paths
         run: |
           set -euo pipefail
-          grep -Fqx 'env=XDG_DATA_DIRS,/run/current-system/sw/share:/etc/profiles/per-user/xxxxx/share:/home/xxxxx/.nix-profile/share:/home/xxxxx/.local/share:/home/xxxxx/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share' config/home/.config/mango/config.conf
+          test "$(nix eval --accept-flake-config --no-write-lock-file --json '.#nixosConfigurations.aether.config.environment.sessionVariables.XDG_DATA_DIRS')" = '"/run/current-system/sw/share:/nix/var/nix/profiles/default/share:/etc/profiles/per-user/xxxxx/share:/home/xxxxx/.nix-profile/share:/home/xxxxx/.local/share:/home/xxxxx/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share"'
+          grep -Fqx 'env=XDG_DATA_DIRS,/run/current-system/sw/share:/nix/var/nix/profiles/default/share:/etc/profiles/per-user/xxxxx/share:/home/xxxxx/.nix-profile/share:/home/xxxxx/.local/share:/home/xxxxx/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share' config/home/.config/mango/config.conf
 
       - name: Provide synthetic CI hardware configuration
         run: |
