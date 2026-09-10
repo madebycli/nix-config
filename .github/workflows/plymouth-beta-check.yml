@@ -73,7 +73,10 @@ jobs:
           set -euo pipefail
           nix flake check --accept-flake-config --no-write-lock-file &
           check_pid=$!
-          while kill -0 "$check_pid" >/dev/null 2>&1; do
+          while true; do
+            check_state=$(ps -p "$check_pid" -o state= 2>/dev/null | tr -d ' ')
+            [ -n "$check_state" ] || break
+            [[ "$check_state" != Z* ]] || break
             echo 'nix flake check still running'
             sleep 10
           done
