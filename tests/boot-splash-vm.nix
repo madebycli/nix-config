@@ -42,10 +42,12 @@ let
             };
 
             kernelParams = [
-              "quiet"
-              "loglevel=3"
-              "rd.systemd.show_status=false"
-              "systemd.show_status=false"
+              # Keep the CI serial log useful when a theme-specific initrd or
+              # greeter path fails after UEFI has handed off to Linux.
+              "console=ttyS0,115200n8"
+              "loglevel=4"
+              "rd.systemd.show_status=true"
+              "systemd.show_status=true"
             ];
             consoleLogLevel = 0;
 
