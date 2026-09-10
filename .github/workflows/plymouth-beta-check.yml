@@ -63,6 +63,9 @@ jobs:
           cp /tmp/hardware-configuration.nix hosts/nyx/hardware-configuration.nix
           cp /tmp/hardware-configuration.nix hosts/aether/hardware-configuration.nix
 
+      - name: Run flake checks
+        run: nix flake check --accept-flake-config --no-write-lock-file
+
       - name: Evaluate primary host boot closures
         run: |
           set -euo pipefail
