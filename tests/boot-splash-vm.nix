@@ -29,6 +29,10 @@ let
 
           boot = {
             loader = {
+              # The UEFI smoke test has no interactive boot-menu input. Boot the
+              # generated entry immediately so the test measures the initrd and
+              # greeter handoff instead of waiting at systemd-boot.
+              timeout = 0;
               systemd-boot = {
                 enable = true;
                 extraFiles = lib.optionalAttrs (selectorValue != "") {
