@@ -1,6 +1,23 @@
 { config, pkgs, lib, ... }:
 
 let
+  # Keep all desktop-entry roots in the session environment. The portal module
+  # and display-manager session packages can otherwise leave XDG_DATA_DIRS
+  # pointing only at generated session metadata, while Flatpak adds its own
+  # export roots. Fuzzel and Noctalia both discover applications through this
+  # variable.
+  launcherDataDirs = lib.concatStringsSep ":" [
+    "/run/current-system/sw/share"
+    "/nix/var/nix/profiles/default/share"
+    "/etc/profiles/per-user/xxxxx/share"
+    "/home/xxxxx/.nix-profile/share"
+    "/home/xxxxx/.local/share"
+    "/home/xxxxx/.local/share/flatpak/exports/share"
+    "/var/lib/flatpak/exports/share"
+    "/usr/local/share"
+    "/usr/share"
+  ];
+
   portalPreferences = pkgs.writeText "browser-portal-file-picker.js" ''
     pref("widget.use-xdg-desktop-portal.file-picker", 1);
   '';
@@ -13,6 +30,11 @@ let
 in
 
 {
+  # Keep native NixOS, user-profile, and Flatpak desktop entries visible to
+  # every graphical session. MangoWM repeats this at compositor level because
+  # Mango resets env= values on config reload.
+  environment.sessionVariables.XDG_DATA_DIRS = lib.mkForce launcherDataDirs;
+
   programs.firefox = {
     enable = true;
     preferences = {
