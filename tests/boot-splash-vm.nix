@@ -45,6 +45,10 @@ let
               # Keep an explicit serial console for CI diagnostics while
               # retaining the normal quiet/status behavior of the fixture.
               "console=ttyS0,115200n8"
+              # systemd stage 1 mounts the synthetic root read-only unless
+              # this is explicit. The fixture-only marker persistence service
+              # needs a writable test root; production hosts are unchanged.
+              "rw"
               "quiet"
               "loglevel=3"
               "rd.systemd.show_status=false"
