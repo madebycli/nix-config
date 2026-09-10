@@ -6,7 +6,7 @@ screen_height = Window.GetHeight(0);
 center_x = screen_width / 2;
 center_y = screen_height / 2;
 
-brand_image = Image.Text("Z O O T", 0.88, 0.92, 0.96, 1.0, "Sans 34");
+brand_image = Image.Text("ZOOT", 0.88, 0.92, 0.96, 1.0, "Sans 34");
 brand_sprite = Sprite(brand_image);
 brand_sprite.SetX(center_x - brand_image.GetWidth() / 2);
 brand_sprite.SetY(center_y - 70);
@@ -43,7 +43,7 @@ fun set_bullets(count) {
 }
 
 fun display_normal() {
-  set_status("SYSTEM INITIALIZATION");
+  set_status("BOOTING");
   prompt_sprite.SetOpacity(0);
   bullets_sprite.SetOpacity(0);
 }
