@@ -36,9 +36,6 @@ let
               timeout = 0;
               systemd-boot = {
                 enable = true;
-                extraFiles = lib.optionalAttrs (selectorValue != "") {
-                  "EFI/PLMF/theme" = pkgs.writeText "plmf-test-theme-selector" "${selectorValue}\n";
-                };
               };
               efi.canTouchEfiVariables = true;
             };
@@ -106,6 +103,38 @@ let
                 exit 1
               fi
               printf 'complete\n' > /run/plmf/unlock-phase
+            '';
+          };
+
+          # Seed the selector after the ESP is available instead of using
+          # systemd-boot.extraFiles. The latter changes the generated UEFI
+          # fixture in a way that can leave OVMF before the boot manager has
+          # transferred control to the kernel. This service models the same
+          # persisted selector file while keeping the bootloader fixture
+          # identical for all theme cases.
+          boot.initrd.systemd.services.plmf-test-selector = lib.mkIf (selectorValue != "") {
+            description = "Seed the PLMF selector on the synthetic ESP";
+            wantedBy = [ "sysinit.target" ];
+            after = [ "systemd-udev-trigger.service" ];
+            before = [ "plmf-select-theme.service" "plymouth-start.service" ];
+            path = with pkgs; [ coreutils util-linux ];
+            serviceConfig = {
+              Type = "oneshot";
+              TimeoutStartSec = "8s";
+            };
+            script = ''
+              set -eu
+
+              esp_mount=/run/plmf-test-esp
+              mkdir -p "$esp_mount"
+              timeout 3s mount \
+                -t vfat \
+                -o rw,nosuid,nodev,noexec \
+                /dev/disk/by-label/ESP \
+                "$esp_mount"
+              mkdir -p "$esp_mount/EFI/PLMF"
+              printf '%s\n' ${lib.escapeShellArg selectorValue} > "$esp_mount/EFI/PLMF/theme"
+              timeout 2s umount "$esp_mount"
             '';
           };
 
