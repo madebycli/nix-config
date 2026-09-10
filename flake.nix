@@ -85,13 +85,12 @@
         ./modules/nixos/desktop.nix
         ./modules/nixos/greeter.nix
         ./modules/nixos/boot-splash.nix
+        ./modules/nixos/audio-diagnostics.nix
         ./modules/flatpak
 
         home-manager.nixosModules.home-manager
 
         {
-          plmf.bootSplash.enable = true;
-
           environment.systemPackages = [
             configSyncProgram
             configUpdateProgram

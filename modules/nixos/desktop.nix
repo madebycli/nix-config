@@ -1,14 +1,37 @@
 { config, pkgs, lib, ... }:
 
+let
+  portalPreferences = pkgs.writeText "browser-portal-file-picker.js" ''
+    pref("widget.use-xdg-desktop-portal.file-picker", 1);
+  '';
+
+  librewolfWithPortal = pkgs.librewolf.override {
+    extraPrefsFiles = (pkgs.librewolf-unwrapped.extraPrefsFiles or [ ]) ++ [
+      portalPreferences
+    ];
+  };
+in
+
 {
+  programs.firefox = {
+    enable = true;
+    preferences = {
+      # Force Firefox to use the portal FileChooser backend, which is mapped
+      # independently from MangoWM's wlroots ScreenCast backend.
+      "widget.use-xdg-desktop-portal.file-picker" = 1;
+    };
+  };
+
   xdg.portal = {
     enable = true;
     extraPortals = [
       pkgs.xdg-desktop-portal-gtk
+      pkgs.xdg-desktop-portal-gnome
       pkgs.xdg-desktop-portal-wlr
     ];
     config.common = {
       default = [ "gtk" ];
+      "org.freedesktop.impl.portal.FileChooser" = [ "gnome" ];
       "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
       "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
       "org.freedesktop.impl.portal.Inhibit" = [ "none" ];
@@ -52,7 +75,6 @@
 
     winetricks
     wineWow64Packages.waylandFull
-    firefox
     mpv
     ffmpeg
     gpu-screen-recorder
@@ -94,7 +116,7 @@
     loupe
 
     brave
-    librewolf
+    librewolfWithPortal
     joplin-desktop
     protonplus
     vesktop

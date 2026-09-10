@@ -19,6 +19,29 @@
     addLoginEntry = true;
   };
 
+  # The NixOS-only Mango module installs the compositor session but does not
+  # provide the user target that activates graphical-session.target. Portal
+  # services use that target as their session lifetime boundary.
+  systemd.user.targets.mango-session = {
+    description = "MangoWM graphical session";
+    unitConfig = {
+      Documentation = [ "man:systemd.special(7)" ];
+      BindsTo = [ "graphical-session.target" ];
+      Wants = [ "graphical-session-pre.target" ];
+      After = [ "graphical-session-pre.target" ];
+    };
+  };
+
+  # Keep screen capture on wlroots while using GNOME's GTK4 chooser only for
+  # the FileChooser interface.
+  xdg.portal.config.mango = {
+    default = [ "gtk" ];
+    "org.freedesktop.impl.portal.FileChooser" = [ "gnome" ];
+    "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
+    "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
+    "org.freedesktop.impl.portal.Inhibit" = [ ];
+  };
+
   # Workaround dependencies for Mango/wlroots clipboard interoperability
   # with Steam Proton XWayland clients.
   environment.systemPackages = with pkgs; [

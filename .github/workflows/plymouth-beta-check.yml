@@ -69,6 +69,15 @@ jobs:
           nix eval --accept-flake-config --no-write-lock-file --raw .#nixosConfigurations.nyx.config.system.build.toplevel.drvPath
           nix eval --accept-flake-config --no-write-lock-file --raw .#nixosConfigurations.aether.config.system.build.toplevel.drvPath
 
+      - name: Verify MangoWM portal routing and session target
+        run: |
+          set -euo pipefail
+          test "$(nix eval --accept-flake-config --no-write-lock-file --json '.#nixosConfigurations.aether.config.xdg.portal.config.mango."org.freedesktop.impl.portal.FileChooser"')" = '["gnome"]'
+          test "$(nix eval --accept-flake-config --no-write-lock-file --json '.#nixosConfigurations.aether.config.xdg.portal.config.mango."org.freedesktop.impl.portal.ScreenCast"')" = '["wlr"]'
+          test "$(nix eval --accept-flake-config --no-write-lock-file --json '.#nixosConfigurations.aether.config.xdg.portal.config.mango."org.freedesktop.impl.portal.Screenshot"')" = '["wlr"]'
+          test "$(nix eval --accept-flake-config --no-write-lock-file --json '.#nixosConfigurations.aether.config.systemd.user.targets.mango-session.unitConfig.BindsTo')" = '["graphical-session.target"]'
+          test "$(nix eval --accept-flake-config --no-write-lock-file --json '.#nixosConfigurations.aether.config.programs.firefox.preferences."widget.use-xdg-desktop-portal.file-picker"')" = '1'
+
   host-initrd:
     strategy:
       fail-fast: false

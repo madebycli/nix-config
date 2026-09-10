@@ -8,6 +8,10 @@
 
   networking.hostName = "aether";
 
+  # Aether has the concrete ESP/root layout required by the PLMF selector;
+  # Nyx intentionally uses a hardware-configuration placeholder.
+  plmf.bootSplash.enable = true;
+
   boot.kernelPackages =
     pkgs.cachyosKernels.linuxPackages-cachyos-bore-x86_64-v3;
 
