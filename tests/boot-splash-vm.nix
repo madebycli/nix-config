@@ -42,12 +42,13 @@ let
             };
 
             kernelParams = [
-              # Keep the CI serial log useful when a theme-specific initrd or
-              # greeter path fails after UEFI has handed off to Linux.
+              # Keep an explicit serial console for CI diagnostics while
+              # retaining the normal quiet/status behavior of the fixture.
               "console=ttyS0,115200n8"
-              "loglevel=4"
-              "rd.systemd.show_status=true"
-              "systemd.show_status=true"
+              "quiet"
+              "loglevel=3"
+              "rd.systemd.show_status=false"
+              "systemd.show_status=false"
             ];
             consoleLogLevel = 0;
 
@@ -195,58 +196,61 @@ let
             script = ''
               set -eu
 
+              fail() {
+                reason="$1"
+                echo "PLMF CI failure: $reason" >&2
+                mkdir -p /tmp/xchg
+                printf 'failure=%s\n' "$reason" > /tmp/xchg/plmf-failure
+                printf 'effective-theme=' >&2
+                cat /run/plmf/effective-theme >&2 2>/dev/null || true
+                printf 'greeter-handoff=' >&2
+                cat /run/plmf/greeter-handoff >&2 2>/dev/null || true
+                pgrep -af 'noctalia-greeter' >&2 || true
+                systemctl --no-pager status greetd.service >&2 || true
+                exit 1
+              }
+
               expected=${lib.escapeShellArg expectedTheme}
               if [ ! -r /run/plmf/effective-theme ]; then
-                echo "PLMF effective-theme marker did not survive switch-root" >&2
-                exit 1
+                fail effective-theme-marker-missing
               fi
               if [ ! -r /run/plmf/plymouth-before-unlock ]; then
-                echo "Pre-Plymouth password phase marker is missing" >&2
-                exit 1
+                fail pre-plymouth-marker-missing
               fi
               if [ "$(cat /run/plmf/plymouth-before-unlock)" != "inactive" ]; then
-                echo "Plymouth was unexpectedly active before unlock" >&2
-                exit 1
+                fail plymouth-active-before-unlock
               fi
               if [ ! -r /run/plmf/plymouth-active ]; then
-                echo "Plymouth was not confirmed active after unlock" >&2
-                exit 1
+                fail plymouth-active-marker-missing
               fi
               if [ "$(cat /run/plmf/plymouth-active)" != "active-after-unlock" ]; then
-                echo "Unexpected Plymouth post-unlock marker" >&2
-                exit 1
+                fail plymouth-active-marker-invalid
               fi
 
               actual=$(cat /run/plmf/effective-theme)
               if [ "$actual" != "$expected" ]; then
-                echo "PLMF theme mismatch: expected=$expected actual=$actual" >&2
-                exit 1
+                fail theme-mismatch
               fi
 
-              systemctl is-active --quiet greetd.service
+              systemctl is-active --quiet greetd.service || fail greetd-inactive
 
               attempts=0
               while ! pgrep -f 'noctalia-greeter' >/dev/null 2>&1; do
                 attempts=$((attempts + 1))
                 if [ "$attempts" -ge 30 ]; then
-                  echo "Noctalia Greeter did not start" >&2
-                  systemctl status greetd.service --no-pager >&2 || true
-                  exit 1
+                  fail noctalia-greeter-not-started
                 fi
                 sleep 1
               done
 
               if [ ! -r /run/plmf/greeter-handoff ]; then
-                echo "PLMF greeter handoff marker is missing" >&2
-                exit 1
+                fail greeter-handoff-marker-missing
               fi
               if [ "$(cat /run/plmf/greeter-handoff)" != "retain-splash" ]; then
-                echo "PLMF greeter handoff did not retain the last splash frame" >&2
-                exit 1
+                fail greeter-handoff-not-retained
               fi
               if plymouth --ping >/dev/null 2>&1; then
-                echo "Plymouth is still active after greetd handoff" >&2
-                exit 1
+                fail plymouth-still-active
               fi
 
               mkdir -p /tmp/xchg

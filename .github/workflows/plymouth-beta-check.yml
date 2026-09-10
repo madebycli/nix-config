@@ -230,6 +230,7 @@ jobs:
           serial_log="$TMPDIR/serial.log"
           runner_log="$TMPDIR/runner.log"
           marker="$TMPDIR/xchg/plmf-ready"
+          failure_marker="$TMPDIR/xchg/plmf-failure"
           export QEMU_OPTS="-display none -serial file:$serial_log -monitor none"
 
           timeout --signal=TERM 120s "$runner" >"$runner_log" 2>&1 &
@@ -259,6 +260,8 @@ jobs:
             cat "$runner_log" >&2 || true
             echo '--- serial log ---' >&2
             cat "$serial_log" >&2 || true
+            echo '--- PLMF failure marker ---' >&2
+            cat "$failure_marker" >&2 || true
             exit 1
           fi
 
