@@ -77,10 +77,15 @@ let
           # prompt, exactly like on nyx.
           boot.initrd.systemd.services.plmf-test-password-before-plymouth = {
             description = "PLMF synthetic LUKS password phase";
-            wantedBy = [ "cryptsetup.target" ];
+            # The VM has no real encrypted volume, so cryptsetup.target is not
+            # pulled in by a generated cryptsetup job. Pull the target in from
+            # the smoke chain so this service still models the real unlock
+            # boundary instead of racing initrd-root-device.target.
+            wantedBy = [ "cryptsetup.target" "initrd-root-device.target" ];
             after = [ "systemd-udev-trigger.service" ];
             before = [
               "cryptsetup.target"
+              "initrd-root-device.target"
               "plymouth-start.service"
             ];
             serviceConfig = {
@@ -148,9 +153,15 @@ let
           boot.initrd.systemd.services.plmf-test-plymouth-after-unlock = {
             description = "Confirm PLMF Plymouth starts after unlock";
             wantedBy = [ "initrd-root-device.target" ];
+            wants = [
+              "cryptsetup.target"
+              "plmf-select-theme.service"
+              "plymouth-start.service"
+            ];
             after = [
               "cryptsetup.target"
               "plmf-test-password-before-plymouth.service"
+              "plmf-select-theme.service"
               "plymouth-start.service"
             ];
             before = [ "initrd-root-fs.target" ];
@@ -164,6 +175,40 @@ let
               test "$(cat /run/plmf/unlock-phase)" = complete
               ${config.boot.plymouth.package}/bin/plymouth --ping
               printf 'active-after-unlock\n' > /run/plmf/plymouth-active
+            '';
+          };
+
+          # Initrd /run is intentionally not the stage-2 /run. Persist the
+          # initrd observations on the mounted root so the stage-2 assertion
+          # can validate the unlock-to-Plymouth ordering after switch-root.
+          boot.initrd.systemd.services.plmf-test-persist-markers = {
+            description = "Persist PLMF initrd smoke markers";
+            wantedBy = [ "initrd-switch-root.target" ];
+            after = [
+              "initrd-fs.target"
+              "initrd-root-fs.target"
+              "plmf-test-plymouth-after-unlock.service"
+            ];
+            before = [ "initrd-switch-root.target" "initrd-switch-root.service" ];
+            path = with pkgs; [ coreutils ];
+            unitConfig.DefaultDependencies = false;
+            serviceConfig = {
+              Type = "oneshot";
+              TimeoutStartSec = "8s";
+            };
+            script = ''
+              set -eu
+
+              marker_dir=/sysroot/var/lib/plmf-test
+              mkdir -p "$marker_dir"
+              for marker in \
+                effective-theme \
+                plymouth-before-unlock \
+                unlock-phase \
+                plymouth-active; do
+                test -r "/run/plmf/$marker"
+                cp "/run/plmf/$marker" "$marker_dir/$marker"
+              done
             '';
           };
 
@@ -196,13 +241,15 @@ let
             script = ''
               set -eu
 
+              marker_dir=/var/lib/plmf-test
+
               fail() {
                 reason="$1"
                 echo "PLMF CI failure: $reason" >&2
                 mkdir -p /tmp/xchg
                 printf 'failure=%s\n' "$reason" > /tmp/xchg/plmf-failure
                 printf 'effective-theme=' >&2
-                cat /run/plmf/effective-theme >&2 2>/dev/null || true
+                cat "$marker_dir/effective-theme" >&2 2>/dev/null || true
                 printf 'greeter-handoff=' >&2
                 cat /run/plmf/greeter-handoff >&2 2>/dev/null || true
                 pgrep -af 'noctalia-greeter' >&2 || true
@@ -211,23 +258,23 @@ let
               }
 
               expected=${lib.escapeShellArg expectedTheme}
-              if [ ! -r /run/plmf/effective-theme ]; then
+              if [ ! -r "$marker_dir/effective-theme" ]; then
                 fail effective-theme-marker-missing
               fi
-              if [ ! -r /run/plmf/plymouth-before-unlock ]; then
+              if [ ! -r "$marker_dir/plymouth-before-unlock" ]; then
                 fail pre-plymouth-marker-missing
               fi
-              if [ "$(cat /run/plmf/plymouth-before-unlock)" != "inactive" ]; then
+              if [ "$(cat "$marker_dir/plymouth-before-unlock")" != "inactive" ]; then
                 fail plymouth-active-before-unlock
               fi
-              if [ ! -r /run/plmf/plymouth-active ]; then
+              if [ ! -r "$marker_dir/plymouth-active" ]; then
                 fail plymouth-active-marker-missing
               fi
-              if [ "$(cat /run/plmf/plymouth-active)" != "active-after-unlock" ]; then
+              if [ "$(cat "$marker_dir/plymouth-active")" != "active-after-unlock" ]; then
                 fail plymouth-active-marker-invalid
               fi
 
-              actual=$(cat /run/plmf/effective-theme)
+              actual=$(cat "$marker_dir/effective-theme")
               if [ "$actual" != "$expected" ]; then
                 fail theme-mismatch
               fi
