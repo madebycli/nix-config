@@ -36,9 +36,6 @@ let
               timeout = 1;
               systemd-boot = {
                 enable = true;
-                extraFiles = lib.optionalAttrs (selectorValue != "") {
-                  "EFI/PLMF/theme" = pkgs.writeText "plmf-test-theme-selector" "${selectorValue}\n";
-                };
               };
               efi.canTouchEfiVariables = true;
             };
@@ -106,6 +103,34 @@ let
                 exit 1
               fi
               printf 'complete\n' > /run/plmf/unlock-phase
+            '';
+          };
+
+          # Seed the same ESP selector that the runtime PLMF tool writes, but
+          # do it after the UEFI loader has started. Passing this file through
+          # systemd-boot.extraFiles makes the firmware smoke fixture stop at
+          # the boot menu on some QEMU runs before the kernel is loaded.
+          boot.initrd.systemd.services.plmf-test-selector = lib.mkIf (selectorValue != "") {
+            description = "PLMF synthetic ESP theme selector";
+            wantedBy = [ "sysinit.target" ];
+            after = [ "systemd-udev-trigger.service" ];
+            before = [ "plmf-select-theme.service" ];
+            path = with pkgs; [ coreutils util-linux ];
+            serviceConfig = {
+              Type = "oneshot";
+              TimeoutStartSec = "8s";
+            };
+            script = ''
+              set -eu
+
+              esp_mount=/run/plmf-test-esp
+              selector="$esp_mount/EFI/PLMF/theme"
+              mkdir -p "$esp_mount"
+              mount -t vfat -o nosuid,nodev,noexec /dev/disk/by-label/ESP "$esp_mount"
+              mkdir -p "$(dirname "$selector")"
+              printf '%s\n' ${lib.escapeShellArg selectorValue} > "$selector"
+              sync "$selector"
+              umount "$esp_mount"
             '';
           };
 
