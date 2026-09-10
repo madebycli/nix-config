@@ -81,9 +81,14 @@ let
             # pulled in by a generated cryptsetup job. Pull the target in from
             # the smoke chain so this service still models the real unlock
             # boundary instead of racing initrd-root-device.target.
-            wantedBy = [ "cryptsetup.target" "initrd-root-device.target" ];
+            wantedBy = [
+              "sysinit.target"
+              "cryptsetup.target"
+              "initrd-root-device.target"
+            ];
             after = [ "systemd-udev-trigger.service" ];
             before = [
+              "sysinit.target"
               "cryptsetup.target"
               "initrd-root-device.target"
               "plymouth-start.service"
@@ -170,10 +175,21 @@ let
               TimeoutStartSec = "8s";
             };
             script = ''
-              set -eu
+              set -u
 
-              test "$(cat /run/plmf/unlock-phase)" = complete
-              ${config.boot.plymouth.package}/bin/plymouth --ping
+              mkdir -p /run/plmf
+              fail() {
+                printf '%s\n' "$1" > /run/plmf/test-failure
+                exit 1
+              }
+
+              if [ ! -r /run/plmf/unlock-phase ] || \
+                [ "$(cat /run/plmf/unlock-phase)" != complete ]; then
+                fail unlock-marker-missing
+              fi
+              if ! ${config.boot.plymouth.package}/bin/plymouth --ping; then
+                fail plymouth-not-active
+              fi
               printf 'active-after-unlock\n' > /run/plmf/plymouth-active
             '';
           };
@@ -206,9 +222,13 @@ let
                 plymouth-before-unlock \
                 unlock-phase \
                 plymouth-active; do
-                test -r "/run/plmf/$marker"
-                cp "/run/plmf/$marker" "$marker_dir/$marker"
+                if [ -r "/run/plmf/$marker" ]; then
+                  cp "/run/plmf/$marker" "$marker_dir/$marker"
+                fi
               done
+              if [ -r /run/plmf/test-failure ]; then
+                cp /run/plmf/test-failure "$marker_dir/test-failure"
+              fi
             '';
           };
 
@@ -250,6 +270,8 @@ let
                 printf 'failure=%s\n' "$reason" > /tmp/xchg/plmf-failure
                 printf 'effective-theme=' >&2
                 cat "$marker_dir/effective-theme" >&2 2>/dev/null || true
+                printf 'initrd-test=' >&2
+                cat "$marker_dir/test-failure" >&2 2>/dev/null || true
                 printf 'greeter-handoff=' >&2
                 cat /run/plmf/greeter-handoff >&2 2>/dev/null || true
                 pgrep -af 'noctalia-greeter' >&2 || true
@@ -258,6 +280,9 @@ let
               }
 
               expected=${lib.escapeShellArg expectedTheme}
+              if [ -r "$marker_dir/test-failure" ]; then
+                fail initrd-test-failed
+              fi
               if [ ! -r "$marker_dir/effective-theme" ]; then
                 fail effective-theme-marker-missing
               fi
