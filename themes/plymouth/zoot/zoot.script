@@ -9,6 +9,7 @@ screen.cy = screen.h / 2;
 state.frame = 0;
 state.password = 0;
 state.started = 1;
+state.phase = -1;
 
 header.image = Image.Text("ZOOT // TERMINAL LINK", 0.40, 0.90, 0.82, 1.0, "Monospace 14");
 header.sprite = Sprite(header.image);
@@ -20,19 +21,6 @@ right.sprite.SetPosition(screen.w * 0.76, screen.h * 0.08, 5);
 
 logo.image = Image.Text("Z O O T", 0.70, 0.98, 0.88, 1.0, "Monospace 38");
 ready.image = Image.Text("READY // WELCOME, DOCTOR", 0.52, 0.96, 0.84, 1.0, "Monospace 16");
-connecting_phase.image = Image.Text("ZOOT LINK // CONNECTING", 0.76, 0.96, 0.90, 1.0, "Monospace 18");
-initialization_phase.image = Image.Text("SYSTEM INITIALIZATION", 0.76, 0.96, 0.90, 1.0, "Monospace 18");
-connecting_detail.image = Image.Text("NEGOTIATING LOCAL BOOT CHANNEL", 0.38, 0.66, 0.62, 1.0, "Monospace 12");
-verify_detail.image = Image.Text("VERIFYING LOCAL MODULE BUNDLE", 0.38, 0.66, 0.62, 1.0, "Monospace 12");
-sync_detail.image = Image.Text("SYNCHRONIZING DISPLAY PIPELINE", 0.38, 0.66, 0.62, 1.0, "Monospace 12");
-handshake_detail.image = Image.Text("HANDSHAKE COMPLETE", 0.38, 0.66, 0.62, 1.0, "Monospace 12");
-waiting_phase.image = Image.Text("ZOOT LINK // WAITING AUTH", 0.76, 0.96, 0.90, 1.0, "Monospace 18");
-waiting_detail.image = Image.Text("SECURE CHANNEL STANDBY", 0.38, 0.66, 0.62, 1.0, "Monospace 12");
-connecting_progress.image = Image.Text("[##........]", 0.46, 0.92, 0.82, 1.0, "Monospace 14");
-verify_progress.image = Image.Text("[####......]", 0.46, 0.92, 0.82, 1.0, "Monospace 14");
-sync_progress.image = Image.Text("[######....]", 0.46, 0.92, 0.82, 1.0, "Monospace 14");
-handshake_progress.image = Image.Text("[########..]", 0.46, 0.92, 0.82, 1.0, "Monospace 14");
-waiting_progress.image = Image.Text("[..........]", 0.46, 0.92, 0.82, 1.0, "Monospace 14");
 scan.image = Image.Text("------------------------------------------------", 0.10, 0.28, 0.26, 0.42, "Monospace 10");
 
 logo.sprite = Sprite(logo.image);
@@ -49,10 +37,18 @@ fun center_sprite(sprite, image, y, z) {
   sprite.SetPosition(screen.cx - image.GetWidth() / 2, y, z);
 }
 
-fun render_phase(phase_image, detail_image, progress_image) {
-  center_sprite(phase.sprite, phase_image, screen.h * 0.43, 10);
-  center_sprite(detail.sprite, detail_image, screen.h * 0.49, 10);
-  center_sprite(progress.sprite, progress_image, screen.h * 0.55, 10);
+fun render_phase(title, detail_text, progress_text, phase_key) {
+  if (state.phase != phase_key) {
+    state.phase = phase_key;
+
+    phase.image = Image.Text(title, 0.76, 0.96, 0.90, 1.0, "Monospace 18");
+    detail.image = Image.Text(detail_text, 0.38, 0.66, 0.62, 1.0, "Monospace 12");
+    progress.image = Image.Text(progress_text, 0.46, 0.92, 0.82, 1.0, "Monospace 14");
+  }
+
+  center_sprite(phase.sprite, phase.image, screen.h * 0.43, 10);
+  center_sprite(detail.sprite, detail.image, screen.h * 0.49, 10);
+  center_sprite(progress.sprite, progress.image, screen.h * 0.55, 10);
 }
 
 fun clear_password() {
@@ -93,6 +89,7 @@ fun display_normal() {
   }
   state.password = 0;
   state.started = 1;
+  state.phase = -1;
   clear_password();
   phase.sprite.SetOpacity(1);
   detail.sprite.SetOpacity(1);
@@ -105,7 +102,7 @@ fun refresh() {
   }
 
   if (state.started == 0) {
-    render_phase(waiting_phase.image, waiting_detail.image, waiting_progress.image);
+    render_phase("ZOOT LINK // WAITING AUTH", "SECURE CHANNEL STANDBY", "[..........]", 0);
     return;
   }
 
@@ -115,13 +112,13 @@ fun refresh() {
   if (frame < 55) {
     logo.sprite.SetOpacity(0);
     ready.sprite.SetOpacity(0);
-    render_phase(connecting_phase.image, connecting_detail.image, connecting_progress.image);
+    render_phase("ZOOT LINK // CONNECTING", "NEGOTIATING LOCAL BOOT CHANNEL", "[##........]", 1);
   } else if (frame < 105) {
-    render_phase(initialization_phase.image, verify_detail.image, verify_progress.image);
+    render_phase("SYSTEM INITIALIZATION", "VERIFYING LOCAL MODULE BUNDLE", "[####......]", 2);
   } else if (frame < 155) {
-    render_phase(initialization_phase.image, sync_detail.image, sync_progress.image);
+    render_phase("SYSTEM INITIALIZATION", "SYNCHRONIZING DISPLAY PIPELINE", "[######....]", 3);
   } else if (frame < 205) {
-    render_phase(initialization_phase.image, handshake_detail.image, handshake_progress.image);
+    render_phase("SYSTEM INITIALIZATION", "HANDSHAKE COMPLETE", "[########..]", 4);
   } else if (frame < 275) {
     phase.sprite.SetOpacity(0);
     detail.sprite.SetOpacity(0);
