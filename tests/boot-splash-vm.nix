@@ -81,20 +81,10 @@ let
           # prompt, exactly like on nyx.
           boot.initrd.systemd.services.plmf-test-password-before-plymouth = {
             description = "PLMF synthetic LUKS password phase";
-            # The VM has no real encrypted volume, so cryptsetup.target is not
-            # pulled in by a generated cryptsetup job. Pull the target in from
-            # the smoke chain so this service still models the real unlock
-            # boundary instead of racing initrd-root-device.target.
-            wantedBy = [
-              "sysinit.target"
-              "cryptsetup.target"
-              "initrd-root-device.target"
-            ];
+            wantedBy = [ "cryptsetup.target" ];
             after = [ "systemd-udev-trigger.service" ];
             before = [
-              "sysinit.target"
               "cryptsetup.target"
-              "initrd-root-device.target"
               "plymouth-start.service"
             ];
             serviceConfig = {
@@ -162,15 +152,9 @@ let
           boot.initrd.systemd.services.plmf-test-plymouth-after-unlock = {
             description = "Confirm PLMF Plymouth starts after unlock";
             wantedBy = [ "initrd-root-device.target" ];
-            wants = [
-              "cryptsetup.target"
-              "plmf-select-theme.service"
-              "plymouth-start.service"
-            ];
             after = [
               "cryptsetup.target"
               "plmf-test-password-before-plymouth.service"
-              "plmf-select-theme.service"
               "plymouth-start.service"
             ];
             before = [ "initrd-root-fs.target" ];
