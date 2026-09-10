@@ -64,7 +64,15 @@ jobs:
           cp /tmp/hardware-configuration.nix hosts/aether/hardware-configuration.nix
 
       - name: Run flake checks
-        run: nix flake check --accept-flake-config --no-write-lock-file
+        run: |
+          set -euo pipefail
+          nix flake check --accept-flake-config --no-write-lock-file &
+          check_pid=$!
+          while kill -0 "$check_pid" >/dev/null 2>&1; do
+            echo 'nix flake check still running'
+            sleep 10
+          done
+          wait "$check_pid"
 
       - name: Evaluate primary host boot closures
         run: |
