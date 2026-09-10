@@ -119,6 +119,44 @@ jobs:
             --print-build-logs \
             .#nixosConfigurations.${{ matrix.host }}.config.system.build.initialRamdisk
 
+  system-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [nyx, aether]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Provide synthetic CI hardware configuration
+        run: |
+          cat > /tmp/hardware-configuration.nix <<'EOF'
+          { modulesPath, ... }:
+          {
+            imports = [ (modulesPath + "/profiles/qemu-guest.nix") ];
+            boot.initrd.availableKernelModules = [ "virtio_pci" "virtio_blk" "xhci_pci" ];
+            fileSystems."/" = { device = "/dev/disk/by-label/nixos"; fsType = "ext4"; };
+            fileSystems."/boot" = { device = "/dev/disk/by-label/ESP"; fsType = "vfat"; };
+            swapDevices = [ ];
+          }
+          EOF
+          cp /tmp/hardware-configuration.nix hosts/nyx/hardware-configuration.nix
+          cp /tmp/hardware-configuration.nix hosts/aether/hardware-configuration.nix
+
+      - name: Build ${{ matrix.host }} system closure
+        run: |
+          nix build \
+            --accept-flake-config \
+            --no-link \
+            --no-write-lock-file \
+            --print-build-logs \
+            .#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel
+
   vm-smoke:
     strategy:
       fail-fast: false
