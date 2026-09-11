@@ -92,6 +92,7 @@ let
               "cryptsetup.target"
               "plymouth-start.service"
             ];
+            unitConfig.DefaultDependencies = false;
             serviceConfig = {
               Type = "oneshot";
               TimeoutStartSec = "8s";
@@ -186,18 +187,21 @@ let
             wantedBy = [ "initrd-root-device.target" ];
             requires = [
               "cryptsetup.target"
+              "plmf-ask-password-console.service"
               "plmf-test-password-before-plymouth.service"
               "plmf-select-theme.service"
               "plymouth-start.service"
             ];
             wants = [
               "cryptsetup.target"
+              "plmf-ask-password-console.service"
               "plmf-test-password-before-plymouth.service"
               "plmf-select-theme.service"
               "plymouth-start.service"
             ];
             after = [
               "cryptsetup.target"
+              "plmf-ask-password-console.service"
               "plmf-test-password-before-plymouth.service"
               "plymouth-start.service"
             ];
@@ -218,6 +222,10 @@ let
                   timeout 2s systemctl show \
                     --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus \
                     plmf-test-password-before-plymouth.service 2>&1 || true
+                  printf 'password-agent-unit=\n'
+                  timeout 2s systemctl show \
+                    --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus \
+                    plmf-ask-password-console.service 2>&1 || true
                   printf 'selector-unit=\n'
                   timeout 2s systemctl show \
                     --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus \
@@ -233,6 +241,9 @@ let
               if [ ! -r /run/plmf/unlock-phase ] || \
                 [ "$(cat /run/plmf/unlock-phase)" != complete ]; then
                 fail unlock-marker-missing
+              fi
+              if ! systemctl is-active --quiet plmf-ask-password-console.service; then
+                fail password-agent-inactive
               fi
               plymouth_ready=0
               for attempt in 1 2 3 4 5; do
@@ -402,6 +413,11 @@ let
               if [ ! -r "$marker_dir/plymouth-before-unlock" ]; then
                 fail pre-plymouth-marker-missing
               fi
+              if [ ! -r "$marker_dir/password-phase" ] || \
+                [ "$(cat "$marker_dir/password-phase")" != started ]; then
+                fail password-phase-marker-missing
+              fi
+              systemctl is-active --quiet plmf-ask-password-console.service || fail password-agent-inactive
               if [ "$(cat "$marker_dir/plymouth-before-unlock")" != "inactive" ]; then
                 fail plymouth-active-before-unlock
               fi
@@ -443,6 +459,8 @@ let
                 printf 'expected=%s\n' "$expected"
                 printf 'actual=%s\n' "$actual"
                 printf 'pre-plymouth=inactive\n'
+                printf 'password-phase=started\n'
+                printf 'password-agent=active\n'
                 printf 'unlock=complete\n'
                 printf 'plymouth=active-after-unlock\n'
                 printf 'handoff=retain-splash\n'
