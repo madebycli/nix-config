@@ -162,6 +162,8 @@ in
           suppressedUnits = [
             "systemd-ask-password-plymouth.path"
             "systemd-ask-password-plymouth.service"
+            "systemd-ask-password-console.path"
+            "systemd-ask-password-console.service"
           ];
 
           contents = {
@@ -175,7 +177,35 @@ in
             "/etc/plymouth/plugins".source = lib.mkForce pluginBundle;
           };
 
+          # The real LUKS password prompt is intentionally handled by an
+          # initrd console agent before cryptsetup.target. The upstream
+          # console password units wait for Plymouth, which would deadlock
+          # this post-unlock handoff: cryptsetup waits for the console agent
+          # while Plymouth waits for cryptsetup. Keep the agent independent
+          # and suppress Plymouth's password agent entirely.
           services = {
+            plmf-ask-password-console = {
+              description = "Dispatch password requests to the initrd console";
+              wantedBy = [ "sysinit.target" ];
+              after = [ "systemd-vconsole-setup.service" ];
+              before = [
+                "cryptsetup.target"
+                "emergency.service"
+                "initrd-switch-root.target"
+                "shutdown.target"
+              ];
+              conflicts = [
+                "emergency.service"
+                "initrd-switch-root.target"
+                "shutdown.target"
+              ];
+              unitConfig.DefaultDependencies = false;
+              serviceConfig = {
+                Type = "notify";
+                ExecStart = "${config.boot.initrd.systemd.package}/bin/systemd-tty-ask-password-agent --watch --console";
+                SystemCallArchitectures = "native";
+              };
+            };
             plmf-select-theme = {
               description = "Select trusted PLMF Plymouth theme";
               wantedBy = [ "sysinit.target" ];
