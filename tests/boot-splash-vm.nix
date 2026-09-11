@@ -102,7 +102,11 @@ let
               fi
               printf 'inactive\n' > /run/plmf/plymouth-before-unlock
 
+              # CI cannot provide an interactive password. Query only password
+              # agents so this models the prompt boundary without blocking the
+              # UEFI smoke test on a synthetic console.
               ${config.boot.initrd.systemd.package}/bin/systemd-ask-password \
+                --no-tty \
                 --timeout=2 \
                 "PLMF VM synthetic LUKS password phase" >/dev/null || true
 
