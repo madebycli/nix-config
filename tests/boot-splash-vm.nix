@@ -180,6 +180,7 @@ let
               "plymouth-start.service"
             ];
             before = [ "initrd-root-fs.target" ];
+            path = with pkgs; [ coreutils procps systemd config.boot.plymouth.package ];
             serviceConfig = {
               Type = "oneshot";
               TimeoutStartSec = "8s";
@@ -198,7 +199,25 @@ let
                 fail unlock-marker-missing
               fi
               if ! ${config.boot.plymouth.package}/bin/plymouth --ping; then
-                fail plymouth-not-active
+                {
+                  printf 'reason=plymouth-not-active\n'
+                  printf 'pid='; cat /run/plymouth/pid 2>/dev/null || true
+                  printf 'processes=\n'
+                  pgrep -af plymouth 2>/dev/null || true
+                  printf 'socket-dir=\n'
+                  ls -la /run/plymouth 2>/dev/null || true
+                  printf 'config=\n'
+                  cat /etc/plymouth/plymouthd.conf 2>/dev/null || true
+                  printf 'run-debug=\n'
+                  cat /run/plmf/plymouth-debug.log 2>/dev/null || true
+                  printf 'var-debug=\n'
+                  cat /var/log/plymouth-debug.log 2>/dev/null || true
+                  printf 'tmp-debug=\n'
+                  cat /tmp/plymouth-debug.log 2>/dev/null || true
+                  printf 'service=\n'
+                  systemctl --no-pager --full status plymouth-start.service 2>&1 || true
+                } > /run/plmf/test-failure
+                exit 1
               fi
               printf 'active-after-unlock\n' > /run/plmf/plymouth-active
             '';
@@ -279,6 +298,10 @@ let
                 echo "PLMF CI failure: $reason" >&2
                 mkdir -p /tmp/xchg
                 printf 'failure=%s\n' "$reason" > /tmp/xchg/plmf-failure
+                if [ -r "$marker_dir/test-failure" ]; then
+                  printf 'initrd-test=\n' >> /tmp/xchg/plmf-failure
+                  cat "$marker_dir/test-failure" >> /tmp/xchg/plmf-failure
+                fi
                 printf 'effective-theme=' >&2
                 cat "$marker_dir/effective-theme" >&2 2>/dev/null || true
                 printf 'initrd-test=' >&2
