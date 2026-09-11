@@ -236,7 +236,7 @@ let
               "plmf-test-plymouth-after-unlock.service"
             ];
             before = [ "initrd-switch-root.target" "initrd-switch-root.service" ];
-            path = with pkgs; [ coreutils ];
+            path = with pkgs; [ coreutils procps systemd config.boot.plymouth.package ];
             unitConfig.DefaultDependencies = false;
             serviceConfig = {
               Type = "oneshot";
@@ -247,6 +247,32 @@ let
 
               marker_dir=/sysroot/var/lib/plmf-test
               mkdir -p "$marker_dir"
+              if [ ! -s /run/plmf/test-failure ]; then
+                {
+                  printf 'reason=empty-or-missing-test-failure\n'
+                  printf 'test-unit=\n'
+                  timeout 2s systemctl show \
+                    --property=ActiveState,SubState,Result,ExecMainCode,ExecMainStatus \
+                    plmf-test-plymouth-after-unlock.service 2>&1 || true
+                  printf 'plymouth-unit=\n'
+                  timeout 2s systemctl show \
+                    --property=ActiveState,SubState,Result,ExecMainCode,ExecMainStatus \
+                    plymouth-start.service 2>&1 || true
+                  printf 'pid='; cat /run/plymouth/pid 2>/dev/null || true
+                  printf 'processes=\n'
+                  pgrep -af plymouth 2>/dev/null || true
+                  printf 'socket-dir=\n'
+                  ls -la /run/plymouth 2>/dev/null || true
+                  printf 'config=\n'
+                  cat /etc/plymouth/plymouthd.conf 2>/dev/null || true
+                  printf 'run-debug=\n'
+                  cat /run/plmf/plymouth-debug.log 2>/dev/null || true
+                  printf 'var-debug=\n'
+                  cat /var/log/plymouth-debug.log 2>/dev/null || true
+                  printf 'tmp-debug=\n'
+                  cat /tmp/plymouth-debug.log 2>/dev/null || true
+                } > /run/plmf/test-failure
+              fi
               for marker in \
                 effective-theme \
                 plymouth-before-unlock \
