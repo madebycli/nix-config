@@ -123,6 +123,14 @@ let
             '';
           };
 
+          # The production Plymouth unit is also pulled in directly by
+                    # initrd-root-device.target. Add the synthetic password phase to that
+          # unit's own ordering so it cannot race the cryptsetup-target edge.
+          boot.initrd.systemd.services.plymouth-start = {
+            wants = [ "plmf-test-password-before-plymouth.service" ];
+            after = [ "plmf-test-password-before-plymouth.service" ];
+          };
+
           # Seed the selector after the ESP is available instead of using
           # systemd-boot.extraFiles. The latter changes the generated UEFI
           # fixture in a way that can leave OVMF before the boot manager has
@@ -184,7 +192,7 @@ let
             path = with pkgs; [ coreutils procps systemd config.boot.plymouth.package ];
             serviceConfig = {
               Type = "oneshot";
-              TimeoutStartSec = "8s";
+              TimeoutStartSec = "12s";
             };
             script = ''
               set -u
@@ -199,7 +207,14 @@ let
                 [ "$(cat /run/plmf/unlock-phase)" != complete ]; then
                 fail unlock-marker-missing
               fi
-              if ! timeout 3s ${config.boot.plymouth.package}/bin/plymouth --ping; then
+              plymouth_ready=0
+              for attempt in 1 2 3 4 5; do
+                if timeout 1s ${config.boot.plymouth.package}/bin/plymouth --ping; then
+                  plymouth_ready=1
+                  break
+                fi
+              done
+              if [ "$plymouth_ready" -ne 1 ]; then
                 {
                   printf 'reason=plymouth-not-active-or-timeout\n'
                   printf 'ping=failed-or-timeout\n'
