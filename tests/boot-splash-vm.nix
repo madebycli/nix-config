@@ -53,6 +53,11 @@ let
               "loglevel=3"
               "rd.systemd.show_status=false"
               "systemd.show_status=false"
+              # Keep a CI-only Plymouth trace on the synthetic root so a
+              # theme-specific daemon failure is distinguishable from a
+              # systemd ordering failure. Production hosts do not inherit
+              # this diagnostic parameter.
+              "plymouth.debug=file:/run/plmf/plymouth-debug.log"
             ];
             consoleLogLevel = 0;
 
@@ -226,7 +231,8 @@ let
                 effective-theme \
                 plymouth-before-unlock \
                 unlock-phase \
-                plymouth-active; do
+                plymouth-active \
+                plymouth-debug.log; do
                 if [ -r "/run/plmf/$marker" ]; then
                   cp "/run/plmf/$marker" "$marker_dir/$marker"
                 fi
@@ -277,6 +283,8 @@ let
                 cat "$marker_dir/effective-theme" >&2 2>/dev/null || true
                 printf 'initrd-test=' >&2
                 cat "$marker_dir/test-failure" >&2 2>/dev/null || true
+                printf 'plymouth-debug=' >&2
+                cat "$marker_dir/plymouth-debug.log" >&2 2>/dev/null || true
                 printf 'greeter-handoff=' >&2
                 cat /run/plmf/greeter-handoff >&2 2>/dev/null || true
                 pgrep -af 'noctalia-greeter' >&2 || true
