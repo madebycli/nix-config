@@ -269,6 +269,8 @@ jobs:
           grep -Fxq "expected=$PLMF_EXPECT_THEME" "$marker"
           grep -Fxq "actual=$PLMF_EXPECT_THEME" "$marker"
           grep -Fxq 'pre-plymouth=inactive' "$marker"
+          grep -Fxq 'password-phase=started' "$marker"
+          grep -Fxq 'password-agent=active' "$marker"
           grep -Fxq 'unlock=complete' "$marker"
           grep -Fxq 'plymouth=active-after-unlock' "$marker"
           grep -Fxq 'handoff=retain-splash' "$marker"
