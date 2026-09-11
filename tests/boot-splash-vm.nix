@@ -174,7 +174,6 @@ let
           # A wantedBy=sysinit link alone does not guarantee that it has finished
           # before the production selector service is scheduled.
           boot.initrd.systemd.services.plmf-select-theme = lib.mkIf (selectorValue != "") {
-            requires = [ "plmf-test-selector.service" ];
             wants = [ "plmf-test-selector.service" ];
             after = [ "plmf-test-selector.service" ];
           };
