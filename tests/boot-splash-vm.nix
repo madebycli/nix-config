@@ -171,6 +171,7 @@ let
             wantedBy = [ "initrd-root-device.target" ];
             wants = [
               "cryptsetup.target"
+              "plmf-test-password-before-plymouth.service"
               "plmf-select-theme.service"
               "plymouth-start.service"
             ];
@@ -221,6 +222,7 @@ let
                 exit 1
               fi
               printf 'active-after-unlock\n' > /run/plmf/plymouth-active
+              printf 'complete\n' > /run/plmf/plymouth-test-success
             '';
           };
 
@@ -247,7 +249,8 @@ let
 
               marker_dir=/sysroot/var/lib/plmf-test
               mkdir -p "$marker_dir"
-              if [ ! -s /run/plmf/test-failure ]; then
+              if [ ! -s /run/plmf/test-failure ] && \
+                [ ! -r /run/plmf/plymouth-test-success ]; then
                 {
                   printf 'reason=empty-or-missing-test-failure\n'
                   printf 'test-unit=\n'
@@ -278,6 +281,7 @@ let
                 plymouth-before-unlock \
                 unlock-phase \
                 plymouth-active \
+                plymouth-test-success \
                 plymouth-debug.log; do
                 if [ -r "/run/plmf/$marker" ]; then
                   cp "/run/plmf/$marker" "$marker_dir/$marker"
