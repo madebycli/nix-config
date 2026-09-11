@@ -187,21 +187,18 @@ let
             wantedBy = [ "initrd-root-device.target" ];
             requires = [
               "cryptsetup.target"
-              "plmf-ask-password-console.service"
               "plmf-test-password-before-plymouth.service"
               "plmf-select-theme.service"
               "plymouth-start.service"
             ];
             wants = [
               "cryptsetup.target"
-              "plmf-ask-password-console.service"
               "plmf-test-password-before-plymouth.service"
               "plmf-select-theme.service"
               "plymouth-start.service"
             ];
             after = [
               "cryptsetup.target"
-              "plmf-ask-password-console.service"
               "plmf-test-password-before-plymouth.service"
               "plymouth-start.service"
             ];
@@ -245,6 +242,7 @@ let
               if ! systemctl is-active --quiet plmf-ask-password-console.service; then
                 fail password-agent-inactive
               fi
+              printf 'active\n' > /run/plmf/password-agent
               plymouth_ready=0
               for attempt in 1 2 3 4 5; do
                 if timeout 1s ${config.boot.plymouth.package}/bin/plymouth --ping; then
@@ -333,6 +331,7 @@ let
                 effective-theme \
                 plymouth-before-unlock \
                 password-phase \
+                password-agent \
                 unlock-phase \
                 plymouth-active \
                 plymouth-test-success \
@@ -417,7 +416,10 @@ let
                 [ "$(cat "$marker_dir/password-phase")" != started ]; then
                 fail password-phase-marker-missing
               fi
-              systemctl is-active --quiet plmf-ask-password-console.service || fail password-agent-inactive
+              if [ ! -r "$marker_dir/password-agent" ] || \
+                [ "$(cat "$marker_dir/password-agent")" != active ]; then
+                fail password-agent-marker-missing
+              fi
               if [ "$(cat "$marker_dir/plymouth-before-unlock")" != "inactive" ]; then
                 fail plymouth-active-before-unlock
               fi
