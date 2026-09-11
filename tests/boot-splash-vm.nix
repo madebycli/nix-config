@@ -100,8 +100,9 @@ let
               set -eu
 
               mkdir -p /run/plmf
+              printf 'started\n' > /run/plmf/password-phase
 
-              if ${config.boot.plymouth.package}/bin/plymouth --ping >/dev/null 2>&1; then
+              if timeout 1s ${config.boot.plymouth.package}/bin/plymouth --ping >/dev/null 2>&1; then
                 echo "Plymouth became active before the password phase" >&2
                 exit 1
               fi
@@ -115,7 +116,7 @@ let
                 --timeout=2 \
                 "PLMF VM synthetic LUKS password phase" >/dev/null || true
 
-              if ${config.boot.plymouth.package}/bin/plymouth --ping >/dev/null 2>&1; then
+              if timeout 1s ${config.boot.plymouth.package}/bin/plymouth --ping >/dev/null 2>&1; then
                 echo "Plymouth became active during the password phase" >&2
                 exit 1
               fi
@@ -124,9 +125,10 @@ let
           };
 
           # The production Plymouth unit is also pulled in directly by
-                    # initrd-root-device.target. Add the synthetic password phase to that
+          # initrd-root-device.target. Add the synthetic password phase to that
           # unit's own ordering so it cannot race the cryptsetup-target edge.
           boot.initrd.systemd.services.plymouth-start = {
+            requires = [ "plmf-test-password-before-plymouth.service" ];
             wants = [ "plmf-test-password-before-plymouth.service" ];
             after = [ "plmf-test-password-before-plymouth.service" ];
           };
@@ -140,7 +142,11 @@ let
           boot.initrd.systemd.services.plmf-test-selector = lib.mkIf (selectorValue != "") {
             description = "Seed the PLMF selector on the synthetic ESP";
             wantedBy = [ "sysinit.target" ];
-            after = [ "systemd-udev-trigger.service" ];
+            requires = [ "dev-disk-by\\x2dlabel-ESP.device" ];
+            after = [
+              "systemd-udev-trigger.service"
+              "dev-disk-by\\x2dlabel-ESP.device"
+            ];
             before = [ "plmf-select-theme.service" "plymouth-start.service" ];
             path = with pkgs; [ coreutils util-linux ];
             serviceConfig = {
@@ -167,6 +173,7 @@ let
           # A wantedBy=sysinit link alone does not guarantee that it has finished
           # before the production selector service is scheduled.
           boot.initrd.systemd.services.plmf-select-theme = lib.mkIf (selectorValue != "") {
+            requires = [ "plmf-test-selector.service" ];
             wants = [ "plmf-test-selector.service" ];
             after = [ "plmf-test-selector.service" ];
           };
@@ -177,6 +184,12 @@ let
           boot.initrd.systemd.services.plmf-test-plymouth-after-unlock = {
             description = "Confirm PLMF Plymouth starts after unlock";
             wantedBy = [ "initrd-root-device.target" ];
+            requires = [
+              "cryptsetup.target"
+              "plmf-test-password-before-plymouth.service"
+              "plmf-select-theme.service"
+              "plymouth-start.service"
+            ];
             wants = [
               "cryptsetup.target"
               "plmf-test-password-before-plymouth.service"
@@ -200,6 +213,20 @@ let
               mkdir -p /run/plmf
               fail() {
                 printf '%s\n' "$1" > /run/plmf/test-failure
+                {
+                  printf 'password-unit=\n'
+                  timeout 2s systemctl show \
+                    --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus \
+                    plmf-test-password-before-plymouth.service 2>&1 || true
+                  printf 'selector-unit=\n'
+                  timeout 2s systemctl show \
+                    --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus \
+                    plmf-select-theme.service 2>&1 || true
+                  printf 'plymouth-unit=\n'
+                  timeout 2s systemctl show \
+                    --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus \
+                    plymouth-start.service 2>&1 || true
+                } >> /run/plmf/test-failure
                 exit 1
               }
 
@@ -294,6 +321,7 @@ let
               for marker in \
                 effective-theme \
                 plymouth-before-unlock \
+                password-phase \
                 unlock-phase \
                 plymouth-active \
                 plymouth-test-success \
@@ -348,6 +376,9 @@ let
                   printf 'initrd-test=\n' >> /tmp/xchg/plmf-failure
                   cat "$marker_dir/test-failure" >> /tmp/xchg/plmf-failure
                 fi
+                printf 'expected=%s\n' "$expected" >> /tmp/xchg/plmf-failure
+                printf 'actual=' >> /tmp/xchg/plmf-failure
+                cat "$marker_dir/effective-theme" >> /tmp/xchg/plmf-failure 2>/dev/null || true
                 printf 'effective-theme=' >&2
                 cat "$marker_dir/effective-theme" >&2 2>/dev/null || true
                 printf 'initrd-test=' >&2
