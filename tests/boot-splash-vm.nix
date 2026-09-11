@@ -198,9 +198,10 @@ let
                 [ "$(cat /run/plmf/unlock-phase)" != complete ]; then
                 fail unlock-marker-missing
               fi
-              if ! ${config.boot.plymouth.package}/bin/plymouth --ping; then
+              if ! timeout 3s ${config.boot.plymouth.package}/bin/plymouth --ping; then
                 {
-                  printf 'reason=plymouth-not-active\n'
+                  printf 'reason=plymouth-not-active-or-timeout\n'
+                  printf 'ping=failed-or-timeout\n'
                   printf 'pid='; cat /run/plymouth/pid 2>/dev/null || true
                   printf 'processes=\n'
                   pgrep -af plymouth 2>/dev/null || true
@@ -215,7 +216,7 @@ let
                   printf 'tmp-debug=\n'
                   cat /tmp/plymouth-debug.log 2>/dev/null || true
                   printf 'service=\n'
-                  systemctl --no-pager --full status plymouth-start.service 2>&1 || true
+                  timeout 2s systemctl --no-pager --full status plymouth-start.service 2>&1 || true
                 } > /run/plmf/test-failure
                 exit 1
               fi
