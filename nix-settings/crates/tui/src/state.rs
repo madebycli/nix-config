@@ -33,6 +33,33 @@ enum Focus {
     Confirmation,
 }
 
+#[derive(Clone, Copy)]
+enum Bundle {
+    Gaming,
+    Office,
+    Development,
+    Multimedia,
+}
+
+#[derive(Clone, Copy)]
+enum ConfigAction {
+    Desktop(&'static str),
+    Shell,
+    DefaultSession,
+    Bundle(Bundle),
+    Browser,
+    FilenEnable,
+    FilenClient,
+    FilenAutostart,
+    Apply,
+}
+
+#[derive(Clone)]
+struct Entry {
+    item: MenuItem,
+    action: Option<ConfigAction>,
+}
+
 pub struct AppState {
     theme: Theme,
     mouse_enabled: bool,
@@ -49,6 +76,9 @@ pub struct AppState {
     pending: Option<Command>,
     desired: DesiredState,
     desired_dirty: bool,
+    notice: Option<String>,
+    quit_armed: bool,
+    overview: String,
 }
 
 impl AppState {
@@ -89,6 +119,9 @@ impl AppState {
             pending: None,
             desired,
             desired_dirty: false,
+            notice: None,
+            quit_armed: false,
+            overview: nix_settings_core::report::status_text(),
         }
     }
 
@@ -102,131 +135,64 @@ impl AppState {
             .unwrap_or("Overview")
     }
 
-    fn configure_items(&self) -> Vec<MenuItem> {
-        let enabled = |name: &str| self.desired.desktops.iter().any(|d| d == name);
+    fn configure_entries(&self) -> Vec<Entry> {
+        let d = &self.desired;
+        let enabled = |name: &str| d.desktops.iter().any(|x| x == name);
+        let check = |on: bool| if on { "[x]" } else { "[ ]" };
+        let entry = |action: ConfigAction, name: String, description: &str| Entry {
+            item: MenuItem::info(name, description),
+            action: Some(action),
+        };
         vec![
-            MenuItem::info(
-                format!("[{}] Mango", if enabled("mango") { "x" } else { " " }),
-                "Toggle Mango compositor",
-            ),
-            MenuItem::info(
-                format!("[{}] Hyprland", if enabled("hyprland") { "x" } else { " " }),
-                "Toggle Hyprland compositor",
-            ),
-            MenuItem::info(
-                format!("[{}] Niri", if enabled("niri") { "x" } else { " " }),
-                "Toggle Niri compositor",
-            ),
-            MenuItem::info(
-                format!("Shell: {}", self.desired.shell),
-                "Cycle Noctalia / Caelestia",
-            ),
-            MenuItem::info(
-                format!("Default session: {}", self.desired.default_session),
-                "Cycle enabled compositors",
-            ),
-            MenuItem::info(
-                format!(
-                    "[{}] Gaming bundle",
-                    if self.desired.bundles.gaming {
-                        "x"
-                    } else {
-                        " "
-                    }
-                ),
-                "Gaming software bundle",
-            ),
-            MenuItem::info(
-                format!(
-                    "[{}] Office bundle",
-                    if self.desired.bundles.office {
-                        "x"
-                    } else {
-                        " "
-                    }
-                ),
-                "Office software bundle",
-            ),
-            MenuItem::info(
-                format!(
-                    "[{}] Development bundle",
-                    if self.desired.bundles.development {
-                        "x"
-                    } else {
-                        " "
-                    }
-                ),
-                "Development software bundle",
-            ),
-            MenuItem::info(
-                format!(
-                    "[{}] Multimedia bundle",
-                    if self.desired.bundles.multimedia {
-                        "x"
-                    } else {
-                        " "
-                    }
-                ),
-                "Multimedia software bundle",
-            ),
-            MenuItem::info(
-                format!("Browser: {}", self.desired.browser.default),
-                "Cycle none / Firefox / Brave / LibreWolf",
-            ),
-            MenuItem::info(
-                format!(
-                    "[{}] Filen",
-                    if self.desired.integrations.filen.enable {
-                        "x"
-                    } else {
-                        " "
-                    }
-                ),
-                "Enable Filen integration",
-            ),
-            MenuItem::info(
-                format!("Filen client: {}", self.desired.integrations.filen.client),
-                "Cycle Desktop / CLI",
-            ),
-            MenuItem::info(
-                format!(
-                    "[{}] Filen autostart",
-                    if self.desired.integrations.filen.autostart {
-                        "x"
-                    } else {
-                        " "
-                    }
-                ),
-                "Start Filen Desktop with the graphical session",
-            ),
-            MenuItem::info(
-                if self.desired_dirty {
-                    "Save & Apply *"
-                } else {
-                    "Save & Apply"
-                },
-                "Write desired state and rebuild the host",
+            entry(ConfigAction::Desktop("mango"), format!("{} Mango", check(enabled("mango"))), "Toggle the Mango compositor. At least one compositor must stay enabled."),
+            entry(ConfigAction::Desktop("hyprland"), format!("{} Hyprland", check(enabled("hyprland"))), "Toggle the Hyprland compositor."),
+            entry(ConfigAction::Desktop("niri"), format!("{} Niri", check(enabled("niri"))), "Toggle the Niri compositor."),
+            entry(ConfigAction::Shell, format!("Shell: {}", d.shell), "Cycle Noctalia / Caelestia. Caelestia requires the Hyprland-only configuration and switches to it."),
+            entry(ConfigAction::DefaultSession, format!("Default session: {}", d.default_session), "Cycle through the enabled compositors."),
+            entry(ConfigAction::Bundle(Bundle::Gaming), format!("{} Gaming bundle", check(d.bundles.gaming)), "Steam, GameMode and MangoHud."),
+            entry(ConfigAction::Bundle(Bundle::Office), format!("{} Office bundle", check(d.bundles.office)), "LibreOffice."),
+            entry(ConfigAction::Bundle(Bundle::Development), format!("{} Development bundle", check(d.bundles.development)), "git, gcc, make, python3 and nodejs."),
+            entry(ConfigAction::Bundle(Bundle::Multimedia), format!("{} Multimedia bundle", check(d.bundles.multimedia)), "ffmpeg and mpv."),
+            entry(ConfigAction::Browser, format!("Browser: {}", d.browser.default), "Cycle none / Firefox / Brave / LibreWolf."),
+            entry(ConfigAction::FilenEnable, format!("{} Filen", check(d.integrations.filen.enable)), "Install the Filen client."),
+            entry(ConfigAction::FilenClient, format!("Filen client: {}", d.integrations.filen.client), "Cycle Desktop / CLI."),
+            entry(ConfigAction::FilenAutostart, format!("{} Filen autostart", check(d.integrations.filen.autostart)), "Start Filen Desktop with the graphical session (Desktop client only)."),
+            entry(
+                ConfigAction::Apply,
+                if self.desired_dirty { "Save & Apply *".into() } else { "Save & Apply".into() },
+                "Write state/<host>.json and run nixos-rebuild switch for this host.",
             ),
         ]
     }
 
-    fn visible_items(&self) -> Vec<MenuItem> {
-        let mut items = if self.category_name() == "Configure" {
-            self.configure_items()
+    fn visible_entries(&self) -> Vec<Entry> {
+        let mut entries = if self.category_name() == "Configure" {
+            self.configure_entries()
         } else {
             self.categories
                 .get(self.selected_category())
-                .map(|c| c.items.clone())
+                .map(|c| {
+                    c.items
+                        .iter()
+                        .cloned()
+                        .map(|item| Entry { item, action: None })
+                        .collect()
+                })
                 .unwrap_or_default()
         };
         if !self.search.is_empty() {
             let needle = self.search.to_ascii_lowercase();
-            items.retain(|item| {
-                item.name.to_ascii_lowercase().contains(&needle)
-                    || item.description.to_ascii_lowercase().contains(&needle)
+            entries.retain(|e| {
+                e.item.name.to_ascii_lowercase().contains(&needle)
+                    || e.item.description.to_ascii_lowercase().contains(&needle)
             });
         }
-        items
+        entries
+    }
+
+    fn selected_entry(&self) -> Option<Entry> {
+        let index = self.item_state.selected()?;
+        self.visible_entries().into_iter().nth(index)
     }
 
     fn move_selection(state: &mut ListState, len: usize, delta: isize) {
@@ -239,54 +205,36 @@ impl AppState {
         state.select(Some(next));
     }
 
-    fn activate_configure(&mut self) {
-        let index = self.item_state.selected().unwrap_or(0);
-        let result = match index {
-            0 => self.desired.toggle_desktop("mango"),
-            1 => self.desired.toggle_desktop("hyprland"),
-            2 => self.desired.toggle_desktop("niri"),
-            3 => {
-                self.desired.shell = if self.desired.shell == "noctalia" {
-                    "caelestia".into()
-                } else {
-                    "noctalia".into()
+    fn apply_config(&mut self, action: ConfigAction) {
+        let d = &mut self.desired;
+        let result = match action {
+            ConfigAction::Desktop(name) => d.toggle_desktop(name),
+            ConfigAction::Shell => {
+                d.shell = if d.shell == "noctalia" { "caelestia" } else { "noctalia" }.into();
+                if d.shell == "caelestia" {
+                    d.desktops = vec!["hyprland".into()];
+                    d.default_session = "hyprland".into();
+                }
+                d.validate()
+            }
+            ConfigAction::DefaultSession => {
+                if let Some(pos) = d.desktops.iter().position(|x| x == &d.default_session) {
+                    d.default_session = d.desktops[(pos + 1) % d.desktops.len()].clone();
+                }
+                Ok(())
+            }
+            ConfigAction::Bundle(bundle) => {
+                let flag = match bundle {
+                    Bundle::Gaming => &mut d.bundles.gaming,
+                    Bundle::Office => &mut d.bundles.office,
+                    Bundle::Development => &mut d.bundles.development,
+                    Bundle::Multimedia => &mut d.bundles.multimedia,
                 };
-                if self.desired.shell == "caelestia" {
-                    self.desired.desktops = vec!["hyprland".into()];
-                    self.desired.default_session = "hyprland".into();
-                }
-                self.desired.validate()
-            }
-            4 => {
-                if let Some(pos) = self
-                    .desired
-                    .desktops
-                    .iter()
-                    .position(|d| d == &self.desired.default_session)
-                {
-                    self.desired.default_session =
-                        self.desired.desktops[(pos + 1) % self.desired.desktops.len()].clone();
-                }
+                *flag = !*flag;
                 Ok(())
             }
-            5 => {
-                self.desired.bundles.gaming = !self.desired.bundles.gaming;
-                Ok(())
-            }
-            6 => {
-                self.desired.bundles.office = !self.desired.bundles.office;
-                Ok(())
-            }
-            7 => {
-                self.desired.bundles.development = !self.desired.bundles.development;
-                Ok(())
-            }
-            8 => {
-                self.desired.bundles.multimedia = !self.desired.bundles.multimedia;
-                Ok(())
-            }
-            9 => {
-                self.desired.browser.default = match self.desired.browser.default.as_str() {
+            ConfigAction::Browser => {
+                d.browser.default = match d.browser.default.as_str() {
                     "none" => "firefox",
                     "firefox" => "brave",
                     "brave" => "librewolf",
@@ -295,68 +243,88 @@ impl AppState {
                 .into();
                 Ok(())
             }
-            10 => {
-                self.desired.integrations.filen.enable = !self.desired.integrations.filen.enable;
+            ConfigAction::FilenEnable => {
+                d.integrations.filen.enable = !d.integrations.filen.enable;
                 Ok(())
             }
-            11 => {
-                self.desired.integrations.filen.client =
-                    if self.desired.integrations.filen.client == "desktop" {
-                        "cli".into()
-                    } else {
-                        "desktop".into()
-                    };
-                Ok(())
-            }
-            12 => {
-                self.desired.integrations.filen.autostart =
-                    !self.desired.integrations.filen.autostart;
-                Ok(())
-            }
-            13 => {
-                if let Err(error) = self.desired.save(&self.snapshot.repo, &self.snapshot.host) {
-                    self.pending = Some(Command::Raw(format!(
-                        "printf '%s\\n' {}",
-                        shell_escape(&format!("Failed to save desired state: {error}"))
-                    )));
-                } else {
-                    self.desired_dirty = false;
-                    self.pending = Some(apply_command(&self.snapshot));
+            ConfigAction::FilenClient => {
+                let filen = &mut d.integrations.filen;
+                filen.client = if filen.client == "desktop" { "cli" } else { "desktop" }.into();
+                if filen.client == "cli" {
+                    filen.autostart = false;
                 }
-                self.spawn_confirmation();
+                Ok(())
+            }
+            ConfigAction::FilenAutostart => {
+                let filen = &mut d.integrations.filen;
+                if filen.client == "cli" {
+                    Err(anyhow::anyhow!("Filen CLI cannot autostart; switch to the Desktop client"))
+                } else {
+                    filen.autostart = !filen.autostart;
+                    Ok(())
+                }
+            }
+            ConfigAction::Apply => {
+                match self.desired.save(&self.snapshot.repo, &self.snapshot.host) {
+                    Ok(()) => {
+                        self.desired_dirty = false;
+                        self.pending = Some(apply_command(&self.snapshot));
+                        self.spawn_confirmation("Save & Apply");
+                    }
+                    Err(error) => self.notice = Some(format!("Cannot save: {error}")),
+                }
                 return;
             }
-            _ => Ok(()),
         };
-        if result.is_ok() {
-            self.desired_dirty = true;
+        match result {
+            Ok(()) => {
+                self.desired_dirty = true;
+                self.notice = None;
+            }
+            Err(error) => {
+                // validation failures leave the state half-edited; reload from disk
+                self.notice = Some(error.to_string());
+                if let Ok(saved) = DesiredState::load(&self.snapshot.repo, &self.snapshot.host) {
+                    if !self.desired_dirty {
+                        self.desired = saved;
+                    }
+                }
+            }
         }
+    }
+
+    fn run_command(&mut self, command: Command) {
+        self.float = Some(Float::new(
+            Box::new(RunningCommand::new(&[&command])),
+            FLOAT_SIZE,
+            FLOAT_SIZE,
+        ));
+        self.focus = Focus::Floating;
     }
 
     fn activate_item(&mut self) {
-        if self.category_name() == "Configure" {
-            self.activate_configure();
-            return;
-        }
-        let items = self.visible_items();
-        let Some(item) = self.item_state.selected().and_then(|i| items.get(i)) else {
+        let Some(entry) = self.selected_entry() else {
             return;
         };
-        if !matches!(item.command, Command::None) {
-            self.pending = Some(item.command.clone());
-            self.spawn_confirmation();
+        if let Some(action) = entry.action {
+            self.apply_config(action);
+            return;
+        }
+        if matches!(entry.item.command, Command::None) {
+            return;
+        }
+        if entry.item.confirm {
+            self.pending = Some(entry.item.command.clone());
+            self.spawn_confirmation(&entry.item.name);
+        } else {
+            self.run_command(entry.item.command.clone());
         }
     }
 
-    fn spawn_confirmation(&mut self) {
+    fn spawn_confirmation(&mut self, name: &str) {
         if self.pending.is_none() {
             return;
         }
-        let visible = self.visible_items();
-        let name = visible
-            .get(self.item_state.selected().unwrap_or(0))
-            .map(|i| i.name.as_str())
-            .unwrap_or("Apply selected action");
         self.confirm = Some(Float::new(
             Box::new(ConfirmPrompt::new(&[name])),
             CONFIRM_SIZE,
@@ -375,12 +343,7 @@ impl AppState {
                 ConfirmStatus::Confirm => {
                     self.confirm = None;
                     if let Some(command) = self.pending.take() {
-                        self.float = Some(Float::new(
-                            Box::new(RunningCommand::new(&[&command])),
-                            FLOAT_SIZE,
-                            FLOAT_SIZE,
-                        ));
-                        self.focus = Focus::Floating;
+                        self.run_command(command);
                     }
                 }
                 ConfirmStatus::Abort => {
@@ -394,6 +357,9 @@ impl AppState {
     }
 
     pub fn handle_key(&mut self, key: &KeyEvent) -> bool {
+        if !matches!(key.code, KeyCode::Char('q')) {
+            self.quit_armed = false;
+        }
         if key.code == KeyCode::Char('c')
             && key.modifiers.contains(KeyModifiers::CONTROL)
             && self.focus != Focus::Floating
@@ -430,7 +396,18 @@ impl AppState {
             return true;
         }
         match key.code {
-            KeyCode::Char('q') => return false,
+            KeyCode::Char('q') => {
+                if self.desired_dirty && !self.quit_armed {
+                    self.quit_armed = true;
+                    self.notice = Some("Unsaved changes. Press q again to discard them and quit.".into());
+                    return true;
+                }
+                return false;
+            }
+            KeyCode::Char('r') => {
+                self.refresh();
+                self.notice = Some("Refreshed.".into());
+            }
             KeyCode::Char('/') => self.focus = Focus::Search,
             KeyCode::Char('t') => self.theme.next(),
             KeyCode::Char('T') => self.theme.prev(),
@@ -443,7 +420,7 @@ impl AppState {
                     Self::move_selection(&mut self.category_state, self.categories.len(), -1);
                     self.item_state.select(Some(0));
                 } else {
-                    let len = self.visible_items().len();
+                    let len = self.visible_entries().len();
                     Self::move_selection(&mut self.item_state, len, -1);
                 }
             }
@@ -452,7 +429,7 @@ impl AppState {
                     Self::move_selection(&mut self.category_state, self.categories.len(), 1);
                     self.item_state.select(Some(0));
                 } else {
-                    let len = self.visible_items().len();
+                    let len = self.visible_entries().len();
                     Self::move_selection(&mut self.item_state, len, 1);
                 }
             }
@@ -490,6 +467,7 @@ impl AppState {
             self.snapshot = snapshot;
             self.categories = categories(&self.snapshot);
         }
+        self.overview = nix_settings_core::report::status_text();
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
@@ -548,10 +526,13 @@ impl AppState {
         let rows: Vec<ListItem> = self
             .categories
             .iter()
-            .map(|c| ListItem::new(format!("> {}", c.name)))
+            .map(|c| {
+                let dirty = c.name == "Configure" && self.desired_dirty;
+                ListItem::new(format!("{}{}", c.name, if dirty { " *" } else { "" }))
+            })
             .collect();
         let block = Block::bordered()
-            .title(" NIX SETTINGS ")
+            .title(" CATEGORIES ")
             .border_set(border::PLAIN)
             .border_style(Style::default().fg(if self.focus == Focus::Categories {
                 self.theme.focused_color()
@@ -579,7 +560,13 @@ impl AppState {
     }
 
     fn draw_content(&mut self, frame: &mut Frame, area: Rect) {
-        let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(5)]).split(area);
+        let overview = self.category_name() == "Overview" && self.search.is_empty();
+        let chunks = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Min(5),
+            Constraint::Length(4),
+        ])
+        .split(area);
         let search_style = if self.focus == Focus::Search {
             self.theme.focused_color()
         } else {
@@ -598,15 +585,36 @@ impl AppState {
         );
         frame.render_widget(search, chunks[0]);
 
-        let items = self.visible_items();
-        let rows: Vec<ListItem> = items
+        let border_color = if self.focus == Focus::Items {
+            self.theme.focused_color()
+        } else {
+            self.theme.unfocused_color()
+        };
+        if overview {
+            frame.render_widget(
+                Paragraph::new(self.overview.clone()).block(
+                    Block::bordered()
+                        .title(" OVERVIEW ")
+                        .border_set(border::PLAIN)
+                        .border_style(Style::default().fg(border_color)),
+                ),
+                chunks[1],
+            );
+            self.draw_detail(frame, chunks[2], None);
+            return;
+        }
+
+        let entries = self.visible_entries();
+        let rows: Vec<ListItem> = entries
             .iter()
-            .map(|item| {
-                let style = match item.command {
-                    Command::None => Style::default().fg(self.theme.dir_color()),
+            .map(|entry| {
+                let style = match (&entry.action, &entry.item.command) {
+                    (Some(ConfigAction::Apply), _) => Style::default().fg(self.theme.cmd_color()).bold(),
+                    (Some(_), _) => Style::default().fg(self.theme.dir_color()),
+                    (None, Command::None) => Style::default().fg(self.theme.unfocused_color()),
                     _ => Style::default().fg(self.theme.cmd_color()),
                 };
-                ListItem::new(Line::styled(item.name.clone(), style))
+                ListItem::new(Line::styled(entry.item.name.clone(), style))
             })
             .collect();
         let title = format!(" {} ", self.category_name().to_ascii_uppercase());
@@ -615,15 +623,35 @@ impl AppState {
                 Block::bordered()
                     .title(title)
                     .border_set(border::PLAIN)
-                    .border_style(Style::default().fg(if self.focus == Focus::Items {
-                        self.theme.focused_color()
-                    } else {
-                        self.theme.unfocused_color()
-                    })),
+                    .border_style(Style::default().fg(border_color)),
             )
             .highlight_style(Style::default().fg(self.theme.focused_color()).bold())
             .highlight_symbol("> ");
         frame.render_stateful_widget(list, chunks[1], &mut self.item_state);
+        let selected = self.selected_entry();
+        self.draw_detail(frame, chunks[2], selected.as_ref());
+    }
+
+    fn draw_detail(&self, frame: &mut Frame, area: Rect, entry: Option<&Entry>) {
+        let (text, color) = if let Some(notice) = &self.notice {
+            (notice.clone(), self.theme.fail_color())
+        } else if let Some(entry) = entry {
+            let mut text = entry.item.description.clone();
+            if entry.item.confirm && entry.action.is_none() && !matches!(entry.item.command, Command::None) {
+                text.push_str("  (asks for confirmation)");
+            }
+            (text, self.theme.unfocused_color())
+        } else {
+            ("Press r to refresh · h/l switch panels · / searches the current page".into(), self.theme.unfocused_color())
+        };
+        frame.render_widget(
+            Paragraph::new(text)
+                .wrap(ratatui::widgets::Wrap { trim: true })
+                .style(Style::default().fg(color))
+                .block(Block::bordered().title(" DETAILS ").border_set(border::PLAIN)
+                    .border_style(Style::default().fg(self.theme.unfocused_color()))),
+            area,
+        );
     }
 
     fn draw_hints(&self, frame: &mut Frame, area: Rect) {
@@ -633,6 +661,7 @@ impl AppState {
             ("Panels", ["h/l", "Left/Right"]),
             ("Open/Toggle", ["Enter", "Space"]),
             ("Search", ["/"]),
+            ("Refresh", ["r"]),
             ("Theme", ["t", "T"]),
         );
         let lines = create_shortcut_list(shortcuts, area.width.saturating_sub(2));

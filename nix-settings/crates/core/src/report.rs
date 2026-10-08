@@ -9,6 +9,7 @@ use crate::{current_host, find_repo};
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::{
+    fmt::Write as _,
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -183,7 +184,9 @@ fn short(rev: &str) -> &str {
     &rev[..rev.len().min(10)]
 }
 
-pub fn status() -> Result<()> {
+/// Render the status report; never touches the network and takes a few ms.
+pub fn status_text() -> String {
+    let mut out = String::new();
     let host = current_host();
     let profile = fs::read_to_string("/etc/nixos-config/profile")
         .ok()
@@ -213,13 +216,13 @@ pub fn status() -> Result<()> {
         })
         .unwrap_or_else(|| "unknown".into());
 
-    println!("NixOS overview");
-    println!("  {:<12} {}", "Host", host);
-    println!("  {:<12} {}", "Profile", profile);
-    println!("  {:<12} {}", "NixOS", version);
-    println!("  {:<12} {}", "Kernel", kernel);
-    println!("  {:<12} {}", "Generation", generation);
-    println!("  {:<12} {}", "Nix disk", disk);
+    let _ = writeln!(out, "NixOS overview");
+    let _ = writeln!(out, "  {:<12} {}", "Host", host);
+    let _ = writeln!(out, "  {:<12} {}", "Profile", profile);
+    let _ = writeln!(out, "  {:<12} {}", "NixOS", version);
+    let _ = writeln!(out, "  {:<12} {}", "Kernel", kernel);
+    let _ = writeln!(out, "  {:<12} {}", "Generation", generation);
+    let _ = writeln!(out, "  {:<12} {}", "Nix disk", disk);
 
     match find_repo() {
         Ok(repo) => {
@@ -243,23 +246,23 @@ pub fn status() -> Result<()> {
             })
             .map(|(a, b)| format!("ahead {a} · behind {b} (last fetch)"))
             .unwrap_or_else(|| "no upstream".into());
-            println!();
-            println!("Repository");
-            println!("  {:<12} {}", "Path", repo.display());
-            println!(
+            out.push('\n');
+            let _ = writeln!(out, "Repository");
+            let _ = writeln!(out, "  {:<12} {}", "Path", repo.display());
+            let _ = writeln!(out, 
                 "  {:<12} {} @ {}{}",
                 "Branch",
                 branch,
                 commit,
                 if dirty { " (dirty)" } else { "" }
             );
-            println!("  {:<12} {}", "Upstream", upstream);
+            let _ = writeln!(out, "  {:<12} {}", "Upstream", upstream);
 
             if let Ok(lock) = load_lock(&repo) {
-                println!();
-                println!("Pinned inputs (flake.lock)");
+                out.push('\n');
+                let _ = writeln!(out, "Pinned inputs (flake.lock)");
                 for input in locked_inputs(&lock) {
-                    println!(
+                    let _ = writeln!(out, 
                         "  {:<20} {}  {}",
                         input.name,
                         short(&input.rev),
@@ -269,10 +272,15 @@ pub fn status() -> Result<()> {
             }
         }
         Err(error) => {
-            println!();
-            println!("Repository: {error}");
+            out.push('\n');
+            let _ = writeln!(out, "Repository: {error}");
         }
     }
+    out
+}
+
+pub fn status() -> Result<()> {
+    print!("{}", status_text());
     Ok(())
 }
 

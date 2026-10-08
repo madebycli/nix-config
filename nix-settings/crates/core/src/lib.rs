@@ -24,6 +24,8 @@ pub struct MenuItem {
     pub name: String,
     pub description: String,
     pub command: Command,
+    /// Ask before running; read-only queries run immediately.
+    pub confirm: bool,
 }
 
 impl MenuItem {
@@ -36,6 +38,19 @@ impl MenuItem {
             name: name.into(),
             description: description.into(),
             command: Command::Raw(raw.into()),
+            confirm: true,
+        }
+    }
+
+    /// A read-only command that is safe to run without confirmation.
+    pub fn query(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        raw: impl Into<String>,
+    ) -> Self {
+        Self {
+            confirm: false,
+            ..Self::command(name, description, raw)
         }
     }
 
@@ -44,6 +59,7 @@ impl MenuItem {
             name: name.into(),
             description: description.into(),
             command: Command::None,
+            confirm: false,
         }
     }
 }
@@ -302,16 +318,16 @@ pub fn categories(snapshot: &SystemSnapshot) -> Vec<Category> {
             MenuItem::info("System configuration", "Use Space/Enter in this page to change the desired state. Save & Apply writes state/<host>.json and rebuilds the host."),
         ]},
         Category { name: "Updates", items: vec![
-            MenuItem::command("Check updates", "Fast check of every Flake input against its remote (no build, no copy)", format!("{exe} updates")),
+            MenuItem::query("Check updates", "Fast check of every Flake input against its remote (no build, no copy)", format!("{exe} updates")),
             MenuItem::command("Apply updates", "Update flake.lock, rebuild and switch this host", format!("cd {repo} && nix flake update && sudo nixos-rebuild switch --flake .#{host}")),
         ]},
         Category { name: "Packages", items: vec![
-            MenuItem::command("Installed profile packages", "Show packages installed through nix profile", "nix profile list"),
+            MenuItem::query("Installed profile packages", "Show packages installed through nix profile", "nix profile list"),
             MenuItem::command("Upgrade profile packages", "Upgrade every package installed in the user Nix profile", "nix profile upgrade --all --refresh"),
         ]},
         Category { name: "Config Sync", items: vec![
             MenuItem::command("Synchronize", "Safe two-way synchronization of managed dotconfigs", format!("cd {repo} && config-sync sync")),
-            MenuItem::command("Status", "Show local/repository dotconfig differences", format!("cd {repo} && config-sync status")),
+            MenuItem::query("Status", "Show local/repository dotconfig differences", format!("cd {repo} && config-sync status")),
             MenuItem::command("Pull", "Pull repository config changes into HOME", format!("cd {repo} && config-sync pull")),
             MenuItem::command("Push", "Push local config changes into the repository", format!("cd {repo} && config-sync push")),
         ]},
@@ -319,7 +335,7 @@ pub fn categories(snapshot: &SystemSnapshot) -> Vec<Category> {
             MenuItem::info("Filen", "Install Filen Desktop or Filen CLI from nixpkgs. Desktop can be started automatically as a graphical-session user service."),
         ]},
         Category { name: "Generations", items: vec![
-            MenuItem::command("List generations", "List NixOS system generations", "sudo nix-env --list-generations -p /nix/var/nix/profiles/system"),
+            MenuItem::query("List generations", "List NixOS system generations", "sudo nix-env --list-generations -p /nix/var/nix/profiles/system"),
             MenuItem::command("Rollback", "Switch to the previous NixOS generation", "sudo nixos-rebuild switch --rollback"),
         ]},
         Category { name: "Maintenance", items: vec![
@@ -327,9 +343,9 @@ pub fn categories(snapshot: &SystemSnapshot) -> Vec<Category> {
             MenuItem::command("Optimize store", "Deduplicate identical Nix store files", "sudo nix-store --optimise"),
         ]},
         Category { name: "Diagnostics", items: vec![
-            MenuItem::command("Flake check", "Evaluate the current repository without rewriting the lock file", format!("cd {repo} && nix flake check --no-write-lock-file")),
-            MenuItem::command("Sync doctor", "Validate repository, sync state, Git history, and secret filters", format!("cd {repo} && config-sync doctor")),
-            MenuItem::command("System status", "Show system, repository and pinned input status", format!("{exe} status")),
+            MenuItem::query("Flake check", "Evaluate the current repository without rewriting the lock file", format!("cd {repo} && nix flake check --no-write-lock-file")),
+            MenuItem::query("Sync doctor", "Validate repository, sync state, Git history, and secret filters", format!("cd {repo} && config-sync doctor")),
+            MenuItem::query("System status", "Show system, repository and pinned input status", format!("{exe} status")),
         ]},
     ]
 }
