@@ -6,3 +6,6 @@ result-*
 *~
 *.swp
 *.tmp
+
+# Rust build output
+target/

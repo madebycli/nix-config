@@ -11,7 +11,7 @@ mod system_info;
 #[path = "../../../vendor/linutil-tui/src/theme.rs"]
 mod theme;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use ratatui::{
     backend::CrosstermBackend,
     crossterm::{
@@ -44,10 +44,31 @@ struct Args {
     mouse: bool,
     #[arg(short = 's', long)]
     size_bypass: bool,
+    #[command(subcommand)]
+    command: Option<Cmd>,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+enum Cmd {
+    /// Print system, repository and pinned input status
+    Status,
+    /// Check every Flake input against its remote
+    Updates,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    if let Some(command) = &args.command {
+        let result = match command {
+            Cmd::Status => nix_settings_core::report::status(),
+            Cmd::Updates => nix_settings_core::report::updates(),
+        };
+        if let Err(error) = result {
+            eprintln!("Error: {error:#}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
     stdout().execute(EnterAlternateScreen)?;
     if args.mouse {
         stdout().execute(EnableMouseCapture)?;

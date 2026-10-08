@@ -1,3 +1,5 @@
+pub mod report;
+
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -284,6 +286,11 @@ impl DesiredState {
 
 pub fn categories(snapshot: &SystemSnapshot) -> Vec<Category> {
     let repo = snapshot.repo.display();
+    let host = &snapshot.host;
+    let exe = env::current_exe()
+        .ok()
+        .and_then(|p| p.to_str().map(str::to_string))
+        .unwrap_or_else(|| "nix-settings".into());
     vec![
         Category { name: "Overview", items: vec![
             MenuItem::info(format!("Host: {}", snapshot.host), "Current host"),
@@ -295,8 +302,8 @@ pub fn categories(snapshot: &SystemSnapshot) -> Vec<Category> {
             MenuItem::info("System configuration", "Use Space/Enter in this page to change the desired state. Save & Apply writes state/<host>.json and rebuilds the host."),
         ]},
         Category { name: "Updates", items: vec![
-            MenuItem::command("Check updates", "Preview Flake input and profile updates", format!("cd {repo} && nix-updates")),
-            MenuItem::command("Apply updates", "Refresh Flake inputs, build, switch, commit, and publish", format!("cd {repo} && nix-refresh")),
+            MenuItem::command("Check updates", "Fast check of every Flake input against its remote (no build, no copy)", format!("{exe} updates")),
+            MenuItem::command("Apply updates", "Update flake.lock, rebuild and switch this host", format!("cd {repo} && nix flake update && sudo nixos-rebuild switch --flake .#{host}")),
         ]},
         Category { name: "Packages", items: vec![
             MenuItem::command("Installed profile packages", "Show packages installed through nix profile", "nix profile list"),
@@ -322,7 +329,7 @@ pub fn categories(snapshot: &SystemSnapshot) -> Vec<Category> {
         Category { name: "Diagnostics", items: vec![
             MenuItem::command("Flake check", "Evaluate the current repository without rewriting the lock file", format!("cd {repo} && nix flake check --no-write-lock-file")),
             MenuItem::command("Sync doctor", "Validate repository, sync state, Git history, and secret filters", format!("cd {repo} && config-sync doctor")),
-            MenuItem::command("System status", "Show Nix Settings system status", format!("cd {repo} && nix-status")),
+            MenuItem::command("System status", "Show system, repository and pinned input status", format!("{exe} status")),
         ]},
     ]
 }
