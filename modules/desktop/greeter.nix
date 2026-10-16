@@ -1,23 +1,19 @@
-{ config, inputs, pkgs, ... }:
+{ config, pkgs, ... }:
 
 {
-  imports = [
-    inputs.noctalia-greeter.nixosModules.default
-  ];
-
-  programs.noctalia-greeter = {
+  # Module and package come from nixpkgs (unstable); no separate Flake input.
+  services.displayManager.noctalia-greeter = {
     enable = true;
-    greeter-args = "--session ${config.my.desktop.defaultSession}";
+    extraArgs = [ "--session" config.my.desktop.defaultSession ];
+
+    cursorTheme = {
+      package = pkgs.bibata-cursors;
+      name = "Bibata-Modern-Classic";
+    };
 
     settings = {
       keyboard.layout = "de";
-
-      cursor = {
-        theme = "Bibata-Modern-Classic";
-        size = 22;
-        path = "${pkgs.bibata-cursors}/share/icons";
-      };
-
+      cursor.size = 22;
       user.default = config.my.user;
     };
   };

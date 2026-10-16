@@ -22,7 +22,7 @@ USAGE
 MODE="${1:-all}"
 case "$MODE" in
   all)
-    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter caelestia-shell microvm)
+    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango caelestia-shell microvm)
     UPDATE_PROFILE=1
     ;;
   base)
@@ -38,7 +38,7 @@ case "$MODE" in
     UPDATE_PROFILE=0
     ;;
   desktop)
-    INPUTS=(home-manager mango noctalia noctalia-greeter caelestia-shell)
+    INPUTS=(home-manager mango caelestia-shell)
     UPDATE_PROFILE=0
     ;;
   profiles)

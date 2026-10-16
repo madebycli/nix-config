@@ -23,8 +23,6 @@ Desktop-related Flake inputs are:
 ```text
 home-manager
 mango
-noctalia
-noctalia-greeter
 caelestia-shell
 ```
 
@@ -57,8 +55,6 @@ The Hyprland + Caelestia profile uses the upstream Home Manager module with `cae
 ```text
 home-manager
 mango
-noctalia
-noctalia-greeter
 caelestia-shell
 ```
 
@@ -80,38 +76,19 @@ nix-updates --full
 
 Flake updates are resolved in a temporary repository copy. Personal profile updates are applied to a temporary copy of the profile and compared with the current profile. `--full` also builds the candidate NixOS system closure and runs `nix store diff-closures`.
 
-Hyprland is supplied by Nixpkgs rather than a separate Flake input, so Hyprland changes are previewed through Nixpkgs in `all`, `base`, and `packages` modes. The `desktop` mode continues to preview Caelestia Shell and the other dedicated desktop inputs.
+Hyprland, Noctalia and the Noctalia Greeter are supplied by Nixpkgs rather than separate Flake inputs, so their changes are previewed through Nixpkgs in `all`, `base`, and `packages` modes. The `desktop` mode previews Home Manager, Mango and Caelestia Shell.
 
-## Desktop profile selection
+## Desktop selection
 
-The installer and `config-update` support combinable compositor flags:
+Compositors and shell are options in `hosts/<host>/features.nix`, not command-line flags:
 
-```text
---mango
---niri
---hyprland
+```nix
+my.desktop.compositors = [ "mango" "niri" ];
+my.desktop.defaultSession = "mango";
+my.desktop.shell = "noctalia";
 ```
 
-Shell flags are separate:
-
-```text
---noctalia
---caelestia-shell
-```
-
-No selection means Mango + Noctalia. `--all` selects Mango + Niri + Hyprland with Noctalia. Caelestia Shell is restricted to the Hyprland-only profile.
-
-Examples:
-
-```bash
-config-update --niri --noctalia
-config-update --mango --niri --noctalia
-config-update --hyprland --noctalia
-config-update --hyprland --caelestia-shell
-config-update --all
-```
-
-Without selection flags, `config-update` reuses the last saved profile when available.
+Change them with `nixctl desktop` or by editing the file, then `nixctl apply`. Caelestia Shell is only allowed with `[ "hyprland" ]` alone.
 
 ## Generations
 

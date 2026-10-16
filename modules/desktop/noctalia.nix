@@ -1,17 +1,7 @@
-{ config, inputs, lib, ... }:
+{ config, lib, ... }:
 
 {
-  # Neuere Nixpkgs-Versionen enthalten selbst ein programs.noctalia-Modul.
-  # Nur dieses eingebaute Modul wird deaktiviert; das gepinnte Flake-Modul
-  # bleibt massgeblich.
-  disabledModules = [
-    "programs/wayland/noctalia.nix"
-  ];
-
-  imports = [
-    inputs.noctalia.nixosModules.default
-  ];
-
+  # Module and package come from nixpkgs (unstable); no separate Flake input.
   config.programs.noctalia = lib.mkIf (config.my.desktop.shell == "noctalia") {
     enable = true;
     recommendedServices.enable = false;
