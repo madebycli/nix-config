@@ -3,8 +3,17 @@
 {
   imports = [
     ./hardware-configuration.nix
-    ../../modules/nixos/graphics-nvidia.nix
+    ./features.nix
+    ../../modules/desktop/graphics-nvidia.nix
   ];
+
+  my.hardwareConfig = ./hardware-configuration.nix;
+
+  # Verify both IDs on the laptop with `lspci -D` before the first switch.
+  my.hardware.nvidiaPrime = {
+    intelBusId = "PCI:0:2:0";
+    nvidiaBusId = "PCI:1:0:0";
+  };
 
   networking.hostName = "aether";
 

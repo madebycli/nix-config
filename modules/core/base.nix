@@ -1,4 +1,4 @@
-{ inputs, pkgs, ... }:
+{ config, inputs, pkgs, ... }:
 
 {
   boot = {
@@ -44,9 +44,9 @@
   };
   console.keyMap = "de";
 
-  users.users.xxxxx = {
+  users.users.${config.my.user} = {
     isNormalUser = true;
-    description = "xxxxx";
+    description = config.my.user;
     extraGroups = [
       "networkmanager"
       "wheel"
@@ -102,18 +102,6 @@
   programs = {
     dconf.enable = true;
     nix-ld.enable = true;
-
-    steam = {
-      enable = true;
-      gamescopeSession.enable = true;
-    };
-
-    gamescope = {
-      enable = true;
-      capSysNice = true;
-    };
-
-    gamemode.enable = true;
 
     localsend = {
       enable = true;

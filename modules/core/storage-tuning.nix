@@ -1,7 +1,7 @@
-{ config, hardwareConfigPath, lib, modulesPath, pkgs, ... }:
+{ config, lib, modulesPath, pkgs, ... }:
 
 let
-  generatedHardware = import hardwareConfigPath {
+  generatedHardware = import config.my.hardwareConfig {
     inherit config lib modulesPath pkgs;
   };
 

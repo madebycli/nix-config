@@ -43,15 +43,7 @@
     ghostty
     bazaar
     filen-desktop
-    mangohud
-    protonup-ng
-    umu-launcher
-    lutris
-    goverlay
-    heroic
 
-    winetricks
-    wineWow64Packages.waylandFull
     firefox
     mpv
     ffmpeg
@@ -96,10 +88,8 @@
     brave
     librewolf
     joplin-desktop
-    protonplus
     vesktop
     pavucontrol
-    faugus-launcher
     gnome-clocks
     gnome-calendar
     gnome-calculator
@@ -112,7 +102,6 @@
     tree
     xed-editor
     komikku
-    prismlauncher
   ];
 
   nixpkgs.config.allowInsecurePredicate = pkg: lib.getName pkg == "electron";

@@ -1,4 +1,4 @@
-{ defaultSession, inputs, pkgs, ... }:
+{ config, inputs, pkgs, ... }:
 
 {
   imports = [
@@ -7,7 +7,7 @@
 
   programs.noctalia-greeter = {
     enable = true;
-    greeter-args = "--session ${defaultSession}";
+    greeter-args = "--session ${config.my.desktop.defaultSession}";
 
     settings = {
       keyboard.layout = "de";
@@ -18,7 +18,7 @@
         path = "${pkgs.bibata-cursors}/share/icons";
       };
 
-      user.default = "xxxxx";
+      user.default = config.my.user;
     };
   };
 }

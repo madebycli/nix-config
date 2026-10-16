@@ -40,324 +40,52 @@
     };
   };
 
-  outputs = inputs@{ nixpkgs, home-manager, ... }:
+  outputs = inputs@{ nixpkgs, ... }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+      lib = nixpkgs.lib;
 
-      desktopModules = {
-        mango = ./modules/nixos/mango.nix;
-        niri = ./modules/nixos/niri.nix;
-        hyprland = ./modules/nixos/hyprland.nix;
+      hosts = [ "nyx" "aether" ];
+
+      # Evaluation-only stand-in for the machine-specific root file system.
+      # Used by `nix flake check` and CI, never installed.
+      ciStub = {
+        fileSystems."/" = { device = "none"; fsType = "tmpfs"; };
+        boot.loader.grub.enable = false;
       };
 
-      shellModules = {
-        noctalia = ./modules/nixos/noctalia.nix;
-        caelestia = ./modules/nixos/caelestia.nix;
-      };
-
-      hostDefinitions = {
-        nyx = {
-          cpuArch = "znver4";
-          module = ./hosts/nyx;
-          hardwareConfigPath = ./hosts/nyx/hardware-configuration.nix;
+      mkHost = hostName: extraModules:
+        lib.nixosSystem {
+          inherit system;
+          specialArgs = { inherit inputs hostName; };
+          modules = [ ./modules ./hosts/${hostName} ] ++ extraModules;
         };
 
-        aether = {
-          cpuArch = "x86-64-v3";
-          module = ./hosts/aether;
-          hardwareConfigPath = ./hosts/aether/hardware-configuration.nix;
-          specialArgs.nvidiaPrime = {
-            # Verify both IDs on the laptop with `lspci -D` before the first switch.
-            intelBusId = "PCI:0:2:0";
-            nvidiaBusId = "PCI:1:0:0";
-          };
-        };
-      };
-
-      commonModules = [
-        {
-          nixpkgs.overlays = [ inputs.nix-cachyos-kernel.overlays.pinned ];
-        }
-
-        ./modules/nixos/base.nix
-        ./modules/nixos/storage-tuning.nix
-        ./modules/nixos/desktop.nix
-        ./modules/nixos/greeter.nix
-        ./modules/flatpak
-
-        home-manager.nixosModules.home-manager
-
-        {
-          environment.systemPackages = [
-            configSyncProgram
-            configUpdateProgram
-            nixHelpProgram
-            nixStatusProgram
-            nixUpdatesProgram
-            nixRefreshProgram
-            nixGenerationsProgram
-            nixCleanProgram
-            nixOptimizeProgram
-            nixRollbackProgram
-            scriptUpdateProgram
-            saveConfigProgram
-          ];
-        }
-      ];
-
-      mkHost = { hostName, desktops, defaultSession, shell }:
-        let
-          host = hostDefinitions.${hostName} or (throw "Unknown host: ${hostName}");
-          unknownDesktops = builtins.filter
-            (desktop: !(builtins.hasAttr desktop desktopModules))
-            desktops;
-          hostSpecialArgs = host.specialArgs or { };
-          profileName =
-            if shell == "caelestia" then "${hostName}-hyprland-caelestia"
-            else if desktops == [ "mango" ] then hostName
-            else if desktops == [ "mango" "niri" "hyprland" ] then "${hostName}-all"
-            else "${hostName}-${builtins.concatStringsSep "-" desktops}";
-          homeImports = [ ./modules/home ];
-        in
-        if desktops == [ ] then
-          throw "Host ${hostName} must enable at least one desktop"
-        else if unknownDesktops != [ ] then
-          throw "Host ${hostName} contains unknown desktops: ${builtins.concatStringsSep ", " unknownDesktops}"
-        else if !(builtins.hasAttr shell shellModules) then
-          throw "Unknown desktop shell: ${shell}"
-        else if !(builtins.elem defaultSession desktops) then
-          throw "Default session ${defaultSession} is not enabled for host ${hostName}"
-        else if shell == "caelestia" && desktops != [ "hyprland" ] then
-          throw "Caelestia Shell is supported only with the Hyprland-only profile"
-        else
-          nixpkgs.lib.nixosSystem {
-            inherit system;
-
-            specialArgs = {
-              inherit inputs desktops defaultSession hostName shell;
-              cpuArch = host.cpuArch;
-              hardwareConfigPath = host.hardwareConfigPath;
-            } // hostSpecialArgs;
-
-            modules = commonModules
-              ++ [
-                host.module
-                shellModules.${shell}
-                {
-                  environment.etc."nixos-config/profile".text = "${profileName}\n";
-
-                  home-manager = {
-                    useGlobalPkgs = true;
-                    useUserPackages = true;
-                    backupFileExtension = "backup";
-                    extraSpecialArgs = {
-                      inherit inputs desktops defaultSession shell;
-                      cpuArch = host.cpuArch;
-                    } // hostSpecialArgs;
-                    users.xxxxx.imports = homeImports;
-                  };
-                }
-              ]
-              ++ map (desktop: desktopModules.${desktop}) desktops;
-          };
-
-      mkProfile = hostName: desktops: defaultSession: shell:
-        mkHost { inherit hostName desktops defaultSession shell; };
-
-      configSyncProgram = pkgs.writeShellApplication {
-        name = "config-sync";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [
-          coreutils diffutils findutils gh git gnugrep gnused jq nix python3 rsync util-linux
-        ];
-        text = ''
-          exec ${pkgs.bash}/bin/bash \
-            ${./scripts/config-sync-wrapper.sh} \
-            ${./scripts/config-sync.py} \
-            "$@"
-        '';
-        checkPhase = ''
-          PYTHONPYCACHEPREFIX="$TMPDIR/pycache" \
-            ${pkgs.python3}/bin/python3 -m py_compile ${./scripts/config-sync.py}
-          ${pkgs.bash}/bin/bash -n ${./scripts/config-sync-wrapper.sh}
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      configUpdateProgram = pkgs.writeShellApplication {
-        name = "config-update";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils git jq nix ];
-        text = builtins.readFile ./scripts/update.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      nixHelpProgram = pkgs.writeShellApplication {
-        name = "nix-help";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils ];
-        text = builtins.readFile ./scripts/nix-help.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      nixStatusProgram = pkgs.writeShellApplication {
-        name = "nix-status";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils gawk git jq nix ];
-        text = builtins.readFile ./scripts/nix-status.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      nixUpdatesProgram = pkgs.writeShellApplication {
-        name = "nix-updates";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils git jq nix ];
-        text = builtins.readFile ./scripts/nix-updates.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      nixRefreshProgram = pkgs.writeShellApplication {
-        name = "nix-refresh";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils gh git jq nix ];
-        text = builtins.readFile ./scripts/nix-refresh.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      nixGenerationsProgram = pkgs.writeShellApplication {
-        name = "nix-generations";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils gawk nix ];
-        text = builtins.readFile ./scripts/nix-generations.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      nixCleanProgram = pkgs.writeShellApplication {
-        name = "nix-clean";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils nix ];
-        text = builtins.readFile ./scripts/nix-clean.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      nixOptimizeProgram = pkgs.writeShellApplication {
-        name = "nix-optimize";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils gawk nix ];
-        text = builtins.readFile ./scripts/nix-optimize.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      nixRollbackProgram = pkgs.writeShellApplication {
-        name = "nix-rollback";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils nix ];
-        text = builtins.readFile ./scripts/nix-rollback.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      scriptUpdateProgram = pkgs.writeShellApplication {
-        name = "script-update";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils diffutils findutils git jq nix python3 ];
-        text = builtins.readFile ./scripts/script-update.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      saveConfigProgram = pkgs.writeShellApplication {
-        name = "save-config";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils git gnugrep rsync ];
-        text = builtins.readFile ./scripts/save-config.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
-
-      installProgram = pkgs.writeShellApplication {
-        name = "nixos-config-install";
-        inheritPath = true;
-        runtimeInputs = with pkgs; [ coreutils findutils git gnugrep gnused nix rsync ];
-        text = builtins.readFile ./scripts/install.sh;
-        checkPhase = ''
-          ${pkgs.bash}/bin/bash -n "$target"
-        '';
-      };
+      tools = import ./pkgs/tools.nix { inherit pkgs; };
+      gbox = pkgs.callPackage ./pkgs/gbox { };
     in
     {
-      nixosConfigurations = {
-        nyx = mkProfile "nyx" [ "mango" ] "mango" "noctalia";
-        nyx-mango = mkProfile "nyx" [ "mango" ] "mango" "noctalia";
-        nyx-niri = mkProfile "nyx" [ "niri" ] "niri" "noctalia";
-        nyx-hyprland = mkProfile "nyx" [ "hyprland" ] "hyprland" "noctalia";
-        nyx-hyprland-caelestia = mkProfile "nyx" [ "hyprland" ] "hyprland" "caelestia";
-        nyx-mango-niri = mkProfile "nyx" [ "mango" "niri" ] "mango" "noctalia";
-        nyx-mango-hyprland = mkProfile "nyx" [ "mango" "hyprland" ] "mango" "noctalia";
-        nyx-niri-hyprland = mkProfile "nyx" [ "niri" "hyprland" ] "niri" "noctalia";
-        nyx-all = mkProfile "nyx" [ "mango" "niri" "hyprland" ] "mango" "noctalia";
+      nixosConfigurations =
+        lib.genAttrs hosts (host: mkHost host [ ])
+        // lib.genAttrs (map (h: "ci-${h}") hosts)
+          (name: mkHost (lib.removePrefix "ci-" name) [ ciStub ]);
 
-        aether = mkProfile "aether" [ "mango" ] "mango" "noctalia";
-        aether-mango = mkProfile "aether" [ "mango" ] "mango" "noctalia";
-        aether-niri = mkProfile "aether" [ "niri" ] "niri" "noctalia";
-        aether-hyprland = mkProfile "aether" [ "hyprland" ] "hyprland" "noctalia";
-        aether-hyprland-caelestia = mkProfile "aether" [ "hyprland" ] "hyprland" "caelestia";
-        aether-mango-niri = mkProfile "aether" [ "mango" "niri" ] "mango" "noctalia";
-        aether-mango-hyprland = mkProfile "aether" [ "mango" "hyprland" ] "mango" "noctalia";
-        aether-niri-hyprland = mkProfile "aether" [ "niri" "hyprland" ] "niri" "noctalia";
-        aether-all = mkProfile "aether" [ "mango" "niri" "hyprland" ] "mango" "noctalia";
+      packages.${system} = tools // {
+        inherit gbox;
+        install = tools.nixos-config-install;
+        update = tools.config-update;
       };
 
-      packages.${system} = {
-        install = installProgram;
-        update = configUpdateProgram;
-        nix-help = nixHelpProgram;
-        nix-status = nixStatusProgram;
-        nix-updates = nixUpdatesProgram;
-        nix-refresh = nixRefreshProgram;
-        nix-generations = nixGenerationsProgram;
-        nix-clean = nixCleanProgram;
-        nix-optimize = nixOptimizeProgram;
-        nix-rollback = nixRollbackProgram;
-        config-sync = configSyncProgram;
-        script-update = scriptUpdateProgram;
-        save-config = saveConfigProgram;
-      };
+      apps.${system} =
+        lib.mapAttrs
+          (name: pkg: { type = "app"; program = lib.getExe pkg; })
+          (tools // { inherit gbox; })
+        // {
+          install = { type = "app"; program = lib.getExe tools.nixos-config-install; };
+          update = { type = "app"; program = lib.getExe tools.config-update; };
+        };
 
-      apps.${system} = {
-        install = { type = "app"; program = "${installProgram}/bin/nixos-config-install"; };
-        update = { type = "app"; program = "${configUpdateProgram}/bin/config-update"; };
-        nix-help = { type = "app"; program = "${nixHelpProgram}/bin/nix-help"; };
-        nix-status = { type = "app"; program = "${nixStatusProgram}/bin/nix-status"; };
-        nix-updates = { type = "app"; program = "${nixUpdatesProgram}/bin/nix-updates"; };
-        nix-refresh = { type = "app"; program = "${nixRefreshProgram}/bin/nix-refresh"; };
-        nix-generations = { type = "app"; program = "${nixGenerationsProgram}/bin/nix-generations"; };
-        nix-clean = { type = "app"; program = "${nixCleanProgram}/bin/nix-clean"; };
-        nix-optimize = { type = "app"; program = "${nixOptimizeProgram}/bin/nix-optimize"; };
-        nix-rollback = { type = "app"; program = "${nixRollbackProgram}/bin/nix-rollback"; };
-        config-sync = { type = "app"; program = "${configSyncProgram}/bin/config-sync"; };
-        script-update = { type = "app"; program = "${scriptUpdateProgram}/bin/script-update"; };
-        save-config = { type = "app"; program = "${saveConfigProgram}/bin/save-config"; };
-      };
+      formatter.${system} = pkgs.nixpkgs-fmt;
     };
 }

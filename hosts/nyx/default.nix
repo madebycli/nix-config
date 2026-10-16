@@ -3,8 +3,11 @@
 {
   imports = [
     ./hardware-configuration.nix
-    ../../modules/nixos/graphics-amd.nix
+    ./features.nix
+    ../../modules/desktop/graphics-amd.nix
   ];
+
+  my.hardwareConfig = ./hardware-configuration.nix;
 
   networking.hostName = "nyx";
 
