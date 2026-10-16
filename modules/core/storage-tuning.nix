@@ -16,7 +16,7 @@ in
     allowDiscards = true;
   }) generatedLuksDevices;
 
-  # Installer und config-update legen nach einem erfolgreichen Switch die Datei
+  # Installer und `nx switch`/`nx update` legen nach einem erfolgreichen Switch die Datei
   # /var/lib/nixos-config/fstrim-pending an. Erst beim folgenden Neustart ist
   # das Root-LUKS-Gerät mit den neuen Discard-Optionen geöffnet; dann läuft TRIM
   # genau einmal und die Markierung wird wieder entfernt.

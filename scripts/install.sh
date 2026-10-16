@@ -120,4 +120,4 @@ if command -v dots >/dev/null 2>&1; then
 fi
 
 printf '\nDone.\nHost: %s\nRepository: %s (%s)\n' "$HOST" "$DIR" "$BRANCH"
-printf 'Next: nixctl (features), sudo plmf theme list (boot splash), dots on (config sync).\n'
+printf 'Next: nixctl (features), nx check (updates), sudo plmf theme list (boot splash), dots on (config sync).\n'

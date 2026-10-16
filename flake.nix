@@ -81,6 +81,7 @@
       dots = pkgs.callPackage ./pkgs/dots { };
       agentbox = pkgs.callPackage ./pkgs/agentbox { };
       nixctl = pkgs.callPackage ./pkgs/nixctl { };
+      nx = pkgs.callPackage ./pkgs/nx { };
     in
     {
       nixosConfigurations =
@@ -91,18 +92,16 @@
           (name: mkHost (lib.removeSuffix "-full" (lib.removePrefix "ci-" name)) [ ciStub ciFull ]);
 
       packages.${system} = tools // {
-        inherit gbox dots agentbox nixctl;
+        inherit gbox dots agentbox nixctl nx;
         install = tools.nixos-config-install;
-        update = tools.config-update;
       };
 
       apps.${system} =
         lib.mapAttrs
           (name: pkg: { type = "app"; program = lib.getExe pkg; })
-          (tools // { inherit gbox dots agentbox nixctl; })
+          (tools // { inherit gbox dots agentbox nixctl nx; })
         // {
           install = { type = "app"; program = lib.getExe tools.nixos-config-install; };
-          update = { type = "app"; program = lib.getExe tools.config-update; };
         };
 
       # Enter with `nix develop .#<name>` or via direnv (`echo "use flake <repo>#ai-rocm" > .envrc`).

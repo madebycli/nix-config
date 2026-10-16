@@ -31,9 +31,7 @@ jobs:
       - name: Build the command-line tools (includes shellcheck)
         run: |
           nix build --no-write-lock-file --no-link \
-            .#gbox .#dots .#nixctl .#agentbox .#install .#update \
-            .#nix-help .#nix-status .#nix-updates .#nix-refresh .#nix-generations \
-            .#nix-clean .#nix-optimize .#nix-rollback
+            .#nx .#gbox .#dots .#nixctl .#agentbox .#install
 
       - name: Dev shells evaluate
         run: |
@@ -48,6 +46,9 @@ jobs:
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: nx unit tests
+        run: python3 tests/nx_test.py
 
       - name: plmf CLI
         run: bash tests/plmf-cli-test.sh

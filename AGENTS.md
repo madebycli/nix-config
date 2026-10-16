@@ -10,7 +10,7 @@ modules/core/        always-on system modules (base, storage, home-manager, tool
 modules/desktop/     compositors, shells, greeter, GPU drivers (my.desktop.*)
 modules/features/    optional features, each behind my.features.<name>.enable
 hosts/<host>/        default.nix (hardware facts), features.nix (switches)
-pkgs/                commands (gbox, dots, nixctl, agentbox, plmf) and themes
+pkgs/                commands (nx, gbox, dots, nixctl, agentbox, plmf) and themes
 config/<app>/        app configuration synchronised by `dots`
 tests/               shell/VM tests; CI runs them
 ```
@@ -21,8 +21,9 @@ tests/               shell/VM tests; CI runs them
   `enable` option; hosts switch it on in `hosts/<host>/features.nix` using
   one `my.features.<name>.enable = <bool>;` line per feature (nixctl edits
   those lines by regex, keep the format).
-- Shell commands go in `pkgs/<name>/` as `<name>.sh` plus `default.nix`
-  using `writeShellApplication`; shellcheck must pass.
+- Small commands go in `pkgs/<name>/` as `<name>.sh` plus `default.nix` using
+  `writeShellApplication` (shellcheck must pass). `nx` is Python (stdlib only) with
+  unit tests in `tests/nx_test.py`; keep its read commands scriptable (`--json`).
 - `hosts/*/hardware-configuration.nix` in Git are empty placeholders; the installer
   copies the machine's own file over them and marks them `skip-worktree`. Never
   commit real hardware data.
@@ -34,8 +35,9 @@ tests/               shell/VM tests; CI runs them
 ```bash
 nix eval --raw .#nixosConfigurations.ci-nyx.config.system.build.toplevel.drvPath
 nix eval --raw .#nixosConfigurations.ci-aether-full.config.system.build.toplevel.drvPath
-nix build .#gbox .#dots .#nixctl .#agentbox
+nix build .#nx .#gbox .#dots .#nixctl .#agentbox
 bash tests/plmf-cli-test.sh
+python3 tests/nx_test.py
 DOTS=$(nix build .#dots --print-out-paths --no-link)/bin/dots bash tests/dots-test.sh
 ```
 

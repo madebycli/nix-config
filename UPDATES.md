@@ -1,122 +1,68 @@
-# Nix maintenance commands
+# Updating and housekeeping with `nx`
 
-This configuration separates repository updates, Flake input updates, personal Nix profiles, and NixOS system generations.
+One command replaces the old `config-update` and `nix-*` scripts. Every read
+command has `--json` (used by the Noctalia plugin).
 
-## Commands
-
-| Command | Purpose |
+| Command | What it does |
 |---|---|
-| `config-update` | Pull newer configuration commits, build, and activate |
-| `nix-help` | Show the command overview |
-| `nix-status [--online]` | Show system, store, Git, and profile status |
-| `nix-updates [MODE] [--full]` | Preview Flake and profile updates |
-| `nix-refresh [MODE]` | Update selected sources, build, and activate |
-| `nix-generations` | List or compare NixOS system generations |
-| `nix-clean [1-20]` | Keep the running generation plus a selected number of backups |
-| `nix-optimize` | Deduplicate identical Nix Store files |
-| `nix-rollback` | Switch to the previous NixOS system generation |
+| `nx status` | host, generation, repository state, enabled features, cached update state (offline, instant) |
+| `nx check` | which inputs have updates; **about 2 seconds**, only `git ls-remote`, nothing is built or downloaded |
+| `nx pull` | fetch the repository and fast-forward (never merges) |
+| `nx switch` | build this host, show the closure diff, activate after confirmation |
+| `nx update` | update only the outdated inputs, build, show the diff, activate after confirmation |
+| `nx gen` / `nx gen diff A [B]` | list generations / compare two |
+| `nx rollback` | switch back to the previous generation |
+| `nx clean [N]` | delete old generations (keeps the newest N+1 plus selected, running and booted) and free the store |
+| `nx optimise` | deduplicate identical store files |
 
-## Desktop inputs
+## Why `nx check` is fast
 
-Desktop-related Flake inputs are:
+The old preview resolved every update in a temporary copy of the repository and
+could build the candidate system. `nx check` instead compares the revision in
+`flake.lock` with the upstream branch head (`git ls-remote`, 12 in parallel,
+10 s timeout each). That answers "is there an update?" without evaluating or
+downloading anything. Use `nx update --build` to see what an update would
+change, without activating it.
 
-```text
-home-manager
-mango
-caelestia-shell
-```
-
-Hyprland is provided directly by the pinned Nixpkgs input through `programs.hyprland.enable`; it has no dedicated Flake input.
-
-Caelestia Shell is integrated through the normal Flake input:
-
-```nix
-caelestia-shell = {
-  url = "github:caelestia-dots/shell";
-  inputs.nixpkgs.follows = "nixpkgs";
-};
-```
-
-The Hyprland + Caelestia profile uses the upstream Home Manager module with `caelestia-shell.packages.<system>.with-cli`.
-
-## Update modes
-
-| Mode | Flake inputs | Personal profile |
-|---|---|---|
-| `nix-refresh` | all inputs | update |
-| `nix-refresh base` | `nixpkgs`, `nix-cachyos-kernel` | update |
-| `nix-refresh packages` | `nixpkgs` | update |
-| `nix-refresh kernel` | `nix-cachyos-kernel` | unchanged |
-| `nix-refresh desktop` | Home Manager plus all compositor and shell inputs | unchanged |
-| `nix-refresh profiles` | none | update |
-
-`nix-refresh desktop` updates:
-
-```text
-home-manager
-mango
-caelestia-shell
-```
-
-Personal profile updates use:
+## Updating
 
 ```bash
-nix profile upgrade --all --refresh
+nx check                  # what is outdated?
+nx update                 # update every outdated input, build, diff, confirm, switch
+nx update base            # nixpkgs + CachyOS kernel
+nx update desktop         # home-manager, mango, caelestia-shell
+nx update apps            # microvm
+nx update mango nixpkgs   # specific inputs
+nx update all             # every input
+nx update --profiles      # also `nix profile upgrade --all`
+nx update --build         # build and diff only, flake.lock is restored
+nx update --boot -y       # activate on next boot, no question
 ```
 
-## Update preview
+Safety rules (unchanged in spirit from the old tools):
+
+- the system is built **before** anything is activated;
+- `flake.lock` is restored if the update, the build or your confirmation fails;
+- a `flake.lock` that already has uncommitted changes stops the update;
+- after a successful switch the lock is committed (`--no-commit` to skip, `--push` to push).
+
+Nixpkgs, Noctalia and the Noctalia Greeter all come from the `nixpkgs` input, so
+`nx update base` updates them together. Groups: `base` = nixpkgs, nix-cachyos-kernel;
+`desktop` = home-manager, mango, caelestia-shell; `apps` = microvm.
+
+## Features and desktop
+
+Desktop and feature selection is `hosts/<host>/features.nix`, changed with `nixctl`
+(`nixctl desktop`, `nixctl on ai`, `nixctl apply`).
+
+## Generations and cleanup
 
 ```bash
-nix-updates
-nix-updates base
-nix-updates desktop
-nix-updates profiles
-nix-updates --full
+nx gen --last 10
+nx gen diff 41 43
+nx clean --dry-run 5
+nx clean 5
+nx rollback
 ```
 
-Flake updates are resolved in a temporary repository copy. Personal profile updates are applied to a temporary copy of the profile and compared with the current profile. `--full` also builds the candidate NixOS system closure and runs `nix store diff-closures`.
-
-Hyprland, Noctalia and the Noctalia Greeter are supplied by Nixpkgs rather than separate Flake inputs, so their changes are previewed through Nixpkgs in `all`, `base`, and `packages` modes. The `desktop` mode previews Home Manager, Mango and Caelestia Shell.
-
-## Desktop selection
-
-Compositors and shell are options in `hosts/<host>/features.nix`, not command-line flags:
-
-```nix
-my.desktop.compositors = [ "mango" "niri" ];
-my.desktop.defaultSession = "mango";
-my.desktop.shell = "noctalia";
-```
-
-Change them with `nixctl desktop` or by editing the file, then `nixctl apply`. Caelestia Shell is only allowed with `[ "hyprland" ]` alone.
-
-## Generations
-
-```bash
-nix-generations
-nix-generations --last 10
-nix-generations --diff 21 22
-```
-
-## Cleanup
-
-```bash
-nix-clean --dry-run 5
-nix-clean 5
-```
-
-The number is the count of rollback generations kept in addition to the running generation. The default is five. Cleanup refuses to run when the running system differs from the boot default or is not the newest generation.
-
-## Store optimization
-
-```bash
-nix-optimize
-```
-
-This runs `nix-store --optimise -vv` and reports the measured store size before and after.
-
-## v2 notes
-
-- `microvm` (the agent VM) is a Flake input. It is updated by `nix-refresh` and `nix-refresh all`.
-- The profile argument of the old commands is gone: every command works on the host (`nyx`, `aether`). Desktop and feature selection lives in `hosts/<host>/features.nix`; change it with `nixctl`.
-- `config-update` never merges; it fast-forwards and stops if local and remote history diverged.
+`nx clean` never deletes the next-boot, running or booted generation.

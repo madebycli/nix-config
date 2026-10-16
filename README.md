@@ -151,16 +151,18 @@ nix develop .#ai-rocm           # llama.cpp + uv + huggingface-cli (ai-cpu, ai-c
 echo "use flake ~/nix-config#ai-cuda" > .envrc && direnv allow
 ```
 
-## Maintenance
+## Maintenance (`nx`)
 
-| Command | Purpose |
-|---|---|
-| `config-update` | pull (fast-forward only), build, show diff, activate |
-| `nix-status`, `nix-updates`, `nix-refresh` | status, update preview, update + switch |
-| `nix-generations`, `nix-clean`, `nix-optimize`, `nix-rollback` | generation and store housekeeping |
-| `nix-help` | overview of all commands |
+```bash
+nx status           # instant overview
+nx check            # which inputs have updates (~2 s, no downloads)
+nx update           # update outdated inputs, build, diff, confirm, switch
+nx switch           # rebuild this host after editing the config
+nx pull             # fetch the repo, fast-forward only
+nx gen | nx clean | nx rollback | nx optimise
+```
 
-See [UPDATES.md](UPDATES.md) for update modes.
+See [UPDATES.md](UPDATES.md). Anything can be run with `--json` for tools.
 
 ## Layout
 
@@ -170,7 +172,7 @@ modules/core/        always-on modules
 modules/desktop/     compositors, shells, greeter, GPU
 modules/features/    optional features (my.features.*)
 hosts/<host>/        hardware facts + feature switches
-pkgs/                gbox, dots, nixctl, agentbox, plmf, themes
+pkgs/                nx, gbox, dots, nixctl, agentbox, plmf, themes
 config/<app>/        synchronised app configuration
 tests/               shell and VM tests (run in CI)
 ```
