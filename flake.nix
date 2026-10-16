@@ -34,6 +34,14 @@
     # Keep this input's own nixpkgs revision: the pinned overlay is built against it.
     nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
 
+    # Declarative microVMs; hosts the isolated agent box (my.features.agentbox).
+    microvm = {
+      url = "github:microvm-nix/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      # Only used by microvm's cloud-hypervisor graphics overlay, which we never evaluate.
+      inputs.spectrum.follows = "nixpkgs";
+    };
+
     mango = {
       url = "github:mangowm/mango"; # ?ref=0.14.4
       inputs.nixpkgs.follows = "nixpkgs";
@@ -56,6 +64,20 @@
         boot.loader.grub.enable = false;
       };
 
+      # Switches every optional feature on so `nix flake check` covers them all.
+      ciFull = {
+        my.features = {
+          agentbox = {
+            enable = true;
+            sshKeys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMM ci" ];
+          };
+          sandbox.apps.example = {
+            command = [ "echo" "hello" ];
+            net = "inet";
+          };
+        };
+      };
+
       mkHost = hostName: extraModules:
         lib.nixosSystem {
           inherit system;
@@ -66,15 +88,18 @@
       tools = import ./pkgs/tools.nix { inherit pkgs; };
       gbox = pkgs.callPackage ./pkgs/gbox { };
       dots = pkgs.callPackage ./pkgs/dots { };
+      agentbox = pkgs.callPackage ./pkgs/agentbox { };
     in
     {
       nixosConfigurations =
         lib.genAttrs hosts (host: mkHost host [ ])
         // lib.genAttrs (map (h: "ci-${h}") hosts)
-          (name: mkHost (lib.removePrefix "ci-" name) [ ciStub ]);
+          (name: mkHost (lib.removePrefix "ci-" name) [ ciStub ])
+        // lib.genAttrs (map (h: "ci-${h}-full") hosts)
+          (name: mkHost (lib.removeSuffix "-full" (lib.removePrefix "ci-" name)) [ ciStub ciFull ]);
 
       packages.${system} = tools // {
-        inherit gbox dots;
+        inherit gbox dots agentbox;
         install = tools.nixos-config-install;
         update = tools.config-update;
       };
@@ -82,7 +107,7 @@
       apps.${system} =
         lib.mapAttrs
           (name: pkg: { type = "app"; program = lib.getExe pkg; })
-          (tools // { inherit gbox dots; })
+          (tools // { inherit gbox dots agentbox; })
         // {
           install = { type = "app"; program = lib.getExe tools.nixos-config-install; };
           update = { type = "app"; program = lib.getExe tools.config-update; };
