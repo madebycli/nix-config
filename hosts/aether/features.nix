@@ -1,20 +1,22 @@
-# Feature switches for this machine. `nixctl` edits the booleans below;
+# Feature switches for this machine, one setting per line.
+# `nixctl` edits the `.enable = ...;` lines and the my.desktop lines;
 # everything else can be changed by hand.
 {
-  my.desktop = {
-    compositors = [ "mango" ];
-    defaultSession = "mango";
-    shell = "noctalia";
-  };
+  my.desktop.compositors = [ "mango" ];
+  my.desktop.defaultSession = "mango";
+  my.desktop.shell = "noctalia";
 
-  my.features = {
-    dots.enable = true;
-    flatpak.enable = true;
-    gaming.enable = true;
-    plymouth = {
-      enable = true;
-      theme = "zoot"; # Arknights-style terminal; switch live: sudo plmf theme set <name>
-    };
-    sandbox.enable = true;
-  };
+  my.features.dots.enable = true;
+  my.features.flatpak.enable = true;
+  my.features.gaming.enable = true;
+  my.features.sandbox.enable = true;
+
+  my.features.plymouth.enable = true;
+  my.features.plymouth.theme = "zoot"; # Arknights-style terminal; live switch: sudo plmf theme set <name>
+
+  # Needs at least one public key before it can be switched on:
+  my.features.agentbox.enable = false;
+  # my.features.agentbox.sshKeys = [ "ssh-ed25519 AAAA... you@host" ];
+
+  my.features.ai.enable = false;
 }

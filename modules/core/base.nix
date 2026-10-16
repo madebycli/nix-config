@@ -101,6 +101,10 @@
 
   programs = {
     dconf.enable = true;
+    direnv = {
+      enable = true;
+      nix-direnv.enable = true;
+    };
     nix-ld.enable = true;
 
     localsend = {

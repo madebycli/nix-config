@@ -19,4 +19,6 @@
   '';
 
   hardware.cpu.amd.updateMicrocode = true;
+
+  my.features.ai.acceleration = "rocm";
 }

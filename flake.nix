@@ -68,9 +68,10 @@
       ciFull = {
         my.features = {
           agentbox = {
-            enable = true;
+            enable = lib.mkForce true;
             sshKeys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMM ci" ];
           };
+          ai.enable = lib.mkForce true;
           sandbox.apps.example = {
             command = [ "echo" "hello" ];
             net = "inet";
@@ -89,6 +90,7 @@
       gbox = pkgs.callPackage ./pkgs/gbox { };
       dots = pkgs.callPackage ./pkgs/dots { };
       agentbox = pkgs.callPackage ./pkgs/agentbox { };
+      nixctl = pkgs.callPackage ./pkgs/nixctl { };
     in
     {
       nixosConfigurations =
@@ -99,7 +101,7 @@
           (name: mkHost (lib.removeSuffix "-full" (lib.removePrefix "ci-" name)) [ ciStub ciFull ]);
 
       packages.${system} = tools // {
-        inherit gbox dots agentbox;
+        inherit gbox dots agentbox nixctl;
         install = tools.nixos-config-install;
         update = tools.config-update;
       };
@@ -107,10 +109,30 @@
       apps.${system} =
         lib.mapAttrs
           (name: pkg: { type = "app"; program = lib.getExe pkg; })
-          (tools // { inherit gbox dots agentbox; })
+          (tools // { inherit gbox dots agentbox nixctl; })
         // {
           install = { type = "app"; program = lib.getExe tools.nixos-config-install; };
           update = { type = "app"; program = lib.getExe tools.config-update; };
+        };
+
+      # Enter with `nix develop .#<name>` or via direnv (`echo "use flake <repo>#ai-rocm" > .envrc`).
+      devShells.${system} =
+        let
+          pkgs = import nixpkgs { inherit system; config.allowUnfree = true; };
+          aiShell = llama: pkgs.mkShell {
+            packages = [ llama pkgs.uv pkgs.python3 pkgs.python3Packages.huggingface-hub ];
+            shellHook = ''
+              echo "AI shell: llama.cpp, uv, python, huggingface-cli"
+            '';
+          };
+        in
+        {
+          default = pkgs.mkShell {
+            packages = with pkgs; [ nixpkgs-fmt deadnix statix shellcheck gitleaks git ];
+          };
+          ai-cpu = aiShell pkgs.llama-cpp;
+          ai-rocm = aiShell (pkgs.llama-cpp.override { rocmSupport = true; });
+          ai-cuda = aiShell (pkgs.llama-cpp.override { cudaSupport = true; });
         };
 
       formatter.${system} = pkgs.nixpkgs-fmt;

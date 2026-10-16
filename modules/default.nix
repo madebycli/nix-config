@@ -8,6 +8,7 @@
     ./core/base.nix
     ./core/storage-tuning.nix
     ./core/home.nix
+    ./core/nixctl.nix
     ./core/tools.nix
     ./desktop
     ./features
