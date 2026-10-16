@@ -1,0 +1,65 @@
+name: Check
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lock file is consistent
+        run: nix flake metadata --no-write-lock-file >/dev/null
+
+      - name: Evaluate every host, with and without optional features
+        run: |
+          for cfg in ci-nyx ci-aether ci-nyx-full ci-aether-full; do
+            echo "Evaluating $cfg"
+            nix eval --no-write-lock-file --raw ".#nixosConfigurations.${cfg}.config.system.build.toplevel.drvPath" >/dev/null
+          done
+
+      - name: Build the command-line tools (includes shellcheck)
+        run: |
+          nix build --no-write-lock-file --no-link \
+            .#gbox .#dots .#nixctl .#agentbox .#install .#update \
+            .#nix-help .#nix-status .#nix-updates .#nix-refresh .#nix-generations \
+            .#nix-clean .#nix-optimize .#nix-rollback
+
+      - name: Dev shells evaluate
+        run: |
+          for shell in default ai-cpu ai-rocm ai-cuda; do
+            nix eval --no-write-lock-file --raw ".#devShells.x86_64-linux.${shell}.drvPath" >/dev/null
+          done
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: plmf CLI
+        run: bash tests/plmf-cli-test.sh
+
+      - name: dots two-machine sync
+        run: DOTS="$(nix build --no-write-lock-file --no-link --print-out-paths .#dots)/bin/dots" bash tests/dots-test.sh
+
+      - name: gbox isolation (needs unprivileged user namespaces)
+        continue-on-error: true
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          GBOX="$(nix build --no-write-lock-file --no-link --print-out-paths .#gbox)/bin/gbox" bash tests/gbox-test.sh
+
+      - name: Secret scan
+        run: nix run --no-write-lock-file nixpkgs#gitleaks -- git . --redact --no-banner

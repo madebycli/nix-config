@@ -29,26 +29,9 @@ esac
 
 host="$(hostname -s)"
 case "$host" in nyx|aether) ;; *) host="unknown" ;; esac
-repo="$HOME/$host"
+repo_conf="$(sed -n "s/^REPO=//p" /etc/nixctl.conf 2>/dev/null | tr -d "'\"")"
+repo="${repo_conf:-$HOME/nix-config}"
 profile="$host"
-profile_from_system=0
-if [[ -r /etc/nixos-config/profile ]]; then
-  candidate="$(tr -d '\r\n' </etc/nixos-config/profile)"
-  case "$candidate" in
-    "$host"|"$host-mango"|"$host-niri"|"$host-hyprland"|"$host-hyprland-caelestia"|"$host-mango-niri"|"$host-mango-hyprland"|"$host-niri-hyprland"|"$host-all") profile="$candidate"; profile_from_system=1 ;;
-  esac
-fi
-if ((profile_from_system == 0)) && [[ -d "$HOME/.local/state/nixos-config" ]]; then
-  while IFS= read -r state_file; do
-    state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
-    [[ "$state_repo" == "$repo" ]] || continue
-    candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
-    case "$candidate" in
-      "$host"|"$host-mango"|"$host-niri"|"$host-hyprland"|"$host-hyprland-caelestia"|"$host-mango-niri"|"$host-mango-hyprland"|"$host-niri-hyprland"|"$host-all") profile="$candidate" ;;
-    esac
-    break
-  done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
-fi
 
 mapfile -t generation_links < <(
   find /nix/var/nix/profiles -maxdepth 1 -type l -name 'system-*-link' -printf '%p\n' 2>/dev/null \

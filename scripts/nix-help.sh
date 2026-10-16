@@ -12,6 +12,14 @@ esac
 cat <<'HELP'
 NixOS command suite
 
+  nixctl                     Switch features on and off (interactive)
+  nixctl apply               Build, preview and activate
+  dots on|off|status         Config synchronisation between machines
+  gbox                       Sandbox for games, Wine and untrusted programs
+  agentbox start|code        Isolated VM for Claude Code and Codex
+  ai on|off                  Local AI models on demand
+  sudo plmf theme set NAME   Boot splash theme (next boot)
+
   config-update              Pull configuration commits, build, and activate
 
   nix-status                 Show the local system, store, and Git overview

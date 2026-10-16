@@ -1,257 +1,73 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly TARGET_USER="xxxxx"
-readonly REPO_HTTPS="https://github.com/madebycli/nix-config.git"
-readonly REPO_SSH="git@github.com:madebycli/nix-config.git"
-readonly CACHE_URL="https://attic.xuyh0120.win/lantian"
-readonly CACHE_KEY="lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc="
-
-case "$(hostname -s)" in
-  nyx|aether) HOST="$(hostname -s)" ;;
-  *) HOST="" ;;
-esac
-
-MANGO=0
-NIRI=0
-HYPRLAND=0
-ALL_DESKTOPS=0
-SHELL_NAME=""
-SELECTION_EXPLICIT=0
-AUTO_YES=0
+# config-update: bring in newer configuration commits (fast-forward only),
+# build, show what changes and switch after confirmation.
 
 usage() {
   cat <<'USAGE'
-Usage:
-  config-update [--nyx|--aether] [desktop flags] [shell flag] [--yes]
+Usage: config-update [--yes] [--boot|--test]
 
-Desktop flags can be combined:
-  --mango
-  --niri
-  --hyprland
-  --all                 Mango + Niri + Hyprland with Noctalia
+Pulls the tracked branch of your configuration repository without merge
+commits, builds the system, shows the closure diff and activates it.
 
-Shell flags:
-  --noctalia            default shell
-  --caelestia-shell     only with Hyprland alone
-
-Examples:
-  config-update --niri --noctalia
-  config-update --mango --niri --noctalia
-  config-update --hyprland --noctalia
-  config-update --hyprland --caelestia-shell
-  config-update --all
-
-Without selection flags, the last saved profile is reused. If no saved profile
-exists, Mango + Noctalia is used.
+  --yes    do not ask before activating
+  --boot   activate on next boot only
+  --test   activate without adding a boot entry
 USAGE
 }
 
-die() {
-  printf 'Error: %s\n' "$*" >&2
-  exit 1
-}
-
-select_shell() {
-  local requested="$1"
-  if [[ -n "$SHELL_NAME" && "$SHELL_NAME" != "$requested" ]]; then
-    die "Noctalia and Caelestia Shell cannot be enabled together."
-  fi
-  SHELL_NAME="$requested"
-  SELECTION_EXPLICIT=1
-}
-
-while (($#)); do
-  case "$1" in
-    --nyx) HOST="nyx" ;;
-    --aether) HOST="aether" ;;
-    --mango) MANGO=1; SELECTION_EXPLICIT=1 ;;
-    --niri) NIRI=1; SELECTION_EXPLICIT=1 ;;
-    --hyprland) HYPRLAND=1; SELECTION_EXPLICIT=1 ;;
-    --all) ALL_DESKTOPS=1; SELECTION_EXPLICIT=1 ;;
-    --noctalia) select_shell noctalia ;;
-    --caelestia-shell) select_shell caelestia ;;
-    --yes|-y) AUTO_YES=1 ;;
-    --help|-h) usage; exit 0 ;;
-    *) usage; printf '\nError: unknown option: %s\n' "$1" >&2; exit 2 ;;
+ACTION=switch
+ASSUME_YES=0
+for arg in "$@"; do
+  case "$arg" in
+    --yes|-y) ASSUME_YES=1 ;;
+    --boot) ACTION=boot ;;
+    --test) ACTION=test ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'Error: unknown option %s\n' "$arg" >&2; usage >&2; exit 2 ;;
   esac
-  shift
 done
 
-[[ -n "$HOST" ]] || die "Host could not be detected. Use --nyx or --aether."
-[[ "$EUID" -ne 0 ]] || die "Do not run as root."
-[[ "$(id -un)" == "$TARGET_USER" ]] || die "Run as user $TARGET_USER."
+HOST="$(hostname -s)"
+REPO="$(sed -n "s/^REPO=//p" /etc/nixctl.conf 2>/dev/null | tr -d "'\"")"
+REPO="${REPO:-$HOME/nix-config}"
+[[ -d "$REPO/.git" ]] || { printf 'Error: %s is not a Git checkout.\n' "$REPO" >&2; exit 1; }
 
-REPO="$HOME/$HOST"
-[[ -d "$REPO/.git" && -f "$REPO/flake.nix" ]] || die "Repository not found: $REPO"
-REMOTE="$(git -C "$REPO" remote get-url origin)"
-[[ "$REMOTE" == "$REPO_HTTPS" || "$REMOTE" == "$REPO_SSH" ]] || die "Unexpected remote: $REMOTE"
+BRANCH="$(git -C "$REPO" branch --show-current)"
+[[ -n "$BRANCH" ]] || { printf 'Error: no branch is checked out in %s.\n' "$REPO" >&2; exit 1; }
 
-if ((SELECTION_EXPLICIT == 0)); then
-  PROFILE="$HOST"
-  PROFILE_FROM_SYSTEM=0
-  if [[ -r /etc/nixos-config/profile ]]; then
-    candidate="$(tr -d '\r\n' </etc/nixos-config/profile)"
-    case "$candidate" in
-      "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all")
-        PROFILE="$candidate"
-        PROFILE_FROM_SYSTEM=1
-        ;;
-    esac
-  fi
-  if ((PROFILE_FROM_SYSTEM == 0)); then
-    while IFS= read -r state_file; do
-      [[ -f "$state_file" ]] || continue
-      state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
-      [[ "$state_repo" == "$REPO" ]] || continue
-      candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
-      case "$candidate" in
-        "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all")
-          PROFILE="$candidate"
-          break
-          ;;
-      esac
-    done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
-  fi
-else
-  if ((ALL_DESKTOPS == 1)); then
-    ((MANGO == 0 && NIRI == 0 && HYPRLAND == 0)) || die "Do not combine --all with individual compositor flags."
-    [[ -z "$SHELL_NAME" || "$SHELL_NAME" == "noctalia" ]] || die "--all uses Noctalia as its shell."
-    MANGO=1
-    NIRI=1
-    HYPRLAND=1
-    SHELL_NAME="noctalia"
-  else
-    if ((MANGO == 0 && NIRI == 0 && HYPRLAND == 0)); then
-      MANGO=1
-    fi
-    [[ -n "$SHELL_NAME" ]] || SHELL_NAME="noctalia"
-  fi
-
-  if [[ "$SHELL_NAME" == "caelestia" ]]; then
-    ((HYPRLAND == 1 && MANGO == 0 && NIRI == 0)) || die "Caelestia Shell is supported only with Hyprland alone."
-  fi
-
-  if [[ "$SHELL_NAME" == "caelestia" ]]; then
-    PROFILE="${HOST}-hyprland-caelestia"
-  elif ((MANGO == 1 && NIRI == 1 && HYPRLAND == 1)); then
-    PROFILE="${HOST}-all"
-  elif ((MANGO == 1 && NIRI == 1)); then
-    PROFILE="${HOST}-mango-niri"
-  elif ((MANGO == 1 && HYPRLAND == 1)); then
-    PROFILE="${HOST}-mango-hyprland"
-  elif ((NIRI == 1 && HYPRLAND == 1)); then
-    PROFILE="${HOST}-niri-hyprland"
-  elif ((HYPRLAND == 1)); then
-    PROFILE="${HOST}-hyprland"
-  elif ((NIRI == 1)); then
-    PROFILE="${HOST}-niri"
-  else
-    PROFILE="$HOST"
-  fi
-fi
-readonly PROFILE
-
-git -C "$REPO" fetch --prune origin
-UPSTREAM="origin/$(git -C "$REPO" branch --show-current)"
-read -r AHEAD BEHIND < <(git -C "$REPO" rev-list --left-right --count "HEAD...$UPSTREAM")
+printf '==> Fetching %s\n' "$BRANCH"
+git -C "$REPO" fetch --prune origin "$BRANCH"
+AHEAD="$(git -C "$REPO" rev-list --count "origin/$BRANCH..HEAD")"
+BEHIND="$(git -C "$REPO" rev-list --count "HEAD..origin/$BRANCH")"
 
 if ((AHEAD > 0 && BEHIND > 0)); then
-  AUTO_LOCK_ONLY=1
-  while IFS= read -r commit; do
-    subject="$(git -C "$REPO" show -s --format=%s "$commit")"
-    case "$subject" in
-      update\(*\):\ refresh\ Flake\ inputs) ;;
-      *) AUTO_LOCK_ONLY=0; break ;;
-    esac
-    mapfile -t commit_paths < <(git -C "$REPO" diff-tree --root --no-commit-id --name-only -r "$commit")
-    if ((${#commit_paths[@]} != 1)) || [[ "${commit_paths[0]}" != "flake.lock" ]]; then
-      AUTO_LOCK_ONLY=0
-      break
-    fi
-  done < <(git -C "$REPO" rev-list "$UPSTREAM..HEAD")
-
-  if ((AUTO_LOCK_ONLY == 1)); then
-    printf '\n==> Rebasing local automatic Flake update commit(s)\n'
-    if ! git -C "$REPO" rebase "$UPSTREAM"; then
-      git -C "$REPO" rebase --abort >/dev/null 2>&1 || true
-      die "Automatic rebase of local Flake update commit(s) failed."
-    fi
-    read -r AHEAD BEHIND < <(git -C "$REPO" rev-list --left-right --count "HEAD...$UPSTREAM")
-  else
-    die "Git history diverged."
-  fi
+  printf 'Error: local and remote history diverged (%s ahead, %s behind). Resolve in %s.\n' "$AHEAD" "$BEHIND" "$REPO" >&2
+  exit 1
 fi
-
-STASHED=0
 if ((BEHIND > 0)); then
-  mapfile -t LOCAL < <({
-    git -C "$REPO" diff --name-only
-    git -C "$REPO" diff --cached --name-only
-    git -C "$REPO" ls-files --others --exclude-standard
-  } | sort -u)
-  mapfile -t REMOTE_PATHS < <(git -C "$REPO" diff --name-only "HEAD..$UPSTREAM")
-
-  for local_path in "${LOCAL[@]}"; do
-    for remote_path in "${REMOTE_PATHS[@]}"; do
-      if [[ "$local_path" == "$remote_path" || "$local_path" == "$remote_path/"* || "$remote_path" == "$local_path/"* ]]; then
-        die "Local and remote changes overlap: $local_path / $remote_path"
-      fi
-    done
-  done
-
-  if ((${#LOCAL[@]})); then
-    git -C "$REPO" stash push --include-untracked -m "config-update-$(date +%s)" --quiet
-    STASHED=1
-  fi
-
-  printf '\n==> Applying newer GitHub configuration\n'
-  git -C "$REPO" merge --ff-only "$UPSTREAM"
-
-  if ((STASHED)); then
-    git -C "$REPO" stash pop --quiet || {
-      printf 'Error: restoring local changes caused conflicts; the backup remains in git stash.\n' >&2
-      exit 1
-    }
-  fi
+  # Autostash keeps uncommitted work (e.g. synchronised dotfiles) intact.
+  git -C "$REPO" pull --ff-only --autostash origin "$BRANCH"
 else
-  printf '\n==> Repository is already up to date\n'
+  printf 'Already up to date with origin/%s.\n' "$BRANCH"
 fi
 
-CACHE_OPTIONS=(
-  --option extra-substituters "$CACHE_URL"
-  --option extra-trusted-public-keys "$CACHE_KEY"
-)
+OUT="$(mktemp -d)"
+trap 'rm -rf "$OUT"' EXIT
 
-printf '\n==> Building system profile: %s\n' "$PROFILE"
-sudo nixos-rebuild build --flake "$REPO#$PROFILE" "${CACHE_OPTIONS[@]}"
+printf '\n==> Building %s\n' "$HOST"
+nixos-rebuild build --flake "$REPO#$HOST" --out-link "$OUT/result"
 
-if ((AUTO_YES == 0)); then
-  printf '\nBuild successful. Activate? [y/N] '
-  read -r ANSWER
-  case "${ANSWER,,}" in y|yes|j|ja) ;; *) exit 0 ;; esac
+printf '\n==> Changes compared to the running system\n'
+nix store diff-closures /run/current-system "$OUT/result" || true
+
+if ((ASSUME_YES == 0)); then
+  read -r -p "Activate ($ACTION)? [y/N] " answer
+  [[ "$answer" == [yY]* ]] || { printf 'Not activated.\n'; exit 0; }
 fi
 
-printf '\n==> Activating system\n'
-sudo nixos-rebuild switch --flake "$REPO#$PROFILE" "${CACHE_OPTIONS[@]}"
-
-printf '\n==> Scheduling TRIM for the next boot\n'
+sudo nixos-rebuild "$ACTION" --flake "$REPO#$HOST"
 sudo install -d -m 0755 /var/lib/nixos-config
 sudo touch /var/lib/nixos-config/fstrim-pending
-
-if [[ -d "$HOME/.local/state/nixos-config" ]]; then
-  while IFS= read -r state_file; do
-    [[ -f "$state_file" ]] || continue
-    state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
-    [[ "$state_repo" == "$REPO" ]] || continue
-    state_tmp="${state_file}.profile.tmp"
-    if jq --arg profile "$PROFILE" '.profile = $profile' "$state_file" >"$state_tmp"; then
-      mv "$state_tmp" "$state_file"
-    else
-      rm -f "$state_tmp"
-    fi
-    break
-  done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
-fi
-
-printf '\nActive profile: %s#%s\n' "$REPO" "$PROFILE"
+printf '\nActive: %s#%s\n' "$REPO" "$HOST"

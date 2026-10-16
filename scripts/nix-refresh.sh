@@ -22,7 +22,7 @@ USAGE
 MODE="${1:-all}"
 case "$MODE" in
   all)
-    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter caelestia-shell)
+    INPUTS=(nixpkgs home-manager nix-cachyos-kernel mango noctalia noctalia-greeter caelestia-shell microvm)
     UPDATE_PROFILE=1
     ;;
   base)
@@ -70,7 +70,8 @@ case "$(hostname -s)" in
   *) printf 'Error: hostname must be nyx or aether.\n' >&2; exit 1 ;;
 esac
 
-readonly REPO="$HOME/$HOST"
+REPO_CONF="$(sed -n "s/^REPO=//p" /etc/nixctl.conf 2>/dev/null | tr -d "'\"")"
+readonly REPO="${REPO_CONF:-$HOME/nix-config}"
 [[ -d "$REPO/.git" && -f "$REPO/flake.nix" && -f "$REPO/flake.lock" ]] || {
   printf 'Error: complete repository not found: %s\n' "$REPO" >&2
   exit 1
@@ -87,28 +88,7 @@ if ! git -C "$REPO" diff --cached --quiet; then
   exit 1
 fi
 
-PROFILE="$HOST"
-PROFILE_FROM_SYSTEM=0
-if [[ -r /etc/nixos-config/profile ]]; then
-  candidate="$(tr -d '\r\n' </etc/nixos-config/profile)"
-  case "$candidate" in
-    "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all") PROFILE="$candidate"; PROFILE_FROM_SYSTEM=1 ;;
-  esac
-fi
-if ((PROFILE_FROM_SYSTEM == 0)); then
-  while IFS= read -r state_file; do
-    [[ -f "$state_file" ]] || continue
-    state_repo="$(jq -r '.repository // empty' "$state_file" 2>/dev/null || true)"
-    [[ "$state_repo" == "$REPO" ]] || continue
-    candidate="$(jq -r '.profile // empty' "$state_file" 2>/dev/null || true)"
-    case "$candidate" in
-      "$HOST"|"$HOST-mango"|"$HOST-niri"|"$HOST-hyprland"|"$HOST-hyprland-caelestia"|"$HOST-mango-niri"|"$HOST-mango-hyprland"|"$HOST-niri-hyprland"|"$HOST-all") PROFILE="$candidate" ;;
-    esac
-    break
-  done < <(find "$HOME/.local/state/nixos-config" -name state.json -type f 2>/dev/null || true)
-fi
-
-readonly PROFILE
+readonly PROFILE="$HOST"
 
 git -C "$REPO" fetch --prune origin
 BRANCH="$(git -C "$REPO" branch --show-current)"

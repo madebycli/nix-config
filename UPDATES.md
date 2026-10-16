@@ -137,3 +137,9 @@ nix-optimize
 ```
 
 This runs `nix-store --optimise -vv` and reports the measured store size before and after.
+
+## v2 notes
+
+- `microvm` (the agent VM) is a Flake input. It is updated by `nix-refresh` and `nix-refresh all`.
+- The profile argument of the old commands is gone: every command works on the host (`nyx`, `aether`). Desktop and feature selection lives in `hosts/<host>/features.nix`; change it with `nixctl`.
+- `config-update` never merges; it fast-forwards and stops if local and remote history diverged.
