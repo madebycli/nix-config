@@ -10,6 +10,10 @@
   my.features = {
     flatpak.enable = true;
     gaming.enable = true;
+    plymouth = {
+      enable = true;
+      theme = "zoot"; # Arknights-style terminal; switch live: sudo plmf theme set <name>
+    };
     sandbox.enable = true;
   };
 }

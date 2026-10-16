@@ -1,0 +1,62 @@
+Window.SetBackgroundTopColor(0.005, 0.008, 0.012);
+Window.SetBackgroundBottomColor(0.005, 0.008, 0.012);
+
+screen_width = Window.GetWidth(0);
+screen_height = Window.GetHeight(0);
+center_x = screen_width / 2;
+center_y = screen_height / 2;
+
+brand_image = Image.Text("PLMF", 0.88, 0.92, 0.96, 1.0, "Sans 34");
+brand_sprite = Sprite(brand_image);
+brand_sprite.SetX(center_x - brand_image.GetWidth() / 2);
+brand_sprite.SetY(center_y - 70);
+
+status_sprite = Sprite();
+prompt_sprite = Sprite();
+bullets_sprite = Sprite();
+
+fun set_status(text) {
+  image = Image.Text(text, 0.58, 0.66, 0.72, 1.0, "Sans 13");
+  status_sprite.SetImage(image);
+  status_sprite.SetX(center_x - image.GetWidth() / 2);
+  status_sprite.SetY(center_y + 10);
+}
+
+fun set_prompt(text) {
+  image = Image.Text(text, 0.82, 0.88, 0.92, 1.0, "Sans 14");
+  prompt_sprite.SetImage(image);
+  prompt_sprite.SetX(center_x - image.GetWidth() / 2);
+  prompt_sprite.SetY(center_y + 48);
+}
+
+fun set_bullets(count) {
+  dots = "";
+  index = 0;
+  while (index < count) {
+    dots += "*";
+    index++;
+  }
+  image = Image.Text(dots, 0.96, 0.98, 1.0, 1.0, "Monospace 18");
+  bullets_sprite.SetImage(image);
+  bullets_sprite.SetX(center_x - image.GetWidth() / 2);
+  bullets_sprite.SetY(center_y + 82);
+}
+
+fun display_normal() {
+  set_status("BOOTING");
+  prompt_sprite.SetOpacity(0);
+  bullets_sprite.SetOpacity(0);
+}
+
+fun display_password(prompt, bullets) {
+  set_status("AUTHENTICATION REQUIRED");
+  set_prompt(prompt);
+  set_bullets(bullets);
+  prompt_sprite.SetOpacity(1);
+  bullets_sprite.SetOpacity(1);
+}
+
+Plymouth.SetDisplayNormalFunction(display_normal);
+Plymouth.SetDisplayPasswordFunction(display_password);
+
+display_normal();

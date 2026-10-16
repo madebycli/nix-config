@@ -52,6 +52,7 @@
       # Used by `nix flake check` and CI, never installed.
       ciStub = {
         fileSystems."/" = { device = "none"; fsType = "tmpfs"; };
+        fileSystems."/boot" = { device = "none"; fsType = "vfat"; };
         boot.loader.grub.enable = false;
       };
 

@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=PLMF Minimal
+Description=Minimal local Plymouth theme for the PLMF boot splash infrastructure
+ModuleName=script
+
+[script]
+ImageDir=/etc/plymouth/themes/minimal
+ScriptFile=/etc/plymouth/themes/minimal/minimal.script
