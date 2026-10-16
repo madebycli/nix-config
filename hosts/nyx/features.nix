@@ -8,6 +8,7 @@
   };
 
   my.features = {
+    dots.enable = true;
     flatpak.enable = true;
     gaming.enable = true;
     plymouth = {

@@ -65,6 +65,7 @@
 
       tools = import ./pkgs/tools.nix { inherit pkgs; };
       gbox = pkgs.callPackage ./pkgs/gbox { };
+      dots = pkgs.callPackage ./pkgs/dots { };
     in
     {
       nixosConfigurations =
@@ -73,7 +74,7 @@
           (name: mkHost (lib.removePrefix "ci-" name) [ ciStub ]);
 
       packages.${system} = tools // {
-        inherit gbox;
+        inherit gbox dots;
         install = tools.nixos-config-install;
         update = tools.config-update;
       };
@@ -81,7 +82,7 @@
       apps.${system} =
         lib.mapAttrs
           (name: pkg: { type = "app"; program = lib.getExe pkg; })
-          (tools // { inherit gbox; })
+          (tools // { inherit gbox dots; })
         // {
           install = { type = "app"; program = lib.getExe tools.nixos-config-install; };
           update = { type = "app"; program = lib.getExe tools.config-update; };

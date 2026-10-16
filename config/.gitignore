@@ -1,0 +1,6 @@
+# Runtime noise that must never be synchronised between machines.
+**/cache/
+**/*.log
+**/*.tmp
+**/*.lock
+**/.cache/
