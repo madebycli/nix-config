@@ -38,6 +38,11 @@ in
     };
   };
 
+  config.services.gnome.gnome-keyring.enable = true;
+  # Unlock the login keyring using the password supplied to the Noctalia greeter.
+  config.security.pam.services.greetd.enableGnomeKeyring = true;
+  config.services.gnome.gcr-ssh-agent.enable = true;
+
   config.assertions = [
     {
       assertion = lib.elem cfg.defaultSession cfg.compositors;
