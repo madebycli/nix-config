@@ -28,6 +28,15 @@ jobs:
             nix eval --no-write-lock-file --raw ".#nixosConfigurations.${cfg}.config.system.build.toplevel.drvPath" >/dev/null
           done
 
+      - name: Keyring and Mango-only defaults
+        run: |
+          for host in ci-nyx ci-aether; do
+            test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.services.gnome.gnome-keyring.enable")" = true
+            test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.security.pam.services.greetd.enableGnomeKeyring")" = true
+            test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.services.gnome.gcr-ssh-agent.enable")" = true
+            test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.my.desktop.compositors")" = '["mango"]'
+          done
+
       - name: Build the command-line tools (includes shellcheck)
         run: |
           nix build --no-write-lock-file --no-link \
