@@ -1,9 +1,14 @@
-"""Unit tests for the pure logic of nx (no network, no Nix)."""
+"""nx logic and local Git workflow tests (no network or system activation)."""
+import contextlib
 import importlib.util
+import io
+import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location("nx", Path(__file__).resolve().parents[1] / "pkgs/nx/nx.py")
 nx = importlib.util.module_from_spec(SPEC)
@@ -109,6 +114,190 @@ class GenerationTests(unittest.TestCase):
     def test_clean_never_deletes_protected(self):
         gens = [{"number": n, "selected": False, "running": n == 1, "booted": False} for n in range(5, 0, -1)]
         self.assertNotIn(1, nx.select_deletions(gens, 0))
+
+
+class WorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.env = mock.patch.dict(os.environ, {
+            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@example.invalid",
+            "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@example.invalid",
+        })
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.remote, self.seed, self.repo = (self.root / n for n in ("remote.git", "seed", "repo"))
+        self.git(self.root, "init", "--bare", "-q", "-b", "main", str(self.remote))
+        self.git(self.root, "clone", "-q", str(self.remote), str(self.seed))
+        (self.seed / "flake.lock").write_text(json.dumps(LOCK, indent=2) + "\n")
+        (self.seed / "flake.nix").write_text("old declarations\n")
+        (self.seed / "other.txt").write_text("base\n")
+        self.git(self.seed, "add", ".")
+        self.git(self.seed, "commit", "-qm", "base")
+        self.git(self.seed, "push", "-q", "origin", "main")
+        self.git(self.root, "clone", "-q", str(self.remote), str(self.repo))
+
+    def git(self, repo, *args):
+        return subprocess.run(["git", "-C", str(repo), *args], check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    def local_lock(self, staged=False):
+        data = json.loads((self.repo / "flake.lock").read_text())
+        data["nodes"]["nixpkgs_2"]["locked"]["rev"] = "local-newer"
+        text = json.dumps(data, indent=2) + "\n"
+        (self.repo / "flake.lock").write_text(text)
+        if staged:
+            self.git(self.repo, "add", "flake.lock")
+        return text
+
+    def incoming(self, conflict=False):
+        data = json.loads((self.seed / "flake.lock").read_text())
+        data["nodes"]["nixpkgs_2"]["locked"]["rev"] += "-remote"
+        (self.seed / "flake.lock").write_text(json.dumps(data, indent=2) + "\n")
+        (self.seed / "flake.nix").write_text("new declarations\n")
+        if conflict:
+            (self.seed / "other.txt").write_text("remote\n")
+            (self.repo / "other.txt").write_text("local\n")
+        self.git(self.seed, "add", ".")
+        self.git(self.seed, "commit", "-qm", "upstream changes")
+        self.git(self.seed, "push", "-q", "origin", "main")
+
+    def pull(self, fail_nix=False):
+        real_run = nx.run
+        calls = []
+
+        def run(cmd, **kwargs):
+            if cmd[0] == "nix":
+                calls.append(cmd)
+                self.assertEqual(cmd[:3], ["nix", "flake", "lock"])
+                data = json.loads((self.repo / "flake.lock").read_text())
+                self.assertEqual(data["nodes"]["nixpkgs_2"]["locked"]["rev"], "local-newer")
+                self.assertEqual((self.repo / "flake.nix").read_text(), "new declarations\n")
+                data["nodes"]["mango"]["locked"]["rev"] = "reconciled"
+                (self.repo / "flake.lock").write_text(json.dumps(data))
+                return subprocess.CompletedProcess(cmd, 1 if fail_nix else 0)
+            return real_run(cmd, **(kwargs | {"capture": True}))
+
+        with mock.patch.object(nx, "load_conf", return_value=(self.repo, "nyx")), \
+                mock.patch.object(nx, "run", side_effect=run), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            nx.cmd_pull(None)
+        return calls
+
+    def test_pull_preserves_local_lock_and_reconciles_new_declarations(self):
+        saved = self.local_lock()
+        self.incoming()
+        self.assertEqual(len(self.pull()), 1)
+        data = json.loads((self.repo / "flake.lock").read_text())
+        self.assertEqual(data["nodes"]["nixpkgs_2"]["locked"]["rev"], "local-newer")
+        self.assertEqual(data["nodes"]["mango"]["locked"]["rev"], "reconciled")
+        self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), self.git(self.seed, "rev-parse", "HEAD"))
+        self.assertEqual(self.git(self.repo, "diff", "--name-only", "--diff-filter=U"), "")
+        self.assertEqual(self.git(self.repo, "stash", "list"), "")
+        backups = list((self.repo / ".git/nx/lock-backups").glob("*.lock"))
+        self.assertEqual([p.read_text() for p in backups], [saved])
+
+    def test_pull_handles_staged_local_lock(self):
+        self.local_lock(staged=True)
+        self.incoming()
+        self.pull()
+        self.assertEqual(self.git(self.repo, "diff", "--cached", "--name-only"), "")
+        self.assertIn("flake.lock", self.git(self.repo, "diff", "--name-only"))
+
+    def test_update_then_pull_can_repeat_without_lock_conflicts(self):
+        self.local_lock()
+        for _ in range(2):
+            self.update()
+            self.incoming()
+            self.pull()
+            self.assertEqual(self.git(self.repo, "diff", "--name-only", "--diff-filter=U"), "")
+            self.assertEqual(self.git(self.repo, "stash", "list"), "")
+
+    def test_clean_lock_follows_remote_without_reconciliation(self):
+        self.incoming()
+        self.assertEqual(self.pull(), [])
+        self.assertEqual(self.git(self.repo, "status", "--porcelain"), "")
+
+    def test_failed_reconciliation_restores_exact_local_lock(self):
+        saved = self.local_lock()
+        self.incoming()
+        with self.assertRaises(SystemExit):
+            self.pull(fail_nix=True)
+        self.assertEqual((self.repo / "flake.lock").read_text(), saved)
+        self.assertEqual(self.git(self.repo, "diff", "--name-only", "--diff-filter=U"), "")
+
+    def test_other_autostash_conflicts_are_reported_as_failure(self):
+        saved = self.local_lock()
+        self.incoming(conflict=True)
+        with self.assertRaises(SystemExit):
+            self.pull()
+        self.assertEqual((self.repo / "flake.lock").read_text(), saved)
+        self.assertEqual(self.git(self.repo, "diff", "--name-only", "--diff-filter=U"), "other.txt")
+        self.assertTrue(self.git(self.repo, "stash", "list"))
+
+    def update(self, options=(), fail_build=False, fail_identity=False):
+        calls = []
+        real_subprocess_run = subprocess.run
+
+        def run(cmd, **kwargs):
+            if cmd[0] == "nix":
+                calls.append(cmd)
+                data = json.loads((self.repo / "flake.lock").read_text())
+                data["nodes"]["mango"]["locked"]["rev"] += "-updated"
+                (self.repo / "flake.lock").write_text(json.dumps(data))
+                return subprocess.CompletedProcess(cmd, 0)
+            return real_subprocess_run(cmd, **kwargs)
+
+        identity = mock.Mock(side_effect=SystemExit(1) if fail_identity else None)
+        args = nx.build_parser().parse_args(["update", *options])
+        with mock.patch.object(nx, "load_conf", return_value=(self.repo, "nyx")), \
+                mock.patch.object(nx, "profile_rows", return_value=[]), \
+                mock.patch.object(nx, "require_git_identity", identity), \
+                mock.patch.object(nx.subprocess, "run", side_effect=run), \
+                mock.patch.object(nx, "build_system", return_value=None if fail_build else "/nix/store/test"), \
+                mock.patch.object(nx, "show_diff"), mock.patch.object(nx, "confirm", return_value=True), \
+                mock.patch.object(nx, "activate") as activate, \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            try:
+                nx.cmd_update(args)
+            finally:
+                self.last_update_calls, self.last_identity, self.last_activate = calls, identity, activate
+        return calls, identity
+
+    def test_repeated_updates_refresh_all_inputs_without_commits_or_identity(self):
+        self.local_lock()
+        head = self.git(self.repo, "rev-parse", "HEAD")
+        for _ in range(2):
+            calls, identity = self.update()
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][:3], ["nix", "flake", "update"])
+            self.assertEqual(set(calls[0][3:-2]), {"nixpkgs", "mango", "pinned", "hm"})
+            identity.assert_not_called()
+            self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), head)
+
+    def test_update_failure_restores_existing_local_changes(self):
+        saved = self.local_lock()
+        with self.assertRaises(SystemExit):
+            self.update(fail_build=True)
+        self.assertEqual((self.repo / "flake.lock").read_text(), saved)
+        self.last_activate.assert_not_called()
+
+    def test_explicit_commit_checks_identity_before_updating_or_activating(self):
+        saved = self.local_lock()
+        with self.assertRaises(SystemExit):
+            self.update(["--commit"], fail_identity=True)
+        self.assertEqual(self.last_update_calls, [])
+        self.last_activate.assert_not_called()
+        self.assertEqual((self.repo / "flake.lock").read_text(), saved)
+
+    def test_build_only_needs_no_identity_and_restores_local_lock(self):
+        saved = self.local_lock()
+        _, identity = self.update(["--build", "--commit"])
+        identity.assert_not_called()
+        self.last_activate.assert_not_called()
+        self.assertEqual((self.repo / "flake.lock").read_text(), saved)
 
 
 if __name__ == "__main__":

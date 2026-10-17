@@ -61,6 +61,9 @@ jobs:
       - name: nx unit tests
         run: python3 tests/nx_test.py
 
+      - name: Installer lock refresh and rollback
+        run: python3 tests/install_test.py
+
       - name: plmf CLI
         run: bash tests/plmf-cli-test.sh
 

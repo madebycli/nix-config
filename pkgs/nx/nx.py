@@ -277,6 +277,44 @@ def git(repo, *args, check=True):
     return run(["git", "-C", str(repo), *args], check=check, capture=True)
 
 
+def require_no_conflicts(repo):
+    paths = git(repo, "diff", "--name-only", "--diff-filter=U", "-z").stdout.strip("\0")
+    if paths:
+        die("unresolved Git conflicts: " + ", ".join(paths.split("\0")) +
+            "; resolve them before continuing (local changes are not discarded)")
+
+
+def save_local_lock(repo, text):
+    directory = Path(git(repo, "rev-parse", "--git-path", "nx/lock-backups").stdout.strip())
+    if not directory.is_absolute():
+        directory = repo / directory
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{time.time_ns()}.lock"
+    path.write_text(text)
+    print(f"Local lock backup: {path}")
+    return path
+
+
+def reconcile_local_lock(repo, text, backup):
+    try:
+        result = run(["nix", "flake", "lock", "--flake", str(repo)], check=False)
+    except BaseException:
+        (repo / "flake.lock").write_text(text)
+        raise
+    if result.returncode != 0:
+        (repo / "flake.lock").write_text(text)
+        die(f"code was pulled, but Nix could not reconcile the local lock; original restored, backup: {backup}. "
+            "Retry with nx update; nothing was activated")
+    print("Local input versions preserved; changed input declarations reconciled by Nix. No commit or push.")
+
+
+def require_git_identity(repo):
+    for identity in ("GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"):
+        if git(repo, "var", identity, check=False).returncode != 0:
+            die("Git identity is required only for --commit/--push; configure user.name and user.email "
+                "or run nx update without those options. Nothing was updated or activated")
+
+
 def toplevel_attr(repo, host):
     return f"{repo}#nixosConfigurations.{host}.config.system.build.toplevel"
 
@@ -408,23 +446,47 @@ def cmd_status(args):
 
 def cmd_pull(args):
     repo, _host = load_conf()
+    require_no_conflicts(repo)
     branch = git(repo, "branch", "--show-current").stdout.strip()
     if not branch:
         die("no branch checked out")
-    git(repo, "fetch", "--prune", "origin", branch)
+    git(repo, "fetch", "origin", branch)
     ahead, behind = map(int, git(repo, "rev-list", "--left-right", "--count", f"HEAD...origin/{branch}").stdout.split())
     if ahead and behind:
         die(f"local and remote diverged ({ahead} ahead, {behind} behind); resolve in {repo}")
     if not behind:
         print(f"Already up to date with origin/{branch}.")
         return 0
+    local_text = None
+    backup = None
+    if git(repo, "status", "--porcelain", "--", "flake.lock").stdout.strip():
+        # The lock is generated data with locally chosen revisions, not a text
+        # document to merge. Keep it out of Git's autostash and let Nix reconcile
+        # changed declarations while retaining unchanged local input versions.
+        load_lock(repo)
+        local_text = (repo / "flake.lock").read_text()
+        backup = save_local_lock(repo, local_text)
     print(git(repo, "log", "--oneline", f"HEAD..origin/{branch}").stdout.rstrip())
-    run(["git", "-C", str(repo), "pull", "--ff-only", "--autostash", "origin", branch])
+    try:
+        if local_text is not None:
+            git(repo, "restore", "--source=HEAD", "--staged", "--worktree", "--", "flake.lock")
+        # Merge exactly the fetched ref so another fetch cannot race the checks.
+        result = run(["git", "-C", str(repo), "merge", "--ff-only", "--autostash", f"origin/{branch}"], check=False)
+    finally:
+        if local_text is not None:
+            (repo / "flake.lock").write_text(local_text)
+    # Git may report success even when applying its autostash left conflicts.
+    require_no_conflicts(repo)
+    if result.returncode != 0:
+        die("fast-forward failed; local lock restored, nothing was activated")
+    if local_text is not None:
+        reconcile_local_lock(repo, local_text, backup)
     return 0
 
 
 def cmd_switch(args):
     repo, host = load_conf()
+    require_no_conflicts(repo)
     untracked_warning(repo)
     path = build_system(repo, host)
     if not path:
@@ -452,6 +514,10 @@ def lock_summary(old, new):
 
 def cmd_update(args):
     repo, host = load_conf()
+    require_no_conflicts(repo)
+    if args.no_commit and (args.commit or args.push):
+        die("--no-commit cannot be combined with --commit or --push")
+    commit_lock = (args.commit or args.push) and not args.build
     lock_path = repo / "flake.lock"
     old_text = lock_path.read_text()
     lock = json.loads(old_text)
@@ -463,9 +529,8 @@ def cmd_update(args):
 
     profile_outdated = []
     if not args.targets:
-        print("Checking upstreams ...")
-        rows = check_rows(lock_inputs(lock) + profile_rows())
-        wanted = [r["name"] for r in rows if r["status"] == "update" and r.get("kind") != "profile"]
+        wanted = sorted(names)
+        rows = check_rows(profile_rows())
         profile_outdated = [r["name"] for r in rows if r["status"] == "update" and r.get("kind") == "profile"]
     elif "all" in args.targets:
         wanted = sorted(names)
@@ -485,8 +550,8 @@ def cmd_update(args):
     if profile_outdated:
         print("Updating profile packages: " + ", ".join(profile_outdated))
 
-    if git(repo, "diff", "--quiet", "--", "flake.lock", check=False).returncode != 0:
-        die("flake.lock has uncommitted changes; commit or restore it first")
+    if wanted and commit_lock:
+        require_git_identity(repo)
     untracked_warning(repo)
 
     def restore():
@@ -515,11 +580,13 @@ def cmd_update(args):
     activate(path, "boot" if args.boot else "switch")
     if profile_outdated:
         run(["nix", "profile", "upgrade", "--all", "--refresh"], check=False)
-    if wanted and not args.no_commit:
+    if wanted and commit_lock:
         git(repo, "commit", "-q", "-m", "flake.lock: update " + ", ".join(wanted), "--", "flake.lock")
         print("Committed flake.lock" + (" and pushing" if args.push else " (not pushed; use --push)"))
         if args.push:
-            run(["git", "-C", str(repo), "push", "origin", "HEAD"], check=False)
+            run(["git", "-C", str(repo), "push", "origin", "HEAD"])
+    elif wanted:
+        print("Updated flake.lock locally; no Git commit or GitHub login required.")
     return 0
 
 
@@ -600,13 +667,14 @@ def build_parser():
     p.add_argument("-y", "--yes", action="store_true")
     p.set_defaults(func=cmd_switch, mode="switch")
 
-    p = sub.add_parser("update", help="update inputs (default: only outdated ones), build, confirm, switch")
+    p = sub.add_parser("update", help="update the local lock (default: all inputs), build, confirm, switch")
     p.add_argument("targets", nargs="*", metavar="TARGET", help="input names, groups (base, desktop, apps) or `all`")
     p.add_argument("--profiles", action="store_true", help="also upgrade `nix profile` packages")
     p.add_argument("--build", action="store_true", help="build only, restore flake.lock afterwards")
     p.add_argument("--boot", action="store_true", help="activate on next boot")
-    p.add_argument("--no-commit", action="store_true", help="leave flake.lock uncommitted")
-    p.add_argument("--push", action="store_true", help="push the lock commit")
+    p.add_argument("--commit", action="store_true", help="explicitly commit flake.lock after activation")
+    p.add_argument("--no-commit", action="store_true", help="leave flake.lock local (default; compatibility option)")
+    p.add_argument("--push", action="store_true", help="explicitly commit and push flake.lock after activation")
     p.add_argument("-y", "--yes", action="store_true")
     p.set_defaults(func=cmd_update)
 

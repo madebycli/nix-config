@@ -39,8 +39,9 @@ one-time override.
 The installer clones to `~/nix-config`, copies this machine's own
 `hardware-configuration.nix` over the tracked placeholder (kept local with
 `skip-worktree`, never committed), builds, shows what changes and activates only
-after you confirm. It never runs `nix flake update`;
-versions come from the committed `flake.lock`.
+after you confirm. Before evaluating or building, it runs `nix flake update` for
+all inputs. Failure or cancellation restores the previous lock. Public HTTPS
+installation and normal updates require no GitHub login, commit or push.
 
 The default checkout path is `~/nix-config` (`my.repoPath`). If a host uses a
 different path, set it in `hosts/<host>/features.nix`, for example
@@ -182,7 +183,7 @@ echo "use flake ~/nix-config#ai-cuda" > .envrc && direnv allow
 ```bash
 nx status           # instant overview
 nx check            # which inputs have updates (~2 s, no downloads)
-nx update           # update outdated inputs, build, diff, confirm, switch
+nx update           # refresh all inputs, build, diff, confirm, switch
 nx switch           # rebuild this host after editing the config
 nx pull             # fetch the repo, fast-forward only
 nx gen | nx clean | nx rollback | nx optimise

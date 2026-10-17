@@ -9,6 +9,7 @@ complete -c nx -n __fish_use_subcommand -a rollback -d "previous generation"
 complete -c nx -n __fish_use_subcommand -a clean -d "delete old generations, free store"
 complete -c nx -n __fish_use_subcommand -a optimise -d "deduplicate the store"
 complete -c nx -n "__fish_seen_subcommand_from update" -a "base desktop apps all"
+complete -c nx -n "__fish_seen_subcommand_from update" -l build -l boot -l profiles -l commit -l push -l no-commit -s y -l yes
 complete -c nx -n "__fish_seen_subcommand_from gen" -a "list diff"
 complete -c nx -n "__fish_seen_subcommand_from switch" -l build -l boot -l test -s y -l yes
 complete -c nx -n "__fish_seen_subcommand_from check status gen" -l json

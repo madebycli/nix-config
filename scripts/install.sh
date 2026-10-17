@@ -98,6 +98,21 @@ fi
 # while commits and pulls leave it alone.
 git update-index --skip-worktree "$target"
 
+install_lock_backup=$(mktemp)
+cp -- flake.lock "$install_lock_backup"
+keep_updated_lock=0
+cleanup_install_lock() {
+  if ((keep_updated_lock == 0)); then
+    cp -- "$install_lock_backup" flake.lock
+    info "Original flake.lock restored"
+  fi
+  rm -f -- "$install_lock_backup"
+}
+trap cleanup_install_lock EXIT
+
+info "Updating all flake inputs"
+nix "${NIX_BOOTSTRAP_OPTIONS[@]}" flake update
+
 info "Evaluating $HOST"
 nix "${NIX_BOOTSTRAP_OPTIONS[@]}" eval --raw ".#nixosConfigurations.${HOST}.config.networking.hostName" >/dev/null
 
@@ -114,6 +129,7 @@ fi
 
 info "Activating"
 sudo nixos-rebuild switch --flake ".#${HOST}" "${NIX_BOOTSTRAP_OPTIONS[@]}"
+keep_updated_lock=1
 
 sudo install -d -m 0755 /var/lib/nixos-config
 sudo touch /var/lib/nixos-config/fstrim-pending

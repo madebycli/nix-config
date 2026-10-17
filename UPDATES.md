@@ -7,9 +7,9 @@ command has `--json` (used by the Noctalia plugin).
 |---|---|
 | `nx status` | host, generation, repository state, enabled features, cached update state (offline, instant) |
 | `nx check` | which inputs have updates; **about 2 seconds**, only `git ls-remote`, nothing is built or downloaded |
-| `nx pull` | fetch the repository and fast-forward (never merges) |
+| `nx pull` | fast-forward repository code and reconcile the saved local lock with Nix |
 | `nx switch` | build this host, show the closure diff, activate after confirmation |
-| `nx update` | update only the outdated inputs, build, show the diff, activate after confirmation |
+| `nx update` | refresh all inputs in the local lock, build, show the diff, activate after confirmation |
 | `nx gen` / `nx gen diff A [B]` | list generations / compare two |
 | `nx rollback` | switch back to the previous generation |
 | `nx clean [N]` | delete old generations (keeps the newest N+1 plus selected, running and booted) and free the store |
@@ -28,7 +28,7 @@ change, without activating it.
 
 ```bash
 nx check                  # what is outdated?
-nx update                 # update every outdated input, build, diff, confirm, switch
+nx update                 # refresh every input, build, diff, confirm, switch
 nx update base            # nixpkgs + CachyOS kernel
 nx update desktop         # home-manager, mango, caelestia-shell
 nx update apps            # microvm
@@ -43,8 +43,30 @@ Safety rules (unchanged in spirit from the old tools):
 
 - the system is built **before** anything is activated;
 - `flake.lock` is restored if the update, the build or your confirmation fails;
-- a `flake.lock` that already has uncommitted changes stops the update;
-- after a successful switch the lock is committed (`--no-commit` to skip, `--push` to push).
+- existing local lock updates are kept as the starting point; no commit is required;
+- normal updates never commit or push and do not require a Git identity or GitHub login;
+- `--commit` explicitly commits the lock after activation; `--push` explicitly commits and pushes;
+- Git identity is checked before an update that requests a commit; `--no-commit` remains a compatibility option.
+
+## Pulling code after local updates
+
+`nx pull` keeps a changed local `flake.lock` out of Git's text merge. It saves a
+backup under Git's `nx/lock-backups` directory, fast-forwards the code, restores
+the local lock, then runs `nix flake lock`. Nix preserves local versions for
+unchanged input declarations and reconciles changed, added or removed inputs.
+Remote lock-only version changes do not replace your local choices; `nx update`
+refreshes those from upstream. Local lock changes are left uncommitted.
+
+Other local files still use Git autostash. Unresolved conflicts stop the command
+with an error and are never discarded. If lock reconciliation fails, the original
+local lock is restored and the backup is retained; retry with `nx update`.
+No system is built or activated by `nx pull`.
+
+The public HTTPS installation needs no GitHub login. Before evaluation and build,
+the installer refreshes every flake input, including on a clean installation. It
+keeps the new local lock after activation and restores the previous lock on
+failure or cancellation. Fresh installs therefore resolve current upstream
+versions rather than relying only on the repository's committed lock.
 
 Nixpkgs, Noctalia and the Noctalia Greeter all come from the `nixpkgs` input, so
 `nx update base` updates them together. Groups: `base` = nixpkgs, nix-cachyos-kernel;
