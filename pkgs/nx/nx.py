@@ -557,26 +557,29 @@ def cmd_update(args):
     def restore():
         lock_path.write_text(old_text)
 
-    if wanted:
-        update = subprocess.run(["nix", "flake", "update", *wanted, "--flake", str(repo)], check=False)
-        if update.returncode != 0:
+    try:
+        if wanted:
+            update = subprocess.run(["nix", "flake", "update", *wanted, "--flake", str(repo)], check=False)
+            if update.returncode != 0:
+                die("flake update failed; flake.lock restored")
+            for line in lock_summary(lock, json.loads(lock_path.read_text())):
+                print(line)
+        path = build_system(repo, host)
+        if not path:
+            die("build failed; flake.lock restored, nothing was changed")
+        show_diff(path)
+        if args.build:
             restore()
-            die("flake update failed; flake.lock restored")
-        for line in lock_summary(lock, json.loads(lock_path.read_text())):
-            print(line)
-    path = build_system(repo, host)
-    if not path:
+            print("\nBuild check only; flake.lock restored.")
+            return 0
+        if not confirm("\nActivate this update?", args.yes):
+            restore()
+            print("Not activated; flake.lock restored.")
+            return 0
+    except BaseException:
+        # Also cover Ctrl-C after Nix wrote the lock or during the build.
         restore()
-        die("build failed; flake.lock restored, nothing was changed")
-    show_diff(path)
-    if args.build:
-        restore()
-        print("\nBuild check only; flake.lock restored.")
-        return 0
-    if not confirm("\nActivate this update?", args.yes):
-        restore()
-        print("Not activated; flake.lock restored.")
-        return 0
+        raise
     activate(path, "boot" if args.boot else "switch")
     if profile_outdated:
         run(["nix", "profile", "upgrade", "--all", "--refresh"], check=False)

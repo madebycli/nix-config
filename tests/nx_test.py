@@ -237,7 +237,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.git(self.repo, "diff", "--name-only", "--diff-filter=U"), "other.txt")
         self.assertTrue(self.git(self.repo, "stash", "list"))
 
-    def update(self, options=(), fail_build=False, fail_identity=False):
+    def update(self, options=(), fail_build=False, fail_identity=False, interrupt=False):
         calls = []
         real_subprocess_run = subprocess.run
 
@@ -247,6 +247,8 @@ class WorkflowTests(unittest.TestCase):
                 data = json.loads((self.repo / "flake.lock").read_text())
                 data["nodes"]["mango"]["locked"]["rev"] += "-updated"
                 (self.repo / "flake.lock").write_text(json.dumps(data))
+                if interrupt:
+                    raise KeyboardInterrupt()
                 return subprocess.CompletedProcess(cmd, 0)
             return real_subprocess_run(cmd, **kwargs)
 
@@ -289,6 +291,13 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.update(["--commit"], fail_identity=True)
         self.assertEqual(self.last_update_calls, [])
+        self.last_activate.assert_not_called()
+        self.assertEqual((self.repo / "flake.lock").read_text(), saved)
+
+    def test_interrupt_restores_existing_local_lock_before_activation(self):
+        saved = self.local_lock()
+        with self.assertRaises(KeyboardInterrupt):
+            self.update(interrupt=True)
         self.last_activate.assert_not_called()
         self.assertEqual((self.repo / "flake.lock").read_text(), saved)
 
