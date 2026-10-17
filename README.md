@@ -18,8 +18,8 @@
 Start from a minimal NixOS with networking, Git, Nix and `sudo`.
 
 ```bash
-nix run --refresh github:madebycli/nix-config/v2#install -- --nyx --branch v2
-nix run --refresh github:madebycli/nix-config/v2#install -- --aether --branch v2
+nix run --refresh github:madebycli/nix-config#install -- --nyx
+nix run --refresh github:madebycli/nix-config#install -- --aether
 ```
 
 The installer clones to `~/nix-config`, copies this machine's own
@@ -27,6 +27,11 @@ The installer clones to `~/nix-config`, copies this machine's own
 `skip-worktree`, never committed), builds, shows what changes and activates only
 after you confirm. It never runs `nix flake update`;
 versions come from the committed `flake.lock`.
+
+The default checkout path is `~/nix-config` (`my.repoPath`). If a host uses a
+different path, set it in `hosts/<host>/features.nix`, for example
+`my.repoPath = "/home/xxxxx/aether";` for an existing Aether checkout, and use
+`--dir /home/xxxxx/aether` when installing there.
 
 ## Switching features
 
@@ -47,10 +52,15 @@ nixctl apply        # build, show the closure diff, activate
 Desktop selection is three options, no per-combination profiles:
 
 ```nix
-my.desktop.compositors = [ "mango" "niri" ];
+my.desktop.compositors = [ "mango" ];
 my.desktop.defaultSession = "mango";
 my.desktop.shell = "noctalia";   # "caelestia" only with [ "hyprland" ] alone
 ```
+
+Both hosts default to Mango only with Noctalia. Their kernel switch is
+`my.kernel = "cachyos";`; use `"latest"` for `pkgs.linuxPackages_latest`.
+The unreachable CachyOS Attic cache is no longer configured. Missing substitutes
+can cause local compilation; failed cache downloads may fall back to local builds.
 
 | Feature | What it adds |
 |---|---|
