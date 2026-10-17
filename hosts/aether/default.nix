@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 {
   imports = [
@@ -18,7 +18,10 @@
   networking.hostName = "aether";
 
   boot.kernelPackages =
-    pkgs.cachyosKernels.linuxPackages-cachyos-bore-x86_64-v3;
+    if config.my.kernel == "cachyos" then
+      pkgs.cachyosKernels.linuxPackages-cachyos-bore-x86_64-v3
+    else
+      pkgs.linuxPackages_latest;
 
   services.udev.extraRules = ''
     ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/scheduler}="mq-deadline"

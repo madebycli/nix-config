@@ -15,6 +15,12 @@
       description = "Where this repository is checked out on the machine.";
     };
 
+    kernel = lib.mkOption {
+      type = lib.types.enum [ "cachyos" "latest" ];
+      default = "cachyos";
+      description = "Kernel family: host-optimized CachyOS or the latest nixpkgs kernel.";
+    };
+
     hardwareConfig = lib.mkOption {
       type = lib.types.path;
       description = ''

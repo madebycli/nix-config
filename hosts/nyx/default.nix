@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 {
   imports = [
@@ -11,8 +11,11 @@
 
   networking.hostName = "nyx";
 
-  boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-bore-zen4;
-  # boot.kernelPackages = pkgs.linuxPackages_latest;
+  boot.kernelPackages =
+    if config.my.kernel == "cachyos" then
+      pkgs.cachyosKernels.linuxPackages-cachyos-bore-zen4
+    else
+      pkgs.linuxPackages_latest;
 
   services.udev.extraRules = ''
     ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/scheduler}="mq-deadline"
