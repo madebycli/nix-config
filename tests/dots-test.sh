@@ -37,7 +37,8 @@ done
 mkdir -p homea/.config/mango
 echo local >homea/.config/mango/x
 run a link >/dev/null
-run a adopt mango | grep -q "refusing to merge" || fail "adopt must refuse when the repo already has the app"
+output=$(run a adopt mango) || fail "dots adopt failed: $output"
+grep -q "refusing to merge" <<<"$output" || fail "adopt must refuse when the repo already has the app: $output"
 
 # Auto-sync does nothing while switched off.
 run b link >/dev/null
@@ -68,7 +69,8 @@ run a auto >/dev/null || true
 # Oversized files are never committed.
 head -c 6000000 /dev/zero >homeb/.config/niri/big.bin
 run b on >/dev/null
-run b auto | grep -q "skipped" || fail "big file was not skipped"
+output=$(run b auto) || fail "dots auto failed: $output"
+grep -q "skipped" <<<"$output" || fail "big file was not skipped: $output"
 git -C pcb ls-files | grep -q big.bin && fail "big file was committed"
 
 echo "dots tests passed"

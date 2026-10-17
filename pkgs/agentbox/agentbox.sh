@@ -16,8 +16,8 @@ ssh_args=(-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$HOME/.ssh/
 running() { systemctl is-active --quiet "microvm@$VM.service"; }
 
 wait_ssh() {
-  local i
-  for i in $(seq 1 60); do
+  local attempt
+  for ((attempt = 0; attempt < 60; attempt++)); do
     if ssh "${ssh_args[@]}" -o BatchMode=yes "$VM_USER@$ADDR" true 2>/dev/null; then
       return 0
     fi
