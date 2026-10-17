@@ -23,8 +23,8 @@ nix run --refresh github:madebycli/nix-config#install -- --aether
 ```
 
 The installed system uses the standard NixOS binary cache (`https://cache.nixos.org`).
-The CachyOS Attic cache is not configured. CachyOS remains the default kernel;
-packages unavailable from the official cache are built from source.
+The CachyOS Attic cache is not configured. Both hosts use the standard Nixpkgs
+kernel (`pkgs.linuxPackages_latest`). Missing substitutes are built from source.
 
 If the running system still disables caches or uses the old Attic cache, use this
 one-time bootstrap command so the official cache is used before the installer starts:
@@ -73,11 +73,11 @@ my.desktop.shell = "noctalia";   # "caelestia" only with [ "hyprland" ] alone
 ```
 
 Both hosts default to Mango only with Noctalia. Their kernel switch is
-`my.kernel = "cachyos";`; use `"latest"` for `pkgs.linuxPackages_latest`.
-The official NixOS cache is enabled. The CachyOS Attic cache remains removed;
-missing substitutes, including the CachyOS kernel, may require local builds.
-CachyOS follows upstream `master`, so kernel updates do not wait for upstream
-binary-cache builds on `release`. `nx update base` updates the locked kernel sources.
+`my.kernel = "latest";` for the standard `pkgs.linuxPackages_latest` kernel.
+CachyOS is temporarily disabled; `"cachyos"` remains available as an explicit
+opt-in with the existing host CPU variants. The official NixOS cache is enabled.
+The CachyOS Attic cache remains removed. The optional CachyOS input follows
+upstream `master`; `nx update base` also updates its locked sources.
 
 | Feature | What it adds |
 |---|---|

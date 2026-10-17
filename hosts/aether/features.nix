@@ -2,7 +2,7 @@
 # `nixctl` edits the `.enable = ...;` lines and the my.desktop lines;
 # everything else can be changed by hand.
 {
-  my.kernel = "cachyos";
+  my.kernel = "latest";
 
   my.desktop.compositors = [ "mango" ];
   my.desktop.defaultSession = "mango";

@@ -39,6 +39,15 @@ jobs:
               | jq -e '.substitute != false and .substituters == ["https://cache.nixos.org/"]' >/dev/null
           done
 
+      - name: Both hosts select the standard Nixpkgs kernel
+        run: |
+          for host in ci-nyx ci-aether; do
+            test "$(nix eval --no-write-lock-file --raw ".#nixosConfigurations.${host}.config.my.kernel")" = latest
+            selected=$(nix eval --no-write-lock-file --raw ".#nixosConfigurations.${host}.config.boot.kernelPackages.kernel.drvPath")
+            standard=$(nix eval --no-write-lock-file --raw ".#nixosConfigurations.${host}.pkgs.linuxPackages_latest.kernel.drvPath")
+            test "$selected" = "$standard"
+          done
+
       - name: Build the command-line tools (includes shellcheck)
         run: |
           nix build --no-write-lock-file --no-link \

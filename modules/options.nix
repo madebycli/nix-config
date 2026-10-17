@@ -17,7 +17,7 @@
 
     kernel = lib.mkOption {
       type = lib.types.enum [ "cachyos" "latest" ];
-      default = "cachyos";
+      default = "latest";
       description = "Kernel family: host-optimized CachyOS or the latest nixpkgs kernel.";
     };
 
