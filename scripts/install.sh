@@ -7,8 +7,6 @@ set -Eeuo pipefail
 readonly REPO_URL="https://github.com/madebycli/nix-config"
 readonly REPO_SSH="git@github.com:madebycli/nix-config.git"
 readonly SOURCE_HARDWARE="/etc/nixos/hardware-configuration.nix"
-readonly CACHE_URL="https://attic.xuyh0120.win/lantian"
-readonly CACHE_KEY="lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc="
 
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 info() { printf '\n==> %s\n' "$*"; }
@@ -94,10 +92,8 @@ git update-index --skip-worktree "$target"
 info "Evaluating $HOST"
 nix eval --raw ".#nixosConfigurations.${HOST}.config.networking.hostName" >/dev/null
 
-cache_options=(--option extra-substituters "$CACHE_URL" --option extra-trusted-public-keys "$CACHE_KEY")
-
 info "Building $HOST (nothing is activated yet)"
-sudo nixos-rebuild build --flake ".#${HOST}" "${cache_options[@]}"
+sudo nixos-rebuild build --flake ".#${HOST}"
 
 info "Changes compared to the running system"
 nix store diff-closures /run/current-system ./result || true
@@ -108,7 +104,7 @@ if ((ASSUME_YES == 0)); then
 fi
 
 info "Activating"
-sudo nixos-rebuild switch --flake ".#${HOST}" "${cache_options[@]}"
+sudo nixos-rebuild switch --flake ".#${HOST}"
 
 sudo install -d -m 0755 /var/lib/nixos-config
 sudo touch /var/lib/nixos-config/fstrim-pending
