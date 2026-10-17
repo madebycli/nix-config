@@ -50,6 +50,7 @@
     gpu-screen-recorder
     gpu-screen-recorder-gtk
     cava
+    gnome-boxes
 
     nautilus
 
