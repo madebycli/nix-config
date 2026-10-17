@@ -13,7 +13,12 @@ git config --global user.name test
 git config --global user.email test@example.invalid
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-run() { local pc=$1; shift; HOME="$T/home$pc" DOTS_CONF="$T/conf$pc" "$DOTS" "$@" 2>&1; }
+run() {
+  local pc=$1
+  shift
+  HOME="$T/home$pc" XDG_CONFIG_HOME="$T/home$pc/.config" \
+    XDG_STATE_HOME="$T/home$pc/.local/state" DOTS_CONF="$T/conf$pc" "$DOTS" "$@" 2>&1
+}
 
 git init -q --bare -b main remote.git
 git init -q -b main seed
