@@ -1,4 +1,4 @@
-{ config, inputs, pkgs, ... }:
+{ config, inputs, pkgs, lib, ... }:
 
 {
   boot = {
@@ -125,8 +125,10 @@
     nixPath = [ "nixpkgs=${inputs.nixpkgs}" ];
 
     settings = {
+      # No binary caches: build missing store paths from source.
+      substitute = false;
+      substituters = lib.mkForce [ ];
       connect-timeout = 5;
-      # Failed cache downloads may fall back to local builds.
       fallback = true;
       experimental-features = [
         "nix-command"

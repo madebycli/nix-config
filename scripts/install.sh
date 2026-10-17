@@ -8,6 +8,15 @@ readonly REPO_URL="https://github.com/madebycli/nix-config"
 readonly REPO_SSH="git@github.com:madebycli/nix-config.git"
 readonly SOURCE_HARDWARE="/etc/nixos/hardware-configuration.nix"
 
+# Ignore all binary caches, including ones configured by the running system.
+# CachyOS remains selected; missing store paths are built from source.
+readonly -a NIX_BOOTSTRAP_OPTIONS=(
+  --option substitute false
+  --option substituters ""
+  --option connect-timeout 5
+  --option fallback true
+)
+
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 info() { printf '\n==> %s\n' "$*"; }
 
@@ -90,10 +99,10 @@ fi
 git update-index --skip-worktree "$target"
 
 info "Evaluating $HOST"
-nix eval --raw ".#nixosConfigurations.${HOST}.config.networking.hostName" >/dev/null
+nix "${NIX_BOOTSTRAP_OPTIONS[@]}" eval --raw ".#nixosConfigurations.${HOST}.config.networking.hostName" >/dev/null
 
 info "Building $HOST (nothing is activated yet)"
-sudo nixos-rebuild build --flake ".#${HOST}"
+sudo nixos-rebuild build --flake ".#${HOST}" "${NIX_BOOTSTRAP_OPTIONS[@]}"
 
 info "Changes compared to the running system"
 nix store diff-closures /run/current-system ./result || true
@@ -104,7 +113,7 @@ if ((ASSUME_YES == 0)); then
 fi
 
 info "Activating"
-sudo nixos-rebuild switch --flake ".#${HOST}"
+sudo nixos-rebuild switch --flake ".#${HOST}" "${NIX_BOOTSTRAP_OPTIONS[@]}"
 
 sudo install -d -m 0755 /var/lib/nixos-config
 sudo touch /var/lib/nixos-config/fstrim-pending
