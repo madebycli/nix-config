@@ -28,15 +28,15 @@ jobs:
             nix eval --no-write-lock-file --raw ".#nixosConfigurations.${cfg}.config.system.build.toplevel.drvPath" >/dev/null
           done
 
-      - name: Keyring, Mango-only and no-cache defaults
+      - name: Keyring, Mango-only and official cache defaults
         run: |
           for host in ci-nyx ci-aether; do
             test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.services.gnome.gnome-keyring.enable")" = true
             test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.security.pam.services.greetd.enableGnomeKeyring")" = true
             test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.services.gnome.gcr-ssh-agent.enable")" = true
             test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.my.desktop.compositors")" = '["mango"]'
-            test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.nix.settings.substitute")" = false
-            test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.nix.settings.substituters")" = '[]'
+            nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.nix.settings" \
+              | jq -e '.substitute != false and .substituters == ["https://cache.nixos.org/"]' >/dev/null
           done
 
       - name: Build the command-line tools (includes shellcheck)

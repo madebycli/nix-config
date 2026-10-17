@@ -22,15 +22,15 @@ nix run --refresh github:madebycli/nix-config#install -- --nyx
 nix run --refresh github:madebycli/nix-config#install -- --aether
 ```
 
-Binary caches are disabled in the installed system and inside the installer.
-CachyOS remains the default kernel. Missing packages are built from source; a first
-installation can take a long time and still needs network access for sources.
+The installed system uses the standard NixOS binary cache (`https://cache.nixos.org`).
+The CachyOS Attic cache is not configured. CachyOS remains the default kernel;
+packages unavailable from the official cache are built from source.
 
-To disable caches before the installer has even started on an older system, use
-this one-time bootstrap command:
+If the running system still disables caches or uses the old Attic cache, use this
+one-time bootstrap command so the official cache is used before the installer starts:
 
 ```bash
-nix run --refresh --option substitute false --option substituters "" github:madebycli/nix-config#install -- --nyx
+nix run --refresh --option substitute true --option substituters https://cache.nixos.org github:madebycli/nix-config#install -- --nyx
 ```
 
 Once the new system is active, the normal command above works without the
@@ -73,8 +73,8 @@ my.desktop.shell = "noctalia";   # "caelestia" only with [ "hyprland" ] alone
 
 Both hosts default to Mango only with Noctalia. Their kernel switch is
 `my.kernel = "cachyos";`; use `"latest"` for `pkgs.linuxPackages_latest`.
-All binary substituters are disabled. Missing packages, including the CachyOS
-kernel, are built locally from source.
+The official NixOS cache is enabled. The CachyOS Attic cache remains removed;
+missing substitutes, including the CachyOS kernel, may require local builds.
 
 | Feature | What it adds |
 |---|---|

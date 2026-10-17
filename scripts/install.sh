@@ -8,11 +8,11 @@ readonly REPO_URL="https://github.com/madebycli/nix-config"
 readonly REPO_SSH="git@github.com:madebycli/nix-config.git"
 readonly SOURCE_HARDWARE="/etc/nixos/hardware-configuration.nix"
 
-# Ignore all binary caches, including ones configured by the running system.
-# CachyOS remains selected; missing store paths are built from source.
+# Use the official cache even if the running system disables substitution or
+# still configures the removed CachyOS Attic cache.
 readonly -a NIX_BOOTSTRAP_OPTIONS=(
-  --option substitute false
-  --option substituters ""
+  --option substitute true
+  --option substituters https://cache.nixos.org
   --option connect-timeout 5
   --option fallback true
 )
