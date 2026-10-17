@@ -14,8 +14,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Keep this input's own nixpkgs revision: the pinned overlay is built against it.
-    nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
+    # Track current sources; release waits for upstream binary-cache builds.
+    # Keep this input's own nixpkgs revision for matching patches and modules.
+    nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/master";
 
     # Declarative microVMs; hosts the isolated agent box (my.features.agentbox).
     microvm = {

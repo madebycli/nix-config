@@ -75,6 +75,8 @@ Both hosts default to Mango only with Noctalia. Their kernel switch is
 `my.kernel = "cachyos";`; use `"latest"` for `pkgs.linuxPackages_latest`.
 The official NixOS cache is enabled. The CachyOS Attic cache remains removed;
 missing substitutes, including the CachyOS kernel, may require local builds.
+CachyOS follows upstream `master`, so kernel updates do not wait for upstream
+binary-cache builds on `release`. `nx update base` updates the locked kernel sources.
 
 | Feature | What it adds |
 |---|---|
