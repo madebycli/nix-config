@@ -48,6 +48,21 @@ jobs:
             test "$selected" = "$standard"
           done
 
+      - name: Upstream Noctalia shell, Nixpkgs greeter and no extra cache
+        run: |
+          nix eval --impure --json --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              system = "x86_64-linux";
+              shell = flake.inputs.noctalia.packages.${system}.default;
+              valid = host:
+                let cfg = flake.nixosConfigurations.${host}; in
+                cfg.config.programs.noctalia.package.drvPath == shell.drvPath
+                && cfg.config.services.displayManager.noctalia-greeter.package.drvPath == cfg.pkgs.noctalia-greeter.drvPath
+                && cfg.config.nix.settings.substituters == [ "https://cache.nixos.org/" ];
+            in builtins.all valid [ "ci-nyx" "ci-aether" ]
+          ' | jq -e '. == true'
+
       - name: Build the command-line tools (includes shellcheck)
         run: |
           nix build --no-write-lock-file --no-link \

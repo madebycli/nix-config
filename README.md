@@ -72,6 +72,10 @@ my.desktop.defaultSession = "mango";
 my.desktop.shell = "noctalia";   # "caelestia" only with [ "hyprland" ] alone
 ```
 
+The Noctalia shell uses the upstream `noctalia` flake input, without an extra
+binary cache. The Noctalia Greeter stays in Nixpkgs. `nx update desktop` updates
+the shell; `nx update base` updates the greeter.
+
 Both hosts default to Mango only with Noctalia. Their kernel switch is
 `my.kernel = "latest";` for the standard `pkgs.linuxPackages_latest` kernel.
 CachyOS is temporarily disabled; `"cachyos"` remains available as an explicit

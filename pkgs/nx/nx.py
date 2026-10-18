@@ -27,7 +27,7 @@ CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "nx
 SYSTEM_PROFILE = Path("/nix/var/nix/profiles/system")
 GROUPS = {
     "base": ["nixpkgs", "nix-cachyos-kernel"],
-    "desktop": ["home-manager", "mango", "caelestia-shell"],
+    "desktop": ["home-manager", "mango", "noctalia", "caelestia-shell"],
     "apps": ["microvm"],
 }
 CACHE_TTL = 600  # seconds a `check` result counts as fresh for `status`
