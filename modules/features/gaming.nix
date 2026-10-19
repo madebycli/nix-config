@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 {
-  options.my.features.gaming.enable = lib.mkEnableOption "Steam, Proton, Wine and launchers";
+  options.my.features.gaming.enable = lib.mkEnableOption "Steam, Proton, Wine, launchers and emulators";
 
   config = lib.mkIf config.my.features.gaming.enable {
     programs = {
@@ -19,6 +19,7 @@
     };
 
     environment.systemPackages = with pkgs; [
+      eden
       mangohud
       protonup-ng
       protonplus
