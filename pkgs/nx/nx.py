@@ -297,7 +297,7 @@ def save_local_lock(repo, text):
 
 def reconcile_local_lock(repo, text, backup):
     try:
-        result = run(["nix", "flake", "lock", "--flake", str(repo)], check=False)
+        result = run(["nix", "flake", "lock", str(repo)], check=False)
     except BaseException:
         (repo / "flake.lock").write_text(text)
         raise

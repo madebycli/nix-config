@@ -171,7 +171,7 @@ class WorkflowTests(unittest.TestCase):
         def run(cmd, **kwargs):
             if cmd[0] == "nix":
                 calls.append(cmd)
-                self.assertEqual(cmd[:3], ["nix", "flake", "lock"])
+                self.assertEqual(cmd, ["nix", "flake", "lock", str(self.repo)])
                 data = json.loads((self.repo / "flake.lock").read_text())
                 self.assertEqual(data["nodes"]["nixpkgs_2"]["locked"]["rev"], "local-newer")
                 self.assertEqual((self.repo / "flake.nix").read_text(), "new declarations\n")

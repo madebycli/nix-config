@@ -85,6 +85,9 @@ jobs:
       - name: nx unit tests
         run: python3 tests/nx_test.py
 
+      - name: Real Nix lock-reconciliation CLI
+        run: python3 tests/nx_nix_cli_test.py
+
       - name: Installer lock refresh and rollback
         run: python3 tests/install_test.py
 
