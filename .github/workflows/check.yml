@@ -66,7 +66,10 @@ jobs:
       - name: Build the command-line tools (includes shellcheck)
         run: |
           nix build --no-write-lock-file --no-link \
-            .#nx .#gbox .#dots .#nixctl .#agentbox .#install
+            .#nx .#gbox .#dots .#nixctl .#agentbox .#install .#nix-settings .#nixdatifier-noctalia
+
+      - name: Rust frontend JSON and real terminal startup
+        run: NIX_SETTINGS_BINARY="$(nix build --no-write-lock-file --no-link --print-out-paths .#nix-settings)/bin/nix-settings-tui" python3 tests/nix_settings_test.py
 
       - name: Dev shells evaluate
         run: |
@@ -84,6 +87,9 @@ jobs:
 
       - name: nx unit tests
         run: python3 tests/nx_test.py
+
+      - name: nixctl settings and failed-build guards
+        run: python3 tests/nixctl_test.py
 
       - name: Real Nix lock-reconciliation CLI
         run: python3 tests/nx_nix_cli_test.py

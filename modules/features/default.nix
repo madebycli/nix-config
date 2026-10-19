@@ -5,6 +5,7 @@
     ./ai.nix
     ./dots.nix
     ./gaming.nix
+    ./nixdatifier.nix
     ./plymouth.nix
     ./sandbox.nix
   ];

@@ -58,9 +58,11 @@ my.features.agentbox.enable = false;
 ```
 
 ```bash
+nix-settings-tui    # Rust UI for configuration, updates, sync and maintenance
 nixctl              # interactive list, space toggles, preview, confirm, switch
 nixctl on ai        # edit one switch
 nixctl desktop      # choose compositors (Mango / Niri / Hyprland) and shell
+nixctl kernel       # choose latest or optional CachyOS
 nixctl apply        # build, show the closure diff, activate
 ```
 
@@ -86,12 +88,30 @@ upstream `master`; `nx update base` also updates its locked sources.
 | Feature | What it adds |
 |---|---|
 | `dots` | Git-based sync of app config with a live on/off switch |
-| `gaming` | Steam, Proton, Wine, launchers, gamescope |
+| `gaming` | Steam, Proton, Wine, launchers, gamescope and the Eden emulator |
+| `nixdatifier` | Native Noctalia panel for nx, dots and the Rust settings frontend |
 | `sandbox` | `gbox`: bubblewrap sandbox for games, Wine and untrusted programs |
 | `agentbox` | Isolated VM for Claude Code and Codex |
 | `plymouth` | Boot splash with themes switchable without a rebuild |
 | `ai` | Local models (Ollama, Open WebUI), started on demand |
 | `flatpak` | Flatpak with a declarative app list |
+
+## Noctalia Nix panel and terminal settings
+
+Both hosts enable `my.features.nixdatifier.enable`. The native plugin backend and
+Home Manager registration are installed when Noctalia is selected. Enable it in
+Noctalia after the successful rebuild:
+
+```sh
+noctalia msg plugins enable madebycli/nixdatifier-noctalia
+noctalia msg panel-toggle madebycli/nixdatifier-noctalia:panel
+```
+
+The panel uses the installed nx/nixctl repository path, offers the two real host
+outputs and keeps separate user-profile targets. Its Settings button opens the
+Rust `nix-settings-tui`, also available directly. `nx update desktop` updates the
+shell and plugin. No extra binary cache is added; the Greeter stays in Nixpkgs.
+See [the TUI architecture and checks](docs/NIX-SETTINGS-PRODUCT.md).
 
 ## Config sync between machines (`dots`)
 

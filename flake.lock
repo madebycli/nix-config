@@ -229,6 +229,27 @@
         "type": "github"
       }
     },
+    "nixdatifier-noctalia": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792440899,
+        "narHash": "sha256-WTyVVtrDBFAYNZH6f7DKsGO9dyPsJJiaUW3PFj8WFc8=",
+        "owner": "madebycli",
+        "repo": "nixdatifier-noctalia",
+        "rev": "9dc105baec7c4a98a150fc9eea02ac186a4c05cc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "madebycli",
+        "ref": "main",
+        "repo": "nixdatifier-noctalia",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1792234340,
@@ -339,6 +360,7 @@
         "mango": "mango",
         "microvm": "microvm",
         "nix-cachyos-kernel": "nix-cachyos-kernel",
+        "nixdatifier-noctalia": "nixdatifier-noctalia",
         "nixpkgs": "nixpkgs_2",
         "noctalia": "noctalia"
       }

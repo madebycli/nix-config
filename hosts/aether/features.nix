@@ -11,6 +11,7 @@
   my.features.dots.enable = true;
   my.features.flatpak.enable = true;
   my.features.gaming.enable = true;
+  my.features.nixdatifier.enable = true;
   my.features.sandbox.enable = true;
 
   my.features.plymouth.enable = true;

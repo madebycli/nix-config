@@ -23,6 +23,7 @@ list_features() {
 
 set_feature() {
   local name="$1" value="$2"
+  [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid feature name"
   grep -qE "^[[:space:]]*my\.features\.$name\.enable[[:space:]]*=" "$FILE" ||
     die "unknown feature '$name' (see: nixctl list)"
   sed -i -E "s/^([[:space:]]*my\.features\.$name\.enable[[:space:]]*=[[:space:]]*)(true|false);/\1$value;/" "$FILE"
@@ -33,7 +34,7 @@ cmd_list() {
     printf '%-12s %s\n' "$name" "$state"
   done
   echo
-  grep -E '^[[:space:]]*my\.desktop\.' "$FILE" | sed -E 's/^[[:space:]]*/  /'
+  grep -E '^[[:space:]]*my\.(kernel|desktop\.)' "$FILE" | sed -E 's/^[[:space:]]*/  /'
 }
 
 cmd_apply() {
@@ -88,6 +89,19 @@ cmd_desktop() {
   if gum confirm "Rebuild now?"; then cmd_apply switch; fi
 }
 
+cmd_kernel() {
+  local kernel="${1:-}" current
+  current="$(sed -nE 's/^[[:space:]]*my\.kernel[[:space:]]*=[[:space:]]*"([^"]+)";.*/\1/p' "$FILE")"
+  [[ "$current" == latest || "$current" == cachyos ]] || die "missing or ambiguous my.kernel in $FILE"
+  if [[ -z "$kernel" ]]; then
+    kernel="$(gum choose --selected="$current" --header "Kernel on $HOST" latest cachyos)" || return 0
+  fi
+  case "$kernel" in latest | cachyos) ;; *) die "kernel: latest|cachyos" ;; esac
+  sed -i -E "s/^([[:space:]]*my\.kernel[[:space:]]*=[[:space:]]*)\"[^\"]+\";/\1\"$kernel\";/" "$FILE"
+  cmd_list
+  if gum confirm "Rebuild now?"; then cmd_apply switch; fi
+}
+
 usage() {
   cat <<'EOF2'
 nixctl                 interactive feature list (space toggles)
@@ -95,6 +109,7 @@ nixctl list            show feature switches of this host
 nixctl on  FEATURE     switch a feature on  (edits features.nix)
 nixctl off FEATURE     switch a feature off
 nixctl desktop         choose compositors and shell interactively
+nixctl kernel [NAME]   choose latest|cachyos (default: interactive)
 nixctl apply [MODE]    build, show the diff, then switch|boot|test (default: switch)
 EOF2
 }
@@ -107,6 +122,7 @@ case "$cmd" in
   on) set_feature "${1:?feature name}" true; cmd_list ;;
   off) set_feature "${1:?feature name}" false; cmd_list ;;
   desktop) cmd_desktop ;;
+  kernel) cmd_kernel "$@" ;;
   apply) cmd_apply "$@" ;;
   help | -h | --help) usage ;;
   *) usage; exit 2 ;;

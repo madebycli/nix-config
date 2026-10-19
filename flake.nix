@@ -15,6 +15,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    nixdatifier-noctalia = {
+      url = "github:madebycli/nixdatifier-noctalia/main";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     caelestia-shell = {
       url = "github:caelestia-dots/shell";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -82,6 +87,8 @@
       agentbox = pkgs.callPackage ./pkgs/agentbox { };
       nixctl = pkgs.callPackage ./pkgs/nixctl { };
       nx = pkgs.callPackage ./pkgs/nx { };
+      nix-settings = pkgs.callPackage ./pkgs/nix-settings { inherit nx nixctl dots; };
+      nixdatifier-noctalia = inputs.nixdatifier-noctalia.packages.${system}.default;
     in
     {
       nixosConfigurations =
@@ -92,14 +99,14 @@
           (name: mkHost (lib.removeSuffix "-full" (lib.removePrefix "ci-" name)) [ ciStub ciFull ]);
 
       packages.${system} = tools // {
-        inherit gbox dots agentbox nixctl nx;
+        inherit gbox dots agentbox nixctl nx nix-settings nixdatifier-noctalia;
         install = tools.nixos-config-install;
       };
 
       apps.${system} =
         lib.mapAttrs
           (name: pkg: { type = "app"; program = lib.getExe pkg; })
-          (tools // { inherit gbox dots agentbox nixctl nx; })
+          (tools // { inherit gbox dots agentbox nixctl nx nix-settings nixdatifier-noctalia; })
         // {
           install = { type = "app"; program = lib.getExe tools.nixos-config-install; };
         };

@@ -6,3 +6,7 @@ result-*
 *~
 *.swp
 *.tmp
+
+# Local test/build artifacts
+/nix-settings/target/
+**/__pycache__/
