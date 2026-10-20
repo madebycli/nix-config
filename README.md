@@ -8,11 +8,6 @@
 
 ## Systems
 
-The optional gaming bundle keeps Faugus Launcher but does not bundle `lsfg-vk`.
-Faugus uses an empty library provider because Nixpkgs currently has no LSFG
-feature switch. User-installed MAKO launchers or libraries in `~/.local` are
-independent and are not removed by a system rebuild.
-
 | Host | Hardware | Default desktop |
 |---|---|---|
 | `nyx` | AMD desktop, `znver4` | Mango + Noctalia |

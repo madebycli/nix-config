@@ -1,14 +1,5 @@
 { config, lib, pkgs, ... }:
 
-let
-  # Nixpkgs hard-wires LSFG paths into Faugus, with no feature flag.
-  # An empty provider keeps its optional library detection working without
-  # pulling lsfg-vk into the system. Existing user-installed libraries are
-  # outside this module's scope.
-  faugusWithoutLsfg = pkgs.faugus-launcher.override {
-    lsfg-vk = pkgs.emptyDirectory;
-  };
-in
 {
   options.my.features.gaming.enable = lib.mkEnableOption "Steam, Proton, Wine, launchers and emulators";
 
@@ -36,7 +27,7 @@ in
       lutris
       goverlay
       heroic
-      faugusWithoutLsfg
+      faugus-launcher
       prismlauncher
       winetricks
       wineWow64Packages.waylandFull
