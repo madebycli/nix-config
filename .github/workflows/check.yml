@@ -68,6 +68,22 @@ jobs:
           nix build --no-write-lock-file --no-link \
             .#nx .#gbox .#dots .#nixctl .#agentbox .#install .#nix-settings .#nixdatifier-noctalia
 
+      - name: Faugus builds without an LSFG runtime dependency
+        run: |
+          faugus=$(nix build --no-write-lock-file --no-link --print-out-paths --impure --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              packages = flake.nixosConfigurations.ci-nyx.config.environment.systemPackages;
+            in flake.inputs.nixpkgs.lib.findFirst
+              (p: (p.pname or "") == "faugus-launcher")
+              (throw "Faugus must remain in the gaming bundle") packages
+          ')
+          nix-store --query --requisites "$faugus" > faugus-closure.txt
+          if grep -E '/[^/]*-lsfg-vk(-|$)' faugus-closure.txt; then
+            echo 'Unexpected LSFG runtime dependency in Faugus' >&2
+            exit 1
+          fi
+
       - name: Rust frontend JSON and real terminal startup
         run: NIX_SETTINGS_BINARY="$(nix build --no-write-lock-file --no-link --print-out-paths .#nix-settings)/bin/nix-settings-tui" python3 tests/nix_settings_test.py
 
