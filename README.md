@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Reproducible NixOS for two machines. Everything optional is a feature you switch on and off, app configuration syncs through Git with a live switch, games run in a sandbox, and AI agents live in a VM.
+  Reproducible NixOS for two machines. Everything optional is a feature you switch on and off, app configuration syncs through Git with a live switch, updates use nx, and features are selected with nixctl.
 </p>
 
 ## Systems
@@ -53,7 +53,6 @@ my.features.agentbox.enable = false;
 ```
 
 ```bash
-nix-settings-tui    # Rust UI for configuration, updates, sync and maintenance
 nixctl              # interactive list, space toggles, preview, confirm, switch
 nixctl on ai        # edit one switch
 nixctl desktop      # choose compositors (Mango / Niri / Hyprland) and shell
@@ -84,29 +83,16 @@ upstream `master`; `nx update base` also updates its locked sources.
 |---|---|
 | `dots` | Git-based sync of app config with a live on/off switch |
 | `gaming` | Steam, Proton, Wine, launchers, gamescope and the Eden emulator |
-| `nixdatifier` | Native Noctalia panel for nx, dots and the Rust settings frontend |
-| `sandbox` | `gbox`: bubblewrap sandbox for games, Wine and untrusted programs |
 | `agentbox` | Isolated VM for Claude Code and Codex |
 | `plymouth` | Boot splash with themes switchable without a rebuild |
 | `ai` | Local models (Ollama, Open WebUI), started on demand |
 | `flatpak` | Flatpak with a declarative app list |
 
-## Noctalia Nix panel and terminal settings
-
-Both hosts enable `my.features.nixdatifier.enable`. The native plugin backend and
-Home Manager registration are installed when Noctalia is selected. Enable it in
-Noctalia after the successful rebuild:
-
-```sh
-noctalia msg plugins enable madebycli/nixdatifier-noctalia
-noctalia msg panel-toggle madebycli/nixdatifier-noctalia:panel
-```
-
-The panel uses the installed nx/nixctl repository path, offers the two real host
-outputs and keeps separate user-profile targets. Its Settings button opens the
-Rust `nix-settings-tui`, also available directly. `nx update desktop` updates the
-shell and plugin. No extra binary cache is added; the Greeter stays in Nixpkgs.
-See [the TUI architecture and checks](docs/NIX-SETTINGS-PRODUCT.md).
+The experimental GBox sandbox, Rust Settings frontend and native Nixdatifier
+panel are preserved on [feature/settings-sandbox](https://github.com/madebycli/nix-config/tree/feature/settings-sandbox).
+Main installs `nixctl` for feature, desktop and kernel selection, and `nx` for
+updates and maintenance. If you previously enabled the native panel, disable
+Nixdatifier in Noctalia's plugin settings before rebuilding.
 
 ## Config sync between machines (`dots`)
 
@@ -123,38 +109,6 @@ dots adopt      # move existing ~/.config folders into the repository
 
 A conflict aborts the rebase, switches auto-sync off and sends a notification.
 Files over 5 MB are never committed.
-
-## Sandbox for games and untrusted programs (`gbox`)
-
-Flatpak-style portals are not enough for a random download, so `gbox` starts the
-program in a bubblewrap sandbox with an empty home, no D-Bus, no host X11/Wayland
-socket and no host network namespace.
-
-```bash
-gbox new chinagame --net none --ro ~/Downloads/game -- ./game
-gbox run chinagame                    # offline
-gbox run chinagame --net inet         # internet, no LAN/localhost
-gbox new wine1 --net inet && gbox wine wine1 -- setup.exe
-gbox new tool --display none --net lan -- ./cli-tool
-gbox list | show NAME | edit NAME | rm NAME [--purge]
-```
-
-| Setting | Meaning |
-|---|---|
-| `--net none` | no network (default) |
-| `--net inet` | internet only; RFC1918, loopback and link-local are dropped |
-| `--net lan` | internet and local network |
-| `--display gamescope` | the game talks to a gamescope running outside the sandbox, never to your compositor (default) |
-| `--share P` / `--ro P` | extra folder, read-write or read-only; `$HOME`, `~/.ssh`, `~/.config` are refused |
-| `--dev P` | single device node, e.g. one gamepad `/dev/input/eventN` |
-| `--no-gpu` / `--no-audio` | software rendering / no sound (the PipeWire socket also exposes the microphone) |
-
-Network modes use a private namespace fed by `pasta`, so a program cannot reach
-your host's loopback services or abstract sockets. Declarative profiles with menu
-entries: `my.features.sandbox.apps.<name> = { command = [ ... ]; net = "inet"; }`.
-
-Limits: this is a user-namespace sandbox, not a VM. A kernel vulnerability can
-break out of it; for code you consider hostile, use `agentbox` or a throwaway VM.
 
 ## Agent VM (`agentbox`)
 
@@ -218,7 +172,7 @@ modules/core/        always-on modules
 modules/desktop/     compositors, shells, greeter, GPU
 modules/features/    optional features (my.features.*)
 hosts/<host>/        hardware facts + feature switches
-pkgs/                nx, gbox, dots, nixctl, agentbox, plmf, themes
+pkgs/                nx, dots, nixctl, agentbox, plmf, themes
 config/<app>/        synchronised app configuration
 tests/               shell and VM tests (run in CI)
 ```

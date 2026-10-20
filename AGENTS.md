@@ -10,8 +10,7 @@ modules/core/        always-on system modules (base, storage, home-manager, tool
 modules/desktop/     compositors, shells, greeter, GPU drivers (my.desktop.*)
 modules/features/    optional features, each behind my.features.<name>.enable
 hosts/<host>/        default.nix (hardware facts), features.nix (switches)
-pkgs/                commands, Rust UI packaging and themes
-nix-settings/        Rust workspace and preserved Linutil vendor snapshot
+pkgs/                commands and themes
 config/<app>/        app configuration synchronised by `dots`
 tests/               shell/VM tests; CI runs them
 ```
@@ -25,9 +24,9 @@ tests/               shell/VM tests; CI runs them
 - Small commands go in `pkgs/<name>/` as `<name>.sh` plus `default.nix` using
   `writeShellApplication` (shellcheck must pass). `nx` is Python (stdlib only) with
   unit tests in `tests/nx_test.py`; keep its read commands scriptable (`--json`).
-- The Rust Settings frontend delegates to nx/nixctl/dots through argv. Keep
-  features.nix authoritative; never reintroduce state/<host>.json. Preserve the
-  exact Linutil vendor snapshot and notices; adaptations belong in crates/.
+- Keep features.nix authoritative for nixctl; never reintroduce state/<host>.json.
+- GBox, Rust Settings and native Nixdatifier integration are maintained on
+  feature/settings-sandbox. Do not restore them to main without an explicit request.
 - `hosts/*/hardware-configuration.nix` in Git are empty placeholders; the installer
   copies the machine's own file over them and marks them `skip-worktree`. Never
   commit real hardware data.
@@ -39,11 +38,10 @@ tests/               shell/VM tests; CI runs them
 ```bash
 nix eval --raw .#nixosConfigurations.ci-nyx.config.system.build.toplevel.drvPath
 nix eval --raw .#nixosConfigurations.ci-aether-full.config.system.build.toplevel.drvPath
-nix build .#nx .#gbox .#dots .#nixctl .#agentbox .#nix-settings
+nix build .#nx .#dots .#nixctl .#agentbox
 bash tests/plmf-cli-test.sh
 python3 tests/nx_test.py
 python3 tests/nixctl_test.py
-NIX_SETTINGS_BINARY=$(nix build --no-link --print-out-paths .#nix-settings)/bin/nix-settings-tui python3 tests/nix_settings_test.py
 DOTS=$(nix build .#dots --print-out-paths --no-link)/bin/dots bash tests/dots-test.sh
 ```
 

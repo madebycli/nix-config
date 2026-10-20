@@ -19,7 +19,10 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Lock file is consistent
-        run: nix flake metadata --no-write-lock-file >/dev/null
+        run: |
+          nix flake lock
+          git diff --exit-code -- flake.lock
+          nix flake metadata --no-write-lock-file >/dev/null
 
       - name: Evaluate every host, with and without optional features
         run: |
@@ -66,10 +69,32 @@ jobs:
       - name: Build the command-line tools (includes shellcheck)
         run: |
           nix build --no-write-lock-file --no-link \
-            .#nx .#gbox .#dots .#nixctl .#agentbox .#install .#nix-settings .#nixdatifier-noctalia
+            .#nx .#dots .#nixctl .#agentbox .#install
 
-      - name: Rust frontend JSON and real terminal startup
-        run: NIX_SETTINGS_BINARY="$(nix build --no-write-lock-file --no-link --print-out-paths .#nix-settings)/bin/nix-settings-tui" python3 tests/nix_settings_test.py
+      - name: Main keeps CLI controls and excludes experimental integrations
+        run: |
+          nix eval --impure --json --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              lib = flake.inputs.nixpkgs.lib;
+              retired = [ "gbox" "nix-settings" "nix-settings-tui" "nixdatifier-noctalia" ];
+              packages = flake.packages.x86_64-linux;
+              apps = flake.apps.x86_64-linux;
+              valid = host:
+                let
+                  cfg = flake.nixosConfigurations.${host};
+                  installed = map lib.getName cfg.config.environment.systemPackages;
+                  features = cfg.options.my.features;
+                in
+                  builtins.elem "nixctl" installed
+                  && builtins.elem "nx" installed
+                  && builtins.all (name: !(builtins.elem name installed)) retired
+                  && !(features ? sandbox) && !(features ? nixdatifier)
+                  && (features ? gaming) && cfg.config.my.desktop.compositors == [ "mango" ];
+            in
+              builtins.all (name: !(builtins.hasAttr name packages) && !(builtins.hasAttr name apps)) retired
+              && builtins.all valid [ "ci-nyx" "ci-aether" "ci-nyx-full" "ci-aether-full" ]
+          ' | jq -e '. == true'
 
       - name: Dev shells evaluate
         run: |
@@ -102,12 +127,6 @@ jobs:
 
       - name: dots two-machine sync
         run: DOTS="$(nix build --no-write-lock-file --no-link --print-out-paths .#dots)/bin/dots" bash tests/dots-test.sh
-
-      - name: gbox isolation (needs unprivileged user namespaces)
-        continue-on-error: true
-        run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
-          GBOX="$(nix build --no-write-lock-file --no-link --print-out-paths .#gbox)/bin/gbox" bash tests/gbox-test.sh
 
       - name: Secret scan
         run: nix run --no-write-lock-file nixpkgs#gitleaks -- git . --redact --no-banner

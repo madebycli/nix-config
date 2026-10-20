@@ -1,7 +1,7 @@
 # Updating and housekeeping with `nx`
 
 One command replaces the old `config-update` and `nix-*` scripts. Every read
-command has `--json` (used by the Noctalia plugin).
+command has `--json` for scripts and other tools.
 
 | Command | What it does |
 |---|---|
@@ -30,7 +30,7 @@ change, without activating it.
 nx check                  # what is outdated?
 nx update                 # refresh every input, build, diff, confirm, switch
 nx update base            # nixpkgs + CachyOS kernel
-nx update desktop         # home-manager, mango, noctalia, nixdatifier-noctalia, caelestia-shell
+nx update desktop         # home-manager, mango, noctalia, caelestia-shell
 nx update apps            # microvm
 nx update mango nixpkgs   # specific inputs
 nx update all             # every input
@@ -72,15 +72,15 @@ The Noctalia shell comes from its own upstream `noctalia` flake input, without
 an additional binary cache. `nx update noctalia` or `nx update desktop` updates
 the shell. The Noctalia Greeter stays in `nixpkgs` and updates with `nx update base`.
 Groups: `base` = nixpkgs, nix-cachyos-kernel; `desktop` = home-manager, mango,
-noctalia, nixdatifier-noctalia, caelestia-shell; `apps` = microvm.
+noctalia, caelestia-shell; `apps` = microvm.
 
 ## Features and desktop
 
 Desktop and feature selection is `hosts/<host>/features.nix`, changed with `nixctl`
 (`nixctl desktop`, `nixctl kernel`, `nixctl on ai`, `nixctl apply`).
-The Rust `nix-settings-tui` groups these same commands behind navigation/search
-and a real terminal. Noctalia's Nixdatifier panel can open it. Neither interface
-creates a second state file or bypasses nx confirmation and local-lock recovery.
+The CLI selectors preserve nx confirmation and local-lock recovery.
+The experimental Settings frontend and native panel are kept on the
+`feature/settings-sandbox` branch.
 
 ## Generations and cleanup
 

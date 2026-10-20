@@ -8,5 +8,5 @@ result-*
 *.tmp
 
 # Local test/build artifacts
-/nix-settings/target/
+target/
 **/__pycache__/
