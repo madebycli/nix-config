@@ -5,6 +5,7 @@ let
     #"app.twintaillauncher.ttl"
     "com.github.tchx84.Flatseal"
     #"gg.norisk.NoRiskClientLauncherV3"
+    "com.usebottles.bottles"
     "io.mrarm.mcpelauncher"
     #"moe.launcher.sleepy-launcher"
     #"moe.launcher.the-honkers-railway-launcher"
