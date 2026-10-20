@@ -31,7 +31,7 @@
       prismlauncher
       winetricks
       wineWow64Packages.waylandFull
-      bottles
+      #bottles
     ];
   };
 }
