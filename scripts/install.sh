@@ -8,15 +8,6 @@ readonly REPO_URL="https://github.com/madebycli/nix-config"
 readonly REPO_SSH="git@github.com:madebycli/nix-config.git"
 readonly SOURCE_HARDWARE="/etc/nixos/hardware-configuration.nix"
 
-# Use the official cache even if the running system disables substitution or
-# still configures the removed CachyOS Attic cache.
-readonly -a NIX_BOOTSTRAP_OPTIONS=(
-  --option substitute true
-  --option substituters https://cache.nixos.org
-  --option connect-timeout 5
-  --option fallback true
-)
-
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 info() { printf '\n==> %s\n' "$*"; }
 
@@ -111,13 +102,13 @@ cleanup_install_lock() {
 trap cleanup_install_lock EXIT
 
 info "Updating all flake inputs"
-nix "${NIX_BOOTSTRAP_OPTIONS[@]}" flake update
+nix flake update
 
 info "Evaluating $HOST"
-nix "${NIX_BOOTSTRAP_OPTIONS[@]}" eval --raw ".#nixosConfigurations.${HOST}.config.networking.hostName" >/dev/null
+nix eval --raw ".#nixosConfigurations.${HOST}.config.networking.hostName" >/dev/null
 
 info "Building $HOST (nothing is activated yet)"
-sudo nixos-rebuild build --flake ".#${HOST}" "${NIX_BOOTSTRAP_OPTIONS[@]}"
+sudo nixos-rebuild build --flake ".#${HOST}"
 
 info "Changes compared to the running system"
 nix store diff-closures /run/current-system ./result || true
@@ -128,7 +119,7 @@ if ((ASSUME_YES == 0)); then
 fi
 
 info "Activating"
-sudo nixos-rebuild switch --flake ".#${HOST}" "${NIX_BOOTSTRAP_OPTIONS[@]}"
+sudo nixos-rebuild switch --flake ".#${HOST}"
 keep_updated_lock=1
 
 sudo install -d -m 0755 /var/lib/nixos-config

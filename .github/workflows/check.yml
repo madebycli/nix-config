@@ -36,7 +36,7 @@ jobs:
             test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.services.gnome.gcr-ssh-agent.enable")" = true
             test "$(nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.my.desktop.compositors")" = '["mango"]'
             nix eval --no-write-lock-file --json ".#nixosConfigurations.${host}.config.nix.settings" \
-              | jq -e '.substitute != false and .substituters == ["https://cache.nixos.org/"]' >/dev/null
+              | jq -e '.substitute != false and .substituters == ["https://cache.nixos.org/"] and .fallback != true and .["require-sigs"] != false' >/dev/null
           done
 
       - name: Both hosts select the standard Nixpkgs kernel
@@ -123,12 +123,6 @@ jobs:
 
       - name: Refresh Nixpkgs as the installer does
         run: nix flake update nixpkgs
-
-      - name: Record the package version and active test workaround
-        run: |
-          nix eval --raw .#nixosConfigurations.ci-nyx.pkgs.python3Packages.pyrate-limiter.version
-          nix eval --json .#nixosConfigurations.ci-nyx.pkgs.python3Packages.pyrate-limiter.disabledTests
-          nix eval --json .#nixosConfigurations.ci-nyx.pkgs.python3Packages.pyrate-limiter.disabledTestPaths
 
       - name: Build the affected Python dependency chain and Lutris
         run: |

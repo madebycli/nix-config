@@ -26,15 +26,10 @@ The installed system uses the standard NixOS binary cache (`https://cache.nixos.
 The CachyOS Attic cache is not configured. Both hosts use the standard Nixpkgs
 kernel (`pkgs.linuxPackages_latest`). Missing substitutes are built from source.
 
-If the running system still disables caches or uses the old Attic cache, use this
-one-time bootstrap command so the official cache is used before the installer starts:
-
-```bash
-nix run --refresh --option substitute true --option substituters https://cache.nixos.org github:madebycli/nix-config#install -- --nyx
-```
-
-Once the new system is active, the normal command above works without the
-one-time override.
+The system and installer use NixOS defaults for substitution, signature checking,
+download timeouts and fallback. The installer does not override the running
+machine's Nix settings. A missing binary substitute may still require a source
+build; disabling download fallback does not prohibit source builds.
 
 The installer clones to `~/nix-config`, copies this machine's own
 `hardware-configuration.nix` over the tracked placeholder (kept local with

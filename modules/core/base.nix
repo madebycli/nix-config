@@ -125,9 +125,6 @@
     nixPath = [ "nixpkgs=${inputs.nixpkgs}" ];
 
     settings = {
-      connect-timeout = 5;
-      # Failed cache downloads may fall back to local builds.
-      fallback = true;
       experimental-features = [
         "nix-command"
         "flakes"

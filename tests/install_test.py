@@ -71,11 +71,7 @@ class InstallTests(unittest.TestCase):
         for tool, *args in calls:
             if tool == "nix" and args[:1] == ["store"]:
                 continue
-            opts = {args[i + 1]: args[i + 2] for i, a in enumerate(args) if a == "--option"}
-            self.assertEqual(opts["substitute"], "true")
-            self.assertEqual(opts["substituters"], "https://cache.nixos.org")
-            while args[:1] == ["--option"]:
-                args = args[3:]
+            self.assertNotIn("--option", args, "Installer must preserve standard Nix settings")
             commands.append(args[:2] if tool == "nix" else args[:1])
         self.assertEqual(commands, [["flake", "update"], ["eval", "--raw"], ["build"], ["switch"]])
 
