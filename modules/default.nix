@@ -14,5 +14,8 @@
     ./features
   ];
 
-  nixpkgs.overlays = [ inputs.nix-cachyos-kernel.overlays.pinned ];
+  nixpkgs.overlays = [
+    inputs.nix-cachyos-kernel.overlays.pinned
+    (import ../overlays/pyrate-limiter.nix)
+  ];
 }

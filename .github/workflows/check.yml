@@ -111,3 +111,28 @@ jobs:
 
       - name: Secret scan
         run: nix run --no-write-lock-file nixpkgs#gitleaks -- git . --redact --no-banner
+
+  gaming-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refresh Nixpkgs as the installer does
+        run: nix flake update nixpkgs
+
+      - name: Record the package version and active test workaround
+        run: |
+          nix eval --raw .#nixosConfigurations.ci-nyx.pkgs.python3Packages.pyrate-limiter.version
+          nix eval --json .#nixosConfigurations.ci-nyx.pkgs.python3Packages.pyrate-limiter.disabledTests
+          nix eval --json .#nixosConfigurations.ci-nyx.pkgs.python3Packages.pyrate-limiter.disabledTestPaths
+
+      - name: Build the affected Python dependency chain and Lutris
+        run: |
+          nix build --no-write-lock-file --no-link --print-build-logs \
+            .#nixosConfigurations.ci-nyx.pkgs.python3Packages.pyrate-limiter \
+            .#nixosConfigurations.ci-nyx.pkgs.python3Packages.moddb \
+            .#nixosConfigurations.ci-nyx.pkgs.lutris
