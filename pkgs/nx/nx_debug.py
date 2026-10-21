@@ -93,7 +93,7 @@ class Redactor:
         s = str(value)
         s = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", s)
         s = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", s)
-        s = re.sub(r"(?i)(https?://)[^\s/@]+(?::[^\s/@]*)?@", r"\1<credentials>@", s)
+        s = re.sub(r"(?i)((?:https?|ssh|git\+https?|git\+ssh|ftp)://)[^\s/@]+(?::[^\s/@]*)?@", r"\1<credentials>@", s)
         s = re.sub(r"(?i)([?&](?:token|access_token|auth|password|secret|key)=)[^\s&#\"']+", r"\1<redacted>", s)
         s = re.sub(r"(?i)((?:access[-_]?tokens?|password|passwd|secret|authorization|api[-_]?key)\s*[:=]\s*)[^\n]+", r"\1<redacted>", s)
         s = re.sub(r"\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)\b", "<token>", s)
@@ -212,6 +212,8 @@ class Collector:
             row[name] = data.decode("utf-8", "replace")
         if row["status"] == "ok" and proc.returncode not in ok_codes:
             row["status"] = "error"
+        if argv[0] == "systemctl" and "not running in this container" in row.get("output", "").lower():
+            row["status"] = "unavailable"
         if transform and row["status"] == "ok":
             try:
                 row["data"] = transform(row.pop("output"))
@@ -329,15 +331,23 @@ class Collector:
             if isinstance(urls, str):
                 urls = urls.split()
             for url in list(dict.fromkeys(urls))[:8]:
-                self.http_probe(url.rstrip("/") + "/nix-cache-info")
+                parsed = urllib.parse.urlsplit(url)
+                def cache_url(name):
+                    # Nix store parameters are not part of the HTTP endpoint.
+                    query = urllib.parse.urlencode([(k, v) for k, v in urllib.parse.parse_qsl(parsed.query)
+                                                     if k not in ("priority", "trusted", "want-mass-query")])
+                    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/") + "/" + name, query, ""))
+                self.http_probe(cache_url("nix-cache-info"))
                 if self.args.store_path and not self.args.store_path.endswith(".drv"):
-                    self.http_probe(url.rstrip("/") + "/" + Path(self.args.store_path).name[:32] + ".narinfo")
+                    self.http_probe(cache_url(Path(self.args.store_path).name[:32] + ".narinfo"))
 
     def http_probe(self, url):
         parsed = urllib.parse.urlsplit(url)
-        if parsed.scheme not in ("http", "https") or parsed.username or parsed.password:
+        if (parsed.scheme not in ("http", "https") or parsed.username or parsed.password
+                or any(re.search(r"(?i)token|password|secret|auth|(?:^|_)key$|signature", key)
+                       for key, _ in urllib.parse.parse_qsl(parsed.query))):
             self.add("cache", "explicit cache HEAD probe", "skipped", url=url,
-                     detail="Only HTTP(S) caches without embedded credentials are probed")
+                     detail="Only HTTP(S) caches without embedded credentials or credential query parameters are probed")
             return
         # Isolate even DNS resolution behind the same process timeout/budget.
         # No redirects, response bodies or authentication are requested.
@@ -431,7 +441,13 @@ except (OSError, ValueError) as e:
             scope = ["--user"] if user else []
             row = self.run("services", f"failed {'user' if user else 'system'} units", ["systemctl", *scope, "--failed", "--no-legend", "--plain", "--no-pager"])
             if row["status"] == "ok" and row.get("output", "").strip():
-                self.finding("error", "services", f"Failed {'user' if user else 'system'} units were found.", "nx debug services --user-unit UNIT" if user else "nx debug services --unit UNIT")
+                units = [line.split()[0] for line in row["output"].splitlines()
+                         if len(line.split()) >= 4 and "failed" in line.split()[2:4]]
+                if units:
+                    row["data"] = {"failed_units": units}
+                    self.finding("error", "services", f"Failed {'user' if user else 'system'} units were found.", "nx debug services --user-unit UNIT" if user else "nx debug services --unit UNIT")
+                else:
+                    row.update(status="invalid-output", detail="systemctl returned nonempty output without failed unit rows")
         units = [(False, u) for u in self.args.unit] + [(True, u) for u in self.args.user_unit]
         if self.args.full:
             units += [(False, "nix-daemon.service"), (False, "greetd.service"), (True, "xdg-desktop-portal.service")]

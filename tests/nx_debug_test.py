@@ -5,7 +5,6 @@ import importlib.util
 import io
 import json
 import os
-import socket
 import stat
 import subprocess
 import sys
@@ -57,8 +56,16 @@ class ProcessTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 2)
         child = Path("/proc") / row["output"].strip() / "stat"
         # A killed orphan can briefly remain a zombie until init reaps it.
-        if child.exists():
-            self.assertIn(child.read_text().split(")", 1)[1].strip().split()[0], ("Z", "X"))
+        deadline = time.monotonic() + 1
+        while True:
+            try:
+                state = child.read_text().split(")", 1)[1].strip().split()[0]
+            except FileNotFoundError:
+                break
+            if state in ("Z", "X"):
+                break
+            self.assertLess(time.monotonic(), deadline, "descendant survived the process-group kill")
+            time.sleep(.01)
 
     def test_closed_pipes_do_not_bypass_timeout(self):
         c = self.collector("--timeout", ".1")
@@ -128,10 +135,11 @@ class DiagnosticTests(unittest.TestCase):
                 c.http_probe(base + "/redirect")
                 c.http_probe("https://user:pass@example.com/nix-cache-info")
                 c.http_probe("file:///nix/store")
+                c.http_probe(base + "/private?access_token=never-send-this")
             finally:
                 server.shutdown()
                 thread.join()
-        self.assertEqual([r["status"] for r in c.sections["cache"]], ["absent", "error", "skipped", "skipped"])
+        self.assertEqual([r["status"] for r in c.sections["cache"]], ["absent", "error", "skipped", "skipped", "skipped"])
         self.assertEqual(requests, ["/missing", "/redirect"])
 
     def test_unit_commands_are_literal_and_journals_bounded(self):
@@ -153,9 +161,16 @@ class DiagnosticTests(unittest.TestCase):
 
     def test_failed_unit_is_a_finding(self):
         c = debug.Collector(arguments("services"))
-        with mock.patch.object(c, "run", side_effect=lambda section, label, argv: c.add(section, label, output="broken.service failed")):
+        with mock.patch.object(c, "run", side_effect=lambda section, label, argv: c.add(section, label, output="broken.service loaded failed failed test service")):
             c.services()
         self.assertEqual(len(c.findings), 2)
+
+    def test_non_systemd_output_is_not_a_failed_service(self):
+        c = debug.Collector(arguments("services"))
+        with mock.patch.object(c, "run", side_effect=lambda section, label, argv: c.add(section, label, output="systemd is not running here")):
+            c.services()
+        self.assertEqual(c.findings, [])
+        self.assertTrue(all(r["status"] == "invalid-output" for r in c.sections["services"]))
 
     def test_missing_config_does_not_abort_repository_diagnosis(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -205,9 +220,9 @@ class ReportTests(unittest.TestCase):
     def test_redaction_including_nested_fields_and_controls(self):
         with mock.patch.dict(os.environ, USER="alice", LOGNAME="alice", HOSTNAME="private-host"), mock.patch.object(debug.Path, "home", return_value=Path("/home/alice")), mock.patch.object(debug.socket, "gethostname", return_value="private-host"):
             value = debug.Redactor().data({"output": ["/home/alice/file alice private-host me@example.org 192.168.1.5 2001:db8::1 aa:bb:cc:dd:ee:ff",
-                "https://name:password@cache.example/a?token=abc", "access-tokens = github.com=secret", "ghp_abcdefgh", "\x1b[31mred\x1b[0m\x00"]})
+                "https://name:password@cache.example/a?token=abc", "ssh://name:ssh-password@host/repo", "access-tokens = github.com=secret", "ghp_abcdefgh", "\x1b[31mred\x1b[0m\x00"]})
         text = json.dumps(value)
-        for secret in ("alice", "private-host", "me@example.org", "192.168.1.5", "2001:db8::1", "aa:bb:cc:dd:ee:ff", "password@", "token=abc", "github.com=secret", "ghp_abcdefgh", "\\u001b", "\\u0000"):
+        for secret in ("alice", "private-host", "me@example.org", "192.168.1.5", "2001:db8::1", "aa:bb:cc:dd:ee:ff", "password@", "ssh-password", "token=abc", "github.com=secret", "ghp_abcdefgh", "\\u001b", "\\u0000"):
             self.assertNotIn(secret, text)
 
     def test_json_export_permissions_and_no_overwrite_or_symlink(self):
