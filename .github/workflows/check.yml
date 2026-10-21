@@ -96,6 +96,12 @@ jobs:
               && builtins.all valid [ "ci-nyx" "ci-aether" "ci-nyx-full" "ci-aether-full" ]
           ' | jq -e '. == true'
 
+      - name: Shell completions parse
+        run: |
+          bash -n pkgs/nx/completions/nx.bash
+          fish="$(nix build --no-write-lock-file --no-link --print-out-paths .#nixosConfigurations.ci-nyx.pkgs.fish)/bin/fish"
+          "$fish" --no-execute pkgs/nx/completions/nx.fish
+
       - name: Dev shells evaluate
         run: |
           for shell in default ai-cpu ai-rocm ai-cuda; do
@@ -118,6 +124,9 @@ jobs:
 
       - name: Real Nix lock-reconciliation CLI
         run: python3 tests/nx_nix_cli_test.py
+
+      - name: Real Nix user-profile lifecycle without system configuration
+        run: python3 tests/nx_profiles_nix_cli_test.py
 
       - name: Installer lock refresh and rollback
         run: python3 tests/install_test.py

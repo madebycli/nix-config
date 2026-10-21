@@ -10,6 +10,8 @@ command has `--json` for scripts and other tools.
 | `nx pull` | fast-forward repository code and reconcile the saved local lock with Nix |
 | `nx switch` | build this host, show the closure diff, activate after confirmation |
 | `nx update` | refresh all inputs in the local lock, build, show the diff, activate after confirmation |
+| `nx update profiles` | upgrade only user-profile packages, without reading or building the system flake |
+| `nx profiles` | list every package in the default Nix user profile |
 | `nx gen` / `nx gen diff A [B]` | list generations / compare two |
 | `nx rollback` | switch back to the previous generation |
 | `nx clean [N]` | delete old generations (keeps the newest N+1 plus selected, running and booted) and free the store |
@@ -35,6 +37,7 @@ nx update apps            # microvm
 nx update mango nixpkgs   # specific inputs
 nx update all             # every input
 nx update --profiles      # also `nix profile upgrade --all`
+nx update profiles        # only user-profile packages; no system rebuild
 nx update --build         # build and diff only, flake.lock is restored
 nx update --boot -y       # activate on next boot, no question
 ```
@@ -81,6 +84,48 @@ Desktop and feature selection is `hosts/<host>/features.nix`, changed with `nixc
 The CLI selectors preserve nx confirmation and local-lock recovery.
 The experimental Settings frontend and native panel are kept on the
 `feature/settings-sandbox` branch.
+
+## User-profile packages
+
+`nx profiles` manages packages installed with `nix profile`. These are independent
+of the Gaming/Desktop feature switches and declarative system/Home Manager packages.
+The commands work without `/etc/nixctl.conf` or a nix-config checkout, and never
+run a NixOS rebuild, use sudo or commit a system lock.
+
+```bash
+nx profiles                         # same as: nx profiles list
+nx profiles list --json              # package names, sources and store paths
+nx profiles install nixpkgs#hello    # add a package
+nx profiles remove hello            # exact name from the list
+nx profiles update                  # upgrade every package in this profile
+nx profiles update hello            # upgrade one or more exact names
+nx update profiles                  # same as: nx profiles update
+nx profiles history                 # native history of package changes
+nx profiles rollback                # previous profile generation
+nx profiles rollback 7              # a specific profile generation
+nx profiles --profile ~/tools list  # explicitly select another profile
+nx update profiles --profile ~/tools
+```
+
+Mutations show/confirm their target; `--yes` skips confirmation for scripts.
+An empty profile is a no-op. Removing packages accepts exact listed names, not
+wildcards, and does not delete old generations or garbage-collect the store.
+Aliases: `ls`, `add`, `rm` and `upgrade`.
+
+The list includes all sources (GitHub, GitLab, local flakes and direct store
+paths). Nix decides which entries can be upgraded; explicitly pinned references
+and direct store paths do not acquire a new version automatically. The lightweight
+`nx check --profiles` upstream revision probe still covers GitHub-based entries.
+
+`--profile PATH` works before or after the `nx profiles` action. Omitting it
+delegates profile selection to Nix. `list --json` returns a `packages` array;
+`history --json` returns Nix's native history text in the `history` field.
+Profile install/update passes `--no-write-lock-file`, preserving source flake locks.
+
+`nx update --profiles` and `nx update desktop profiles` update the system and
+profile together, using one confirmation. A profile upgrade failure is reported
+as an error; an already activated system is retained. Profile-only updates reject
+system-only `--build`, `--boot`, `--commit` and `--push` options.
 
 ## Generations and cleanup
 

@@ -157,12 +157,28 @@ echo "use flake ~/nix-config#ai-cuda" > .envrc && direnv allow
 nx status           # instant overview
 nx check            # which inputs have updates (~2 s, no downloads)
 nx update           # refresh all inputs, build, diff, confirm, switch
+nx update profiles  # only user-profile packages, without a system rebuild
 nx switch           # rebuild this host after editing the config
 nx pull             # fetch the repo, fast-forward only
 nx gen | nx clean | nx rollback | nx optimise
 ```
 
 See [UPDATES.md](UPDATES.md). Anything can be run with `--json` for tools.
+
+User-profile packages have their own CLI, independent of system feature selection:
+
+```bash
+nx profiles                       # list installed profile packages
+nx profiles install nixpkgs#hello
+nx profiles remove hello
+nx profiles update                # all packages; optionally append exact names
+nx profiles history
+nx profiles rollback              # restore the previous user-profile generation
+```
+
+Use `--profile PATH` for another profile and `--yes` for confirmed mutations in
+scripts. These commands do not rebuild NixOS. Gaming and desktop choices stay in
+`nixctl`.
 
 ## Layout
 

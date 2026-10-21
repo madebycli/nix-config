@@ -6,7 +6,8 @@ Design rules:
     in parallel). It never evaluates, downloads or builds anything.
   * Nothing is activated before a build succeeded and you confirmed it.
   * Updating restores flake.lock whenever the build fails or you decline.
-  * Every read command offers --json for tools such as the Noctalia plugin.
+  * Every read command offers --json for scripts and other tools.
+  * User profiles are independent of the system flake and its activation.
 """
 
 import argparse
@@ -176,27 +177,146 @@ def check_rows(rows, ls_remote=git_ls_remote, offline=False, workers=12):
         return list(pool.map(probe, rows))
 
 
-def profile_rows():
-    """Packages installed with `nix profile` that come from a Git-hosted flake."""
-    result = subprocess.run(["nix", "profile", "list", "--json"], capture_output=True, text=True, check=False)
+def profile_command(action, profile=None):
+    command = ["nix", "profile", action]
+    if profile is not None:
+        command += ["--profile", str(Path(profile).expanduser())]
+    return command
+
+
+def profile_packages(profile=None, strict=True):
+    """Read all package sources from both named and older indexed manifests."""
+    result = run(profile_command("list", profile) + ["--json"], capture=True, check=False)
     if result.returncode != 0:
+        if strict:
+            die(f"cannot list profile {profile or '(default)'}: {(result.stderr or '').strip()}")
         return []
-    elements = json.loads(result.stdout or "{}").get("elements", {})
+    try:
+        manifest = json.loads(result.stdout)
+        elements = manifest["elements"]
+        if not isinstance(elements, (dict, list)):
+            raise ValueError("expected profile elements")
+    except (ValueError, KeyError, TypeError) as exc:
+        if strict:
+            die(f"invalid profile JSON: {exc}")
+        return []
     items = elements.items() if isinstance(elements, dict) else enumerate(elements)
-    rows = []
+    packages = []
     for name, element in items:
-        original = element.get("originalUrl") or ""
+        if not isinstance(element, dict) or not isinstance(element.get("storePaths", []), list):
+            die("invalid package entry in profile JSON")
+        paths = element.get("storePaths", [])
+        packages.append({
+            "name": str(name),
+            "package": re.sub(r"^[a-z0-9]{32}-", "", Path(paths[0]).name) if paths else str(name),
+            "original_url": element.get("originalUrl", element.get("originalUri")),
+            "locked_url": element.get("url", element.get("uri")),
+            "attr_path": element.get("attrPath"),
+            "store_paths": paths,
+            "active": element.get("active", True),
+            "priority": element.get("priority"),
+        })
+    return packages
+
+
+def profile_rows():
+    """Git-hosted profile entries for the lightweight upstream revision check."""
+    rows = []
+    for package in profile_packages(strict=False):
+        original = package["original_url"] or ""
         match = re.match(r"^github:([^/]+)/([^/?#]+)(?:/([^?#]+))?", original)
-        rev = re.search(r"/([0-9a-f]{40})(?:\?|$|#)", element.get("url") or "")
+        rev = re.search(r"/([0-9a-f]{40})(?:\?|$|#)", package["locked_url"] or "")
         if not match:
             continue
         owner, repo, ref = match.groups()
         rows.append({
-            "name": str(name), "follows": False, "kind": "profile",
+            "name": package["name"], "follows": False, "kind": "profile",
             "locked": {"rev": rev.group(1) if rev else "", "lastModified": 0},
             "original": {"type": "github", "owner": owner, "repo": repo, **({"ref": ref} if ref else {})},
         })
     return rows
+
+
+# --------------------------------------------------------------------------- user profiles
+
+
+def profile_members(names, packages):
+    available = {package["name"] for package in packages}
+    unknown = [name for name in names if name.startswith("-") or name not in available]
+    if unknown:
+        die("unknown profile package(s): " + ", ".join(unknown) + "; use nx profiles to list exact names")
+    return list(dict.fromkeys(names))
+
+
+def upgrade_profile(profile=None, names=(), assume_yes=False, confirmed=False):
+    packages = profile_packages(profile)
+    selected = profile_members(names, packages) if names else [p["name"] for p in packages]
+    if not selected:
+        print("No packages installed in this profile.")
+        return 0
+    print(f"Updating profile {profile or '(default)'}: " + ", ".join(selected))
+    if not confirmed and not confirm("Update these profile packages?", assume_yes):
+        print("Not updated.")
+        return 0
+    selectors = selected if names else ["--all"]
+    run(profile_command("upgrade", profile) + selectors + ["--refresh", "--no-write-lock-file"])
+    return 0
+
+
+def cmd_profiles(args):
+    action = {"ls": "list", "add": "install", "rm": "remove", "upgrade": "update"}.get(
+        args.profile_action, args.profile_action)
+    profile = args.profile
+    if args.json and action not in ("list", "history"):
+        die("--json is supported by profiles list and history")
+    if action == "list":
+        packages = profile_packages(profile)
+        if args.json:
+            print(json.dumps({"profile": profile, "packages": packages}, indent=2))
+        elif not packages:
+            print("No packages installed in this profile.")
+        else:
+            for package in packages:
+                source = package["original_url"] or "store path"
+                attr = "#" + package["attr_path"] if package["attr_path"] else ""
+                inactive = " (inactive)" if not package["active"] else ""
+                print(f"{package['name']:<24} {package['package']:<32} {source}{attr}{inactive}")
+        return 0
+    if action == "history":
+        result = run(profile_command("history", profile), capture=args.json)
+        if args.json:
+            print(json.dumps({"profile": profile, "history": result.stdout}, indent=2))
+        return 0
+    if action == "update":
+        return upgrade_profile(profile, args.names, args.yes)
+    if action == "install":
+        if any(value.startswith("-") for value in args.installables):
+            die("installable references must not start with '-'")
+        print("Installing into profile " + (profile or "(default)") + ": " + ", ".join(args.installables))
+        if not confirm("Install these profile packages?", args.yes):
+            print("Not installed.")
+            return 0
+        run(profile_command("install", profile) + args.installables + ["--no-write-lock-file"])
+        return 0
+    if action == "remove":
+        selected = profile_members(args.names, profile_packages(profile))
+        print("Removing from profile " + (profile or "(default)") + ": " + ", ".join(selected))
+        if not confirm("Remove these profile packages?", args.yes):
+            print("Not removed.")
+            return 0
+        run(profile_command("remove", profile) + selected)
+        return 0
+    if action == "rollback":
+        if args.generation is not None and args.generation < 1:
+            die("profile generation must be positive")
+        target = f"generation {args.generation}" if args.generation else "the previous generation"
+        if not confirm(f"Roll profile {profile or '(default)'} back to {target}?", args.yes):
+            print("Not rolled back.")
+            return 0
+        destination = ["--to", str(args.generation)] if args.generation else []
+        run(profile_command("rollback", profile) + destination)
+        return 0
+    die("unknown profile action")
 
 
 # --------------------------------------------------------------------------- generations
@@ -513,6 +633,13 @@ def lock_summary(old, new):
 
 
 def cmd_update(args):
+    profile_target = "profiles" in args.targets
+    if profile_target and set(args.targets) == {"profiles"}:
+        if args.build or args.boot or args.commit or args.push:
+            die("profile-only updates do not support --build, --boot, --commit or --push")
+        return upgrade_profile(args.profile, assume_yes=args.yes)
+    if args.profile and not (args.profiles or profile_target):
+        die("--profile requires `nx update profiles` or --profiles")
     repo, host = load_conf()
     require_no_conflicts(repo)
     if args.no_commit and (args.commit or args.push):
@@ -523,7 +650,7 @@ def cmd_update(args):
     lock = json.loads(old_text)
     names = {r["name"] for r in lock_inputs(lock) if not r["follows"]}
 
-    unknown = [t for t in args.targets if t not in GROUPS and t not in names and t != "all"]
+    unknown = [t for t in args.targets if t not in GROUPS and t not in names and t not in ("all", "profiles")]
     if unknown:
         die(f"unknown input or group: {', '.join(unknown)} (inputs: {', '.join(sorted(names))}; groups: {', '.join(GROUPS)}, all)")
 
@@ -537,10 +664,11 @@ def cmd_update(args):
     else:
         wanted = []
         for target in args.targets:
-            wanted += GROUPS[target] if target in GROUPS else [target]
+            if target != "profiles":
+                wanted += GROUPS[target] if target in GROUPS else [target]
         wanted = [n for n in dict.fromkeys(wanted) if n in names]
-    if args.profiles and not profile_outdated:
-        profile_outdated = [r["name"] for r in profile_rows()]
+    if args.profiles or profile_target:
+        profile_outdated = [p["name"] for p in profile_packages(args.profile)]
 
     if not wanted and not profile_outdated:
         print("Everything is current.")
@@ -582,7 +710,8 @@ def cmd_update(args):
         raise
     activate(path, "boot" if args.boot else "switch")
     if profile_outdated:
-        run(["nix", "profile", "upgrade", "--all", "--refresh"], check=False)
+        print("System activated; updating user profile packages.")
+        upgrade_profile(args.profile, confirmed=True)
     if wanted and commit_lock:
         git(repo, "commit", "-q", "-m", "flake.lock: update " + ", ".join(wanted), "--", "flake.lock")
         print("Committed flake.lock" + (" and pushing" if args.push else " (not pushed; use --push)"))
@@ -671,8 +800,9 @@ def build_parser():
     p.set_defaults(func=cmd_switch, mode="switch")
 
     p = sub.add_parser("update", help="update the local lock (default: all inputs), build, confirm, switch")
-    p.add_argument("targets", nargs="*", metavar="TARGET", help="input names, groups (base, desktop, apps) or `all`")
+    p.add_argument("targets", nargs="*", metavar="TARGET", help="inputs, groups (base, desktop, apps), all, or profiles (profile-only)")
     p.add_argument("--profiles", action="store_true", help="also upgrade `nix profile` packages")
+    p.add_argument("--profile", metavar="PATH", help="user profile for profiles/--profiles (default: Nix default)")
     p.add_argument("--build", action="store_true", help="build only, restore flake.lock afterwards")
     p.add_argument("--boot", action="store_true", help="activate on next boot")
     p.add_argument("--commit", action="store_true", help="explicitly commit flake.lock after activation")
@@ -680,6 +810,33 @@ def build_parser():
     p.add_argument("--push", action="store_true", help="explicitly commit and push flake.lock after activation")
     p.add_argument("-y", "--yes", action="store_true")
     p.set_defaults(func=cmd_update)
+
+    p = sub.add_parser("profiles", help="list and manage packages installed with nix profile")
+    p.add_argument("--profile", metavar="PATH", help="profile path (default: Nix default)")
+    p.add_argument("--json", action="store_true", help="JSON for list/history")
+    p.add_argument("-y", "--yes", action="store_true")
+    actions = p.add_subparsers(dest="profile_action", metavar="ACTION")
+    p.set_defaults(func=cmd_profiles, profile_action="list")
+    for name, aliases, help_text in (
+        ("list", ["ls"], "list all installed profile packages"),
+        ("install", ["add"], "install flake references or store paths"),
+        ("remove", ["rm"], "remove packages by exact name from the list"),
+        ("update", ["upgrade"], "update all packages or selected names"),
+        ("history", [], "show package changes between profile generations"),
+        ("rollback", [], "switch to the previous or a specified profile generation"),
+    ):
+        child = actions.add_parser(name, aliases=aliases, help=help_text)
+        child.add_argument("--profile", metavar="PATH", default=argparse.SUPPRESS)
+        if name in ("list", "history"):
+            child.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+        else:
+            child.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
+        if name == "install":
+            child.add_argument("installables", nargs="+", metavar="REF")
+        elif name in ("remove", "update"):
+            child.add_argument("names", nargs="+" if name == "remove" else "*", metavar="NAME")
+        elif name == "rollback":
+            child.add_argument("generation", nargs="?", type=int)
 
     p = sub.add_parser("gen", help="list or compare system generations")
     p.add_argument("action", nargs="?", choices=["list", "diff"], default="list")
