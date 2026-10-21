@@ -71,6 +71,12 @@ jobs:
           nix build --no-write-lock-file --no-link \
             .#nx .#dots .#nixctl .#agentbox .#install
 
+      - name: Packaged nx diagnostics work with isolated Python
+        run: |
+          nx="$(nix build --no-write-lock-file --no-link --print-out-paths .#nx)/bin/nx"
+          "$nx" debug --list --json | jq -e 'has("cache") and has("build")'
+          "$nx" debug nix cache --json | jq -e '.schema_version == 1 and (.sections.nix | length > 0)'
+
       - name: Main keeps CLI controls and excludes experimental integrations
         run: |
           nix eval --impure --json --expr '
@@ -118,6 +124,9 @@ jobs:
 
       - name: nx unit tests
         run: python3 tests/nx_test.py
+
+      - name: nx debug bounds, redaction and read-only reports
+        run: python3 tests/nx_debug_test.py
 
       - name: nixctl settings and failed-build guards
         run: python3 tests/nixctl_test.py

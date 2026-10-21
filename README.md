@@ -158,6 +158,7 @@ nx status           # instant overview
 nx check            # which inputs have updates (~2 s, no downloads)
 nx update           # refresh all inputs, build, diff, confirm, switch
 nx update profiles  # only user-profile packages, without a system rebuild
+nx debug            # detailed local diagnostics, findings and bounded logs
 nx switch           # rebuild this host after editing the config
 nx pull             # fetch the repo, fast-forward only
 nx gen | nx clean | nx rollback | nx optimise
@@ -179,6 +180,11 @@ nx profiles rollback              # restore the previous user-profile generation
 Use `--profile PATH` for another profile and `--yes` for confirmed mutations in
 scripts. These commands do not rebuild NixOS. Gaming and desktop choices stay in
 `nixctl`.
+
+For installation, update or desktop failures, use `nx debug`, or select sections
+with `nx debug nix cache repo`. `nx debug --full --json --output ~/nx-debug.json`
+saves a detailed report. Unit journals, previous boots and failing store paths
+can be inspected separately. See [diagnostics and report options](UPDATES.md#diagnostics-and-support-reports).
 
 ## Layout
 

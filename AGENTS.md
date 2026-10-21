@@ -41,6 +41,7 @@ nix eval --raw .#nixosConfigurations.ci-aether-full.config.system.build.toplevel
 nix build .#nx .#dots .#nixctl .#agentbox
 bash tests/plmf-cli-test.sh
 python3 tests/nx_test.py
+python3 tests/nx_debug_test.py
 python3 tests/nx_profiles_nix_cli_test.py
 python3 tests/nixctl_test.py
 DOTS=$(nix build .#dots --print-out-paths --no-link)/bin/dots bash tests/dots-test.sh

@@ -10,6 +10,7 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     install -Dm0755 nx.py $out/libexec/nx/nx.py
+    install -Dm0644 nx_debug.py $out/libexec/nx/nx_debug.py
     makeWrapper ${python3}/bin/python3 $out/bin/nx \
       --add-flags "-I $out/libexec/nx/nx.py" \
       --prefix PATH : ${lib.makeBinPath [ git nix coreutils ]}

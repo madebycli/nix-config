@@ -12,6 +12,7 @@ Design rules:
 
 import argparse
 import concurrent.futures
+import importlib.util
 import json
 import os
 import re
@@ -774,9 +775,19 @@ def cmd_optimise(_args):
 # --------------------------------------------------------------------------- cli
 
 
+def debug_module():
+    # The packaged entry point runs with python -I, so sibling modules are not
+    # on sys.path. Load only this installed file, never a module from cwd.
+    spec = importlib.util.spec_from_file_location("nx_debug", Path(__file__).with_name("nx_debug.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="nx", description="Update, switch and clean this NixOS configuration.")
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
+    debug_module().add_parser(sub)
 
     p = sub.add_parser("status", help="host, generation, repository and cached update state (offline)")
     p.add_argument("--json", action="store_true")

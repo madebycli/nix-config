@@ -12,6 +12,7 @@ command has `--json` for scripts and other tools.
 | `nx update` | refresh all inputs in the local lock, build, show the diff, activate after confirmation |
 | `nx update profiles` | upgrade only user-profile packages, without reading or building the system flake |
 | `nx profiles` | list every package in the default Nix user profile |
+| `nx debug` | detailed local diagnostics, findings, logs and redacted text/JSON reports |
 | `nx gen` / `nx gen diff A [B]` | list generations / compare two |
 | `nx rollback` | switch back to the previous generation |
 | `nx clean [N]` | delete old generations (keeps the newest N+1 plus selected, running and booted) and free the store |
@@ -126,6 +127,97 @@ Profile install/update passes `--no-write-lock-file`, preserving source flake lo
 profile together, using one confirmation. A profile upgrade failure is reported
 as an error; an already activated system is retained. Profile-only updates reject
 system-only `--build`, `--boot`, `--commit` and `--push` options.
+
+## Diagnostics and support reports
+
+`nx debug` collects local evidence without building, evaluating a flake, activating
+a system, changing settings, repairing services or requesting sudo. It works
+without nx configuration and continues when a tool, file, service, journal or
+permission is missing. Tools already on PATH are used; no extra packages or
+background services are installed for diagnostics. Local Nix read commands can
+use Nix's normal internal metadata caches.
+
+```bash
+nx debug                                      # all normal sections
+nx debug --list                               # available diagnostic sections
+nx debug nix cache repo                        # focus on installation/update issues
+nx debug --full                                # more hardware, service and log detail
+nx debug services --unit greetd.service         # properties and bounded unit journal
+nx debug services --user-unit pipewire.service  # user service details and journal
+nx debug logs --boot -1 --lines 200              # previous boot warnings
+nx debug repo --repo ~/nix-config --host nyx     # explicit checkout/host
+nx debug profiles --profile ~/tools             # another user profile
+nx debug --full --json --output ~/nx-debug.json # private report file, no upload
+nx debug nix cache --strict                     # nonzero for findings/incomplete checks
+```
+
+| Section | Evidence |
+|---|---|
+| `system` | OS/kernel, uptime, load, memory and pressure, free bytes/inodes |
+| `nix` | Nix version, daemon/socket, allowlisted client/system settings and environment switches |
+| `cache` | substitution, signatures, fallback, negative TTL and configured caches |
+| `repo` | nx target, Git branch/commit/dirty state, conflicts, lock metadata and host switches |
+| `profiles` | all user profile sources, history and system generations |
+| `boot` | running/booted/selected system and kernels, boot space and available journal boots |
+| `services` | failed system/user units, optional unit properties and journals |
+| `hardware` | CPU, PCI/drivers, disks, DRM and audio; full adds USB, modules and NVIDIA |
+| `network` | link/NetworkManager/resolver state; no automatic connectivity requests |
+| `desktop` | selected session variables, compositor/shell process names, portals/audio |
+| `logs` | bounded system/user warnings and Nix daemon journal |
+| `build` | an explicitly supplied local store path, derivation dependencies/outputs and saved log |
+
+`build` is selected automatically with `--store-path`. Use a literal store path
+from the failed build, including `.drv` when inspecting a derivation:
+
+```bash
+nx debug build --store-path /nix/store/HASH-package.drv
+nx debug cache --probe-cache
+nx debug cache --probe-cache --store-path /nix/store/HASH-package
+```
+
+Replace `HASH-package` with the real full store basename (32-character hash).
+Build queries are offline with empty substituters. They inspect local metadata
+and saved logs; they do not retry a build or fetch a missing log. Derivation
+environment/arguments are omitted because they can contain credentials. An absent
+local log does not establish build success. Inspect the failing dependency's own
+derivation to investigate checks such as the pyrate-limiter test failures.
+
+Only `--probe-cache` sends external requests: bounded HEAD requests to at most
+eight configured HTTP(S) substituters, without credentials or redirects. It checks
+`nix-cache-info` and, with a non-derivation `--store-path`, that exact output's
+narinfo. A 404 means no entry was found at that URL. HEAD failures, denied access
+and redirects do not establish availability. Neither a reachable cache nor a
+cached output proves all dependencies are cached. Client settings can differ from
+daemon settings and per-command overrides; the report makes this limit explicit.
+
+Findings include failed units, repository conflicts, invalid locks, low disk/inode
+space, differing selected/running systems or kernels, disabled substitution or
+signature checks, and active download fallback. They include next steps where
+appropriate. A missing substitute can still trigger a source build with
+`fallback=false`; package checks run when enabled by that local derivation.
+
+Each subprocess has an 8-second timeout and 64 KiB each for stdout/stderr.
+Collection has a 90-second command budget. Override with `--timeout` (0.1..60),
+`--budget` (1..600) and `--max-bytes` (1024..1048576). Reaching a limit stops the
+process group, including descendants, and marks the check `timeout`, `truncated`
+or `budget-exhausted`. Files are capped at 256 KiB. Journals default to 80 lines
+per query, 400 with `--full`; `--lines` allows 1..2000. `--boot` accepts zero or
+negative offsets. Repeat `--unit`/`--user-unit` for up to 20 literal unit names.
+The full report never treats missing or restricted evidence as a healthy result.
+
+JSON schema version 1 contains timestamp, duration, requested sections, options,
+privacy notes, summary counts, findings and section checks. Each command check
+records arguments, status, return code, duration and bounded data/output/stderr
+when available. Default exit 0 means the report was collected; `--strict` returns
+1 for findings or incomplete checks. Invalid arguments and export failures return
+nonzero. `--list --json` returns the section description mapping.
+
+Exports use mode 0600 and refuse existing files or symlinks. Reports mask common
+credentials/tokens, home/user/hostname identifiers, email and IP/MAC addresses on
+a best-effort basis. They omit raw environment, raw NIX_CONFIG, unlisted Nix
+settings, process arguments and arbitrary repository file contents. Review before
+sharing: domains, device descriptions, paths and log messages can still identify
+a system. No report is uploaded automatically.
 
 ## Generations and cleanup
 

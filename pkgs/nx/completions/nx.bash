@@ -1,12 +1,17 @@
 _nx() {
   local cur="${COMP_WORDS[COMP_CWORD]}" cmd="${COMP_WORDS[1]}"
   local prev="${COMP_WORDS[COMP_CWORD-1]}" action="" i
-  if [[ $prev == --profile ]]; then
+  if [[ $prev == --profile || $prev == --repo || $prev == --output || $prev == --store-path ]]; then
     mapfile -t COMPREPLY < <(compgen -f -- "$cur")
     return
   fi
   if [[ $COMP_CWORD -eq 1 ]]; then
-    COMPREPLY=($(compgen -W "status check pull switch update profiles gen rollback clean optimise" -- "$cur"))
+    COMPREPLY=($(compgen -W "status check pull switch update profiles debug gen rollback clean optimise" -- "$cur"))
+  elif [[ $cmd == debug ]]; then
+    case "$prev" in
+      --unit|--user-unit|--host|--boot|--lines|--timeout|--budget|--max-bytes) COMPREPLY=(); return ;;
+    esac
+    COMPREPLY=($(compgen -W "system nix cache repo profiles boot services hardware network desktop logs build --list --full --json --output --repo --host --profile --unit --user-unit --store-path --probe-cache --boot --lines --timeout --budget --max-bytes --strict" -- "$cur"))
   elif [[ $cmd == update ]]; then
     if [[ ${COMP_WORDS[2]} == profiles ]]; then
       COMPREPLY=($(compgen -W "--profile --yes" -- "$cur"))

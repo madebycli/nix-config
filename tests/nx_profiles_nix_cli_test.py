@@ -114,6 +114,27 @@ class RealProfileTests(unittest.TestCase):
         self.assertIn("No packages", output)
         self.assertEqual(os.readlink(self.profile), generation)
 
+    def test_debug_reads_real_settings_profile_and_derivation_without_building(self):
+        self.install("hello")
+        before = self.packages()
+        generation = os.readlink(self.profile)
+        path = next(iter(before.values()))["store_paths"][0]
+        result = subprocess.run(["nix-store", "--query", "--deriver", path],
+                                env=self.env, capture_output=True, text=True, check=True)
+        drv = result.stdout.strip()
+        data = json.loads(self.nx("debug", "nix", "cache", "profiles", "build", "--profile", self.profile,
+                                 "--store-path", drv, "--json", "--budget", "30").stdout)
+        settings = next(r for r in data["sections"]["nix"] if "settings" in r["label"])
+        self.assertEqual(settings["status"], "ok", settings)
+        self.assertEqual(settings["data"]["substitute"], False)
+        derivation = next(r for r in data["sections"]["build"] if "dependencies" in r["label"])
+        self.assertEqual(derivation["status"], "ok", derivation)
+        self.assertTrue(derivation["data"], derivation)
+        self.assertNotIn('"env":', json.dumps(derivation))
+        self.assertEqual(os.readlink(self.profile), generation)
+        self.assertEqual(self.packages(), before)
+        self.assertFalse((self.source / "flake.lock").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
