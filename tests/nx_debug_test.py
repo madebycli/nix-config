@@ -89,19 +89,23 @@ class ProcessTests(unittest.TestCase):
 
 class DiagnosticTests(unittest.TestCase):
     def test_config_filters_tokens_and_remote_builders(self):
-        raw = {"substituters": {"value": ["https://cache.nixos.org/"]}, "fallback": {"value": False},
-               "access-tokens": {"value": "NEVER_SHOW"}, "builders": {"value": "ssh://secret:pass@builder"}}
+        raw = ("substituters = https://cache.nixos.org/ https://cache.example/\n"
+               "fallback = false\nsubstitute = true\nmax-jobs = 8\n"
+               "access-tokens = NEVER_SHOW\nbuilders = ssh://secret:pass@builder\n")
         c = debug.Collector(arguments())
         # Keep the real filtering callback while replacing only the process.
         original = c.run
         def routed(section, label, argv, transform=None, **kwargs):
-            row = original(section, label, [sys.executable, "-c", "print(" + repr(json.dumps(raw)) + ")"], transform)
+            row = original(section, label, [sys.executable, "-c", "print(" + repr(raw) + ")"], transform)
             row["command"] = argv
             return row
         with mock.patch.object(c, "run", side_effect=routed):
             settings = c.get_settings()
         self.assertEqual(settings["builders"], True)
         self.assertEqual(settings["fallback"], False)
+        self.assertEqual(settings["substitute"], True)
+        self.assertEqual(settings["max-jobs"], 8)
+        self.assertEqual(settings["substituters"], ["https://cache.nixos.org/", "https://cache.example/"])
         self.assertNotIn("access-tokens", settings)
         self.assertNotIn("NEVER_SHOW", json.dumps(c.sections))
         self.assertNotIn("secret:pass", json.dumps(c.sections))

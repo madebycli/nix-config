@@ -242,11 +242,33 @@ class Collector:
     def get_settings(self):
         if self.settings is None:
             def filtered(output):
-                data = json.loads(output)
-                return {key: (bool(item.get("value", item)) if key == "builders" else item.get("value", item))
-                        for key, item in data.items() if key in SETTING_KEYS and isinstance(item, dict)}
+                # Nix's JSON includes the full manual descriptions and can exceed
+                # the output cap. Plain config show has the same effective values
+                # without that documentation; filter before recording any output.
+                data = {}
+                list_keys = {"substituters", "extra-substituters", "trusted-substituters", "trusted-public-keys",
+                             "experimental-features", "extra-experimental-features", "allowed-users", "trusted-users"}
+                for line in output.splitlines():
+                    if "=" not in line:
+                        continue
+                    key, value = (part.strip() for part in line.split("=", 1))
+                    if key not in SETTING_KEYS:
+                        continue
+                    if key == "builders":
+                        data[key] = bool(value)
+                    elif key in list_keys:
+                        data[key] = shlex.split(value)
+                    elif value in ("true", "false"):
+                        data[key] = value == "true"
+                    elif re.fullmatch(r"[0-9]+", value):
+                        data[key] = int(value)
+                    else:
+                        data[key] = value
+                if not data:
+                    raise ValueError("No recognized Nix settings in command output")
+                return data
             row = self.run("nix", "effective client settings (allowlist, no access tokens)",
-                           ["nix", "--extra-experimental-features", "nix-command", "config", "show", "--json"], filtered)
+                           ["nix", "--extra-experimental-features", "nix-command", "config", "show"], filtered)
             self.settings = row.get("data", {})
         return self.settings
 
