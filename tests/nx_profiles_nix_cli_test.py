@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import quote
 
 
 NX = Path(__file__).resolve().parents[1] / "pkgs/nx/nx.py"
@@ -67,7 +68,7 @@ class RealProfileTests(unittest.TestCase):
 
     def install(self, attribute):
         self.nx("profiles", "--profile", self.profile, "install",
-                f"path:{self.source}#{attribute}", "--yes")
+                f"path:{quote(str(self.source), safe='/')}#{attribute}", "--yes")
 
     def test_install_profile_only_update_remove_history_and_rollback(self):
         self.assertEqual(self.packages(), {})
