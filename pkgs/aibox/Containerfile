@@ -13,6 +13,7 @@ RUN git init /opt/strata && cd /opt/strata \
     && git fetch --depth 1 origin ${STRATA_REV} && git checkout --detach FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "${STRATA_REV}"
 RUN cmake -S /opt/strata -B /opt/strata/build-hip -G Ninja \
+      -DCMAKE_PREFIX_PATH=/opt/rocm \
       -DCMAKE_BUILD_TYPE=Release -DSTRATA_ENABLE_HIP=ON -DSTRATA_ENABLE_CUDA=OFF \
       -DCMAKE_HIP_ARCHITECTURES=${GPU_ARCH} -DSTRATA_PORTABLE=ON \
       -DSTRATA_BUILD_TESTS=OFF \

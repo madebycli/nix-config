@@ -41,6 +41,13 @@ real model-specific tool loops still require acceptance with the eventual model.
 
 ## Model-free tests
 
+If preparation stopped at `find_package(hip)` with `hipConfig.cmake` not found,
+update the configuration and rebuild before retrying `aibox prepare`. The
+Containerfile explicitly supplies `/opt/rocm` as `CMAKE_PREFIX_PATH`, so CMake
+can find the SDK's HIP/BLAS package metadata as well as its compiler. Existing
+Podman images/caches do not need to be deleted. This corrects package discovery;
+it is not proof that subsequent compilation or GPU inference succeeds.
+
 ```bash
 aibox smoke             # real API with mock answers, not an AI model
 aibox exec ~/projects/ai-test -- curl --fail http://strata:8080/health
