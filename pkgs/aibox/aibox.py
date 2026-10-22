@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unprivileged container controller. No model acquisition and no implicit pulls."""
+"""Rootless AI containers. Models are acquired only through explicit manager actions."""
 import argparse
 import hashlib
 import json
@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 
 NETWORK = "nx-ai-private"
 SERVER = "nx-ai-inference"
@@ -62,7 +65,7 @@ def image_name(cfg):
 
 def ensure_image(image):
     if not exists("image", image):
-        raise ValueError(f"Image missing: {image}. Run aibox prepare first")
+        raise ValueError(f"Image missing: {image}. Run aibox prepare-ui for nx-ai-manager, otherwise aibox prepare")
 
 
 def ensure_network():
@@ -113,6 +116,20 @@ def prepare(cfg, agent_only=False):
     print("Runtime prepared. No models downloaded. Next: aibox doctor")
 
 
+def ui_binding(data):
+    """Return only an explicitly published loopback UI, never a LAN binding."""
+    ports = (data or {}).get("NetworkSettings", {}).get("Ports", {}) or {}
+    bindings = ports.get("8080/tcp") or []
+    if not bindings:
+        return None
+    if any(p.get("HostIp") != "127.0.0.1" for p in bindings):
+        raise ValueError("Refusing UI with a non-loopback port binding")
+    port = str(bindings[0].get("HostPort", ""))
+    if not port.isdigit() or not 1024 <= int(port) <= 65535:
+        raise ValueError("Invalid UI port in container metadata")
+    return f"http://127.0.0.1:{port}"
+
+
 def start(cfg, smoke=False):
     ensure_image(image_name(cfg))
     models = None if smoke else safe_directory(cfg["modelDirectory"])
@@ -134,8 +151,115 @@ def start(cfg, smoke=False):
     print("Private API: http://strata:8080/v1 inside aibox; no host port published")
 
 
+def wait_for_ui(url, timeout=30):
+    # Never send a localhost probe through HTTP_PROXY or follow a redirect away
+    # from the selected local service.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with opener.open(url + "/api/health", timeout=1) as response:
+                data = json.loads(response.read(65536))
+            if not isinstance(data, dict) or data.get("ok") is not True or "backend" not in data or "engine" not in data:
+                raise ValueError("The selected port did not answer as Strata")
+            return data
+        except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError):
+            time.sleep(0.25)
+    raise ValueError(f"UI is not ready at {url}; check aibox logs and retry aibox ui. The container was left running")
+
+
+def manager_image(cfg):
+    support = Path(os.environ["AIBOX_SUPPORT"])
+    digest = hashlib.sha256(image_name(cfg).encode())
+    for name in ("ManagerContainerfile", "manager-bundle.py"):
+        digest.update((support / name).read_bytes())
+    return "localhost/nx-ai-manager:" + digest.hexdigest()[:20]
+
+
+def prepare_ui(cfg):
+    ensure_image(image_name(cfg))
+    support = os.environ["AIBOX_SUPPORT"]
+    run("build", "--tag", manager_image(cfg), "--file", f"{support}/ManagerContainerfile",
+        "--build-arg", f"ENGINE_IMAGE={image_name(cfg)}",
+        "--build-arg", f"GPU_ARCH={cfg['gpuArch']}", support)
+    print("Full Strata app prepared. No model weights downloaded; no HIP recompile.")
+
+
+def manager_state(cfg):
+    # Keep state adjacent to models, never in the coding workspace or host home.
+    models = Path(cfg["modelDirectory"]).expanduser()
+    models.mkdir(mode=0o700, parents=True, exist_ok=True)
+    models = safe_directory(models)
+    state = models.parent / "manager"
+    state.mkdir(mode=0o700, parents=True, exist_ok=True)
+    state = safe_directory(state)
+    if state.is_relative_to(models) or models.is_relative_to(state):
+        raise ValueError("Manager state and models must be separate directories")
+    return state, models
+
+
+def start_ui(cfg, port):
+    ensure_image(manager_image(cfg))
+    devices = gpu_args(cfg)
+    state, models = manager_state(cfg)
+    ensure_network()
+    # Management needs outbound access for explicit model downloads. Coding
+    # containers remain on NETWORK only. No host network or engine socket.
+    outbound = "nx-ai-downloads"
+    if not exists("network", outbound):
+        run("network", "create", "--label", f"{LABEL}=true", outbound)
+    net = json.loads(run("network", "inspect", outbound, capture=True).stdout)[0]
+    if net.get("internal") or net.get("labels", {}).get(LABEL) != "true":
+        raise ValueError("Refusing management network without the expected policy/label")
+    old = owned_server()
+    if old and old.get("State", {}).get("Running"):
+        raise ValueError("Inference is running. Run aibox stop before opening the model manager")
+    if old:
+        run("rm", SERVER)
+    run(*base_run(SERVER), "--detach", "--network-alias=strata",
+        "--network", outbound, "--label", f"{LABEL}.mode=manager",
+        "--userns=keep-id", "--user", f"{os.getuid()}:{os.getgid()}", *devices,
+        "--publish", f"127.0.0.1:{port}:8080",
+        "--mount", f"type=bind,src={state},target=/state,bind-nonrecursive",
+        "--mount", f"type=bind,src={models},target=/models,bind-nonrecursive",
+        manager_image(cfg))
+
+
+def ui(cfg, port=8766, no_open=False):
+    if not 1024 <= port <= 65535:
+        raise ValueError("UI port must be between 1024 and 65535")
+    data = owned_server()
+    if data and data.get("State", {}).get("Running"):
+        if data.get("Config", {}).get("Labels", {}).get(f"{LABEL}.mode") != "manager":
+            raise ValueError("Private inference is running. Run aibox stop, then aibox ui")
+        url = ui_binding(data)
+        if url != f"http://127.0.0.1:{port}":
+            raise ValueError(f"UI is already running at {url}; use that port or stop it first")
+    else:
+        start_ui(cfg, port)
+        url = f"http://127.0.0.1:{port}"
+    wait_for_ui(url)
+    print(f"Strata model manager: {url}  |  stop with: aibox stop")
+    print("Choose/download a model in Models. Nothing is loaded automatically by aibox.")
+    if not no_open:
+        try:
+            result = subprocess.run(["xdg-open", url], check=False, timeout=10,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if result.returncode:
+                print("Browser could not be opened automatically; open the URL above.")
+        except (OSError, subprocess.TimeoutExpired):
+            print("Browser could not be opened automatically; open the URL above.")
+
+
 def agent_args(cfg, project, command):
     path = safe_directory(project, workspace=True, model=cfg["modelDirectory"])
+    manager = Path(cfg["modelDirectory"]).expanduser().resolve().parent / "manager"
+    if path.is_relative_to(manager) or manager.is_relative_to(path):
+        raise ValueError("Workspace and manager state directory must not overlap")
     args = base_run() + ["--rm", "--interactive",
             "--userns=keep-id:uid=1000,gid=1000", "--user=1000:1000",
             "--mount", f"type=bind,src={path},target=/work,bind-nonrecursive",
@@ -169,6 +293,10 @@ def main():
     p.add_argument("--agent-only", action="store_true")
     sub.add_parser("doctor", help="Run Strata's GPU device probe without a model")
     sub.add_parser("smoke", help="Start the real API in mock mode, without GPU or model")
+    sub.add_parser("prepare-ui", help="Build the full model manager on the prepared HIP image, no models")
+    p = sub.add_parser("ui", help="Open Strata's full model manager on localhost")
+    p.add_argument("--port", type=int, default=8766)
+    p.add_argument("--no-open", action="store_true", help="Print the address without launching a browser")
     for name in ("start", "stop", "status", "logs"):
         sub.add_parser(name)
     p = sub.add_parser("shell", help="Open offline coding shell sharing only PROJECT")
@@ -182,6 +310,8 @@ def main():
     cfg = load_config()
     if args.action == "prepare":
         prepare(cfg, args.agent_only)
+    elif args.action == "prepare-ui":
+        prepare_ui(cfg)
     elif args.action == "doctor":
         ensure_image(image_name(cfg))
         # Probe has no network and no host file mounts.
@@ -192,6 +322,8 @@ def main():
             *gpu_args(cfg), image_name(cfg), "devices")
     elif args.action in ("start", "smoke"):
         start(cfg, smoke=args.action == "smoke")
+    elif args.action == "ui":
+        ui(cfg, port=args.port, no_open=args.no_open)
     elif args.action in ("shell", "exec"):
         ensure_image(os.environ["AIBOX_AGENT_IMAGE"])
         ensure_network()
@@ -204,7 +336,7 @@ def main():
         return result.returncode
     elif args.action == "stop":
         if owned_server():
-            run("stop", "--time=20", SERVER)
+            run("stop", "--time=60", SERVER)
     elif args.action == "logs":
         if not owned_server():
             raise ValueError("Inference has not been started")
@@ -214,6 +346,7 @@ def main():
         print(json.dumps({"inference": data.get("State") if data else None,
                           "image_prepared": exists("image", image_name(cfg)),
                           "model_config_present": (Path(cfg["modelDirectory"]).expanduser() / "server.json").is_file(),
+                          "ui": ui_binding(data) if data else None,
                           "api": "http://strata:8080/v1 (container network only)"}, indent=2))
     return 0
 

@@ -1,0 +1,30 @@
+# Full upstream React UI + Node host + Control, layered on the prepared HIP image.
+# No model acquisition, no second GPU compilation.
+ARG ENGINE_IMAGE
+FROM ${ENGINE_IMAGE} AS engine
+FROM docker.io/library/node:24.19.0-bookworm-slim AS web
+COPY --from=engine /opt/strata/apps/host /app
+WORKDIR /app
+RUN npm ci --ignore-scripts --no-audit --no-fund && npm run build
+FROM engine
+ARG GPU_ARCH=gfx1030
+COPY --from=web /usr/local/bin/node /usr/local/bin/node
+COPY --from=web /app/dist /opt/strata/apps/host/dist
+COPY manager-bundle.py /opt/aibox-manager-bundle.py
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /opt/venv /opt/strata/python \
+    && /opt/venv/bin/python3 /opt/aibox-manager-bundle.py ${GPU_ARCH} \
+    && node --version
+ENV HOME=/state/home XDG_DATA_HOME=/state/data XDG_STATE_HOME=/state/state \
+    XDG_CONFIG_HOME=/state/config XDG_CACHE_HOME=/state/cache \
+    STRATA_HOME=/state/app STRATA_WORKSPACE=/state/workspace \
+    STRATA_MODELS_DIR=/models STRATA_INSTALL_DIR=/state/install \
+    STRATA_COMPONENTS_DIR=/state/components STRATA_RUNTIME_DIR=/tmp/strata-runtime \
+    STRATA_CONTROL_DIR=/opt/strata STRATA_PYTHON=/opt/venv/bin/python3 \
+    STRATA_ENGINE_BUNDLE_DIR=/opt/aibox-engine-bundle STRATA_ENGINE_BACKEND=hip \
+    STRATA_PACKAGED=1 STRATA_APP_VERSION=0.2.2 \
+    STRATA_REAL_ENGINE=1 STRATA_BIND=0.0.0.0 STRATA_PORT=8080
+WORKDIR /opt/strata/apps/host
+ENTRYPOINT ["/usr/local/bin/node", "server/index.mjs", "--dist", "dist"]
+CMD []

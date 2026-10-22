@@ -21,7 +21,9 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Controller boundary tests
-        run: python3 tests/aibox_test.py
+        run: |
+          python3 tests/aibox_test.py
+          python3 tests/aibox_ui_test.py
       - name: Build packaged CLI and coding image, without models
         run: |
           nix build --no-write-lock-file --no-link .#aibox .#aibox-agent-image
@@ -67,7 +69,7 @@ jobs:
 
   strata-hip-build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - name: Build the pinned gfx1030 engine, no GPU and no model download
@@ -85,6 +87,27 @@ jobs:
           curl --fail --silent http://127.0.0.1:18080/v1/responses \
             -H 'Content-Type: application/json' \
             -d '{"model":"local","input":"hello","stream":false}' | python3 -m json.tool
+      - name: Build the full Strata model manager without model weights
+        run: |
+          docker build --tag nx-ai-manager-ci --file pkgs/aibox/ManagerContainerfile \
+            --build-arg ENGINE_IMAGE=nx-ai-strata-ci --build-arg GPU_ARCH=gfx1030 pkgs/aibox
+      - name: Real full app, Control and catalog, without a GPU or model
+        run: |
+          docker run --detach --name strata-manager-ci --read-only --cap-drop=ALL \
+            --security-opt=no-new-privileges --user=1000:1000 \
+            --tmpfs /tmp:rw,mode=1777 --tmpfs /state:rw,mode=1777 --tmpfs /models:rw,mode=1777 \
+            --publish 127.0.0.1:18766:8080 nx-ai-manager-ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18766/api/health; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18766/ | grep 'type="module"'
+          curl --fail --silent http://127.0.0.1:18766/api/control/status | jq -e '.control.dir == "/opt/strata"'
+          curl --fail --silent http://127.0.0.1:18766/api/native | jq -e '.available and .packaged and (.catalog.families | length > 0) and (.instances | length == 0)'
+          docker exec strata-manager-ci sh -c 'test -z "$(find /models -type f -name "*.gguf" -print -quit)"'
+      - name: Manager logs
+        if: always()
+        run: docker logs strata-manager-ci || true
       - name: Container logs
         if: always()
         run: docker logs strata-ci || true

@@ -47,10 +47,13 @@ let
     mkdir -p $out
     cp ${./Containerfile} $out/Containerfile
     cp ${./entrypoint.py} $out/entrypoint.py
+    cp ${./ManagerContainerfile} $out/ManagerContainerfile
+    cp ${./manager-bundle.py} $out/manager-bundle.py
   '';
   aibox = pkgs.writeShellApplication {
     name = "aibox";
-    runtimeInputs = [ pkgs.python3 pkgs.podman pkgs.crun ];
+    inheritPath = true;
+    runtimeInputs = [ pkgs.python3 pkgs.podman pkgs.crun pkgs.xdg-utils ];
     text = ''
       export AIBOX_AGENT_ARCHIVE=${agentImage}
       export AIBOX_AGENT_IMAGE=${lib.escapeShellArg "${agentImage.imageName}:${agentImage.imageTag}"}

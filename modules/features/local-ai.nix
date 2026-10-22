@@ -20,7 +20,7 @@ in
       type = lib.types.str;
       default = "/home/${config.my.user}/.local/share/nx-ai/models";
       defaultText = lib.literalExpression ''"/home/''${config.my.user}/.local/share/nx-ai/models"'';
-      description = "Manually populated model directory, mounted read-only. Nothing is downloaded or started by activation.";
+      description = "Model storage: read-only for aibox start, writable for the explicit full model manager. Nothing is downloaded or started by activation.";
     };
     hipBaseImage = lib.mkOption {
       type = lib.types.str;

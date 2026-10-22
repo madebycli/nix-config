@@ -41,6 +41,72 @@ into the project automatically. Codex is configured for Strata's Responses API;
 real model-specific tool loops still require acceptance with the eventual model.
 `aibox shell` alone does not start inference or make Codex functional without a model.
 
+## Full Strata model manager
+
+The full upstream React app and Node host include Strata Control: model catalog,
+explicit downloads/repair/removal, load/unload, settings, monitoring and chat.
+This is the full `apps/host` application, not `serve/web`'s chat-only UI.
+
+After `nx pull` and `nx switch`, using your already prepared HIP runtime:
+
+```bash
+aibox stop
+aibox prepare-ui        # build full app layer; no HIP recompile or model weights
+aibox ui                # opens http://127.0.0.1:8766
+```
+
+`prepare-ui` reuses the existing engine image and builds the pinned app's frontend
+with Node 24.19.0 and its npm lockfile. It downloads web/build dependencies, not
+model weights. If the underlying runtime is missing, run `aibox prepare` first.
+`ui` never implicitly builds or pulls images. The original runtime image identity
+is unchanged by this addition, so its successful HIP build stays reusable.
+
+Open **Models** to choose a supported model and explicitly download it. Load it
+when ready, adjust its settings and use chat. No `server.json` is needed for this
+workflow. Opening the manager itself neither selects nor loads a model; the
+upstream app may read hardware/state or check component updates. A model download
+job can also update the engine through upstream's component updater. Strata
+Control uses the existing local gfx1030 engine as an unsigned local component;
+its ROCm libraries stay in the parent image. It is not a standalone upstream
+engine release. The existing image does not contain a vision-reader executable.
+
+The configured `modelDirectory` is writable **only for the manager**; upstream
+may keep weights under its `models/` subdirectory. App settings, generated run
+configs, components and the app's private workspace persist in a sibling
+`manager/` directory. `aibox stop` preserves all of these. Select `/models` inside
+the UI for the mounted model storage, not your host's `/home/...` path. Arbitrary
+host folders are unavailable. The app's own workspace lives under `/state`; use
+`aibox shell PROJECT` for your explicitly shared coding project.
+
+Only **127.0.0.1:8766** is published. The manager also joins a separate outbound
+container network for explicit downloads and optional online app features. The
+coding container remains attached only to the internal network. The manager has
+GPU access, its model folder and its own state, with no host home/store/socket
+mount. Its management API is reachable by the coding container on the private
+network, so treat those containers as one trust domain for model management.
+
+```bash
+aibox ui --no-open       # print the address without launching the browser
+aibox ui --port 8767     # another unprivileged local port
+aibox status
+aibox logs
+aibox stop              # stop manager and its inference children
+```
+
+The command waits for the full host's `/api/health` endpoint. It refuses to
+replace a running private `start`/`smoke` server; stop that first. Browser closure
+does not stop the manager. The API remains `http://strata:8080/v1` inside aibox.
+For Codex, use the loaded model's exact API model ID (`codex -m MODEL_ID`) or give
+it the alias `local` in Strata. If you enable an API key in Strata, clients must
+supply that key themselves; the wrapper does not read your saved app secrets.
+End-to-end coding/tool loops require acceptance with the actual chosen model.
+
+## Private manual server
+
+`aibox start` continues to use read-only models and a manually supplied
+`server.json`, without any host-published port. `aibox smoke` is still a mock API
+connectivity test; its `loaded: true` response does not mean weights are loaded.
+
 ## Model-free tests
 
 If preparation stopped at `find_package(hip)` with `hipConfig.cmake` not found,
@@ -74,20 +140,23 @@ as a successful GPU run.
 
 - Rootless Podman runs as your normal user, never with sudo or a Docker group.
   The CLI refuses root. No privileged service or container API socket is enabled.
-- Inference receives GPU devices and, later, a dedicated model folder read-only.
+- The private `start` server receives GPU devices and a dedicated model folder read-only.
+  The explicit full manager gets writable model/state folders as described above.
   It receives no workspace, home, host store, SSH agent or graphical sockets.
 - Coding receives **one explicitly selected, user-owned project directory** as
-  `/work`. Root/home/system paths and overlap with models are rejected. Nested
+  `/work`. Root/home/system paths and overlap with models or manager state are rejected. Nested
   host mounts are excluded. No GPU devices, host credentials, runtime sockets or
   full host `/nix/store` are bound. The image contains its own Nix tool closure.
 - Both runtimes have read-only roots, dropped capabilities, no new privileges,
   private PID/IPC namespaces and the default seccomp policy. No unconfined
   seccomp, host network, host IPC, memory locking bypass or device cgroup bypass.
 - An internal, labelled container network connects coding to `strata:8080`.
-  No host/LAN port is published. The controller verifies an existing network's
+  No host port is published in the default CLI profile. Explicit `aibox ui`
+  publishes the UI/API on 127.0.0.1 only; no LAN port is published. The controller verifies an existing network's
   internal policy. Proxy variables from the host are not inherited.
-- This initial profile is **offline**. Internet package installation and cloud
-  Claude/Codex providers do not work inside it. No implicit online mode is added.
+- The coding profile is **offline**. Internet package installation and cloud
+  Claude/Codex providers do not work directly inside it. The manager has outbound
+  access, and its upstream integrations can access the internet.
   Add dependencies declaratively through `agentExtraPackages` and rebuild.
 - Container isolation shares the host kernel and GPU driver. It is not an
   absolute boundary against kernel/driver exploits. Unlike the stronger
@@ -95,7 +164,7 @@ as a successful GPU run.
   normal rootless account; a container escape could reach that account's files.
   Files already inside the selected project are available to the agent.
 
-There is no autostart, no published API, no CPU quota and no arbitrary RAM limit.
+There is no autostart, no LAN-published API, no CPU quota and no arbitrary RAM limit.
 Heavy inference can still compete with the desktop for RAM and GPU resources;
 `aibox stop` stops inference and releases its resources. No model or project is
 deleted by stop. Project compiler caches can be placed inside the project.
@@ -128,7 +197,8 @@ prunes user images or Nix generations.
 
 ## Supplying a model later
 
-No `server.json` or model directory is created automatically. When a model
+For the private manual `aibox start` path, no `server.json` is created automatically.
+The full manager creates its storage directory on explicit startup. When a model
 has been selected and prepared, place its files in `modelDirectory` and add a
 `server.json` with only `args`, `tokenizer` and `model_name`. All paths must
 refer to their **container** locations under `/models`, not host paths.
@@ -156,7 +226,10 @@ promise follows merely from API routes existing.
 
 `python3 tests/aibox_test.py` covers argument boundaries, forbidden host mounts,
 root refusal, internal-network validation, model-free behavior and workspace
-selection. The dedicated Local AI workflow is configured to build the actual HIP
+selection. `python3 tests/aibox_ui_test.py` checks full-manager lifecycle, loopback
+publication and persistent-folder boundaries. The dedicated Local AI workflow is
+configured to build the full app layer and probe its real Control/catalog endpoints
+without downloading weights, build the actual HIP
 engine for gfx1030 without a GPU, exercise the real API's mock mode and check a
 real rootless coding container. A workflow file alone is not evidence of a
 successful run. These checks do not replace nyx `aibox doctor`,
