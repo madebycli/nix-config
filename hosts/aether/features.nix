@@ -20,4 +20,6 @@
   # my.features.agentbox.sshKeys = [ "ssh-ed25519 AAAA... you@host" ];
 
   my.features.ai.enable = false;
+  # Opt-in; adjust gpuArch/renderDevice for this machine before use.
+  my.features.local-ai.enable = false;
 }

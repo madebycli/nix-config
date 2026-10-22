@@ -1,0 +1,27 @@
+# Engine and runtime only. Never invoke upstream setup/download/model acquisition.
+ARG BASE=docker.io/rocm/dev-ubuntu-24.04:7.2.3-complete
+FROM ${BASE}
+ARG GPU_ARCH=gfx1030
+ARG BUILD_JOBS=2
+ARG STRATA_REV=011c9e600a93bbc9fd451c563501b5831c32bbca
+ENV DEBIAN_FRONTEND=noninteractive PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake ninja-build git ca-certificates python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+RUN git init /opt/strata && cd /opt/strata \
+    && git remote add origin https://github.com/Niko1221/Strata.git \
+    && git fetch --depth 1 origin ${STRATA_REV} && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${STRATA_REV}"
+RUN cmake -S /opt/strata -B /opt/strata/build-hip -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release -DSTRATA_ENABLE_HIP=ON -DSTRATA_ENABLE_CUDA=OFF \
+      -DCMAKE_HIP_ARCHITECTURES=${GPU_ARCH} -DSTRATA_PORTABLE=ON \
+      -DSTRATA_BUILD_TESTS=OFF \
+    && cmake --build /opt/strata/build-hip --target strata strata-device -j${BUILD_JOBS}
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir -r /opt/strata/requirements.txt
+COPY entrypoint.py /opt/aibox-entrypoint.py
+ENV PATH=/opt/venv/bin:/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    HOME=/tmp/aibox PYTHONPATH=/opt/strata STRATA_ALLOWED_HOSTS=strata,localhost
+WORKDIR /opt/strata
+ENTRYPOINT ["/opt/venv/bin/python3", "/opt/aibox-entrypoint.py"]
+CMD ["devices"]

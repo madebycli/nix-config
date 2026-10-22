@@ -62,6 +62,7 @@
             sshKeys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMM ci" ];
           };
           ai.enable = lib.mkForce true;
+          local-ai.enable = lib.mkForce true;
         };
       };
 
@@ -77,6 +78,8 @@
       agentbox = pkgs.callPackage ./pkgs/agentbox { };
       nixctl = pkgs.callPackage ./pkgs/nixctl { };
       nx = pkgs.callPackage ./pkgs/nx { };
+      aiboxPackages = import ./pkgs/aibox { inherit pkgs lib; };
+      inherit (aiboxPackages) aibox;
     in
     {
       nixosConfigurations =
@@ -87,14 +90,15 @@
           (name: mkHost (lib.removeSuffix "-full" (lib.removePrefix "ci-" name)) [ ciStub ciFull ]);
 
       packages.${system} = tools // {
-        inherit dots agentbox nixctl nx;
+        inherit dots agentbox nixctl nx aibox;
+        aibox-agent-image = aiboxPackages.agentImage;
         install = tools.nixos-config-install;
       };
 
       apps.${system} =
         lib.mapAttrs
           (name: pkg: { type = "app"; program = lib.getExe pkg; })
-          (tools // { inherit dots agentbox nixctl nx; })
+          (tools // { inherit dots agentbox nixctl nx aibox; })
         // {
           install = { type = "app"; program = lib.getExe tools.nixos-config-install; };
         };

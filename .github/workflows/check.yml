@@ -125,6 +125,9 @@ jobs:
       - name: nx unit tests
         run: python3 tests/nx_test.py
 
+      - name: Local AI container boundaries without models
+        run: python3 tests/aibox_test.py
+
       - name: nx debug bounds, redaction and read-only reports
         run: python3 tests/nx_debug_test.py
 

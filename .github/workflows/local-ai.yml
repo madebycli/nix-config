@@ -1,0 +1,90 @@
+name: Local AI without models
+
+on:
+  push:
+    branches: [main]
+    paths: ['pkgs/aibox/**', 'modules/features/local-ai.nix', 'tests/aibox*', '.github/workflows/local-ai.yml', 'flake.nix', 'flake.lock']
+  pull_request:
+    paths: ['pkgs/aibox/**', 'modules/features/local-ai.nix', 'tests/aibox*', '.github/workflows/local-ai.yml', 'flake.nix', 'flake.lock']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coding-container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Controller boundary tests
+        run: python3 tests/aibox_test.py
+      - name: Build packaged CLI and coding image, without models
+        run: |
+          nix build --no-write-lock-file --no-link .#aibox .#aibox-agent-image
+          cli="$(nix build --no-write-lock-file --no-link --print-out-paths .#aibox)/bin/aibox"
+          "$cli" --help
+      - name: Install rootless container test prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman crun uidmap
+          # Ubuntu runner policy only; the NixOS module does not change this setting.
+          if test -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Real rootless workspace and offline boundary
+        run: |
+          export AIBOX_AGENT_ARCHIVE="$(nix build --no-write-lock-file --no-link --print-out-paths .#aibox-agent-image)"
+          export AIBOX_AGENT_IMAGE="$(tar -xOf "$AIBOX_AGENT_ARCHIVE" manifest.json | jq -r '.[0].RepoTags[0]')"
+          export AIBOX_CONFIG="$RUNNER_TEMP/aibox.json"
+          export PATH=/usr/bin:/bin
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path(os.environ['AIBOX_CONFIG']).write_text(json.dumps({'modelDirectory': os.environ['RUNNER_TEMP'] + '/models'}))
+          PY
+          python3 pkgs/aibox/aibox.py prepare --agent-only
+          project="$RUNNER_TEMP/ai-project"
+          mkdir -p "$project"
+          private="$HOME/aibox-private-sentinel"
+          printf 'host only\n' > "$private"
+          python3 pkgs/aibox/aibox.py exec "$project" -- bash -c '
+            set -eu
+            test ! -e "$1"
+            test ! -S /run/podman/podman.sock
+            test ! -e /dev/kfd
+            test ! -e /dev/dri/renderD128
+            test -f "$HOME/.codex/AGENTS.md"
+            codex --version
+            python3 --version
+            printf "project write\n" > /work/result.txt
+            if curl --noproxy "*" --max-time 3 --connect-timeout 2 -s http://1.1.1.1/; then exit 1; fi
+          ' bash "$private"
+          test "$(cat "$project/result.txt")" = 'project write'
+
+  strata-hip-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the pinned gfx1030 engine, no GPU and no model download
+        run: docker build --tag nx-ai-strata-ci --file pkgs/aibox/Containerfile pkgs/aibox
+      - name: Start real Strata API in model-free mock mode
+        run: |
+          docker run --detach --name strata-ci --read-only --cap-drop=ALL \
+            --security-opt=no-new-privileges --user=1000:1000 --tmpfs /tmp:rw,mode=1777 \
+            --publish 127.0.0.1:18080:8080 nx-ai-strata-ci smoke
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/health; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18080/v1/models | python3 -m json.tool
+          curl --fail --silent http://127.0.0.1:18080/v1/responses \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"local","input":"hello","stream":false}' | python3 -m json.tool
+      - name: Container logs
+        if: always()
+        run: docker logs strata-ci || true

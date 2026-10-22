@@ -186,6 +186,12 @@ with `nx debug nix cache repo`. `nx debug --full --json --output ~/nx-debug.json
 saves a detailed report. Unit journals, previous boots and failing store paths
 can be inspected separately. See [diagnostics and report options](UPDATES.md#diagnostics-and-support-reports).
 
+## Optional local coding AI
+
+`my.features.local-ai.enable` adds on-demand rootless Strata HIP and an offline
+workspace coding container. It is disabled on both hosts and includes no models
+or automatic model downloads. See [setup, isolation and model-free tests](docs/LOCAL-AI.md).
+
 ## Layout
 
 ```text
