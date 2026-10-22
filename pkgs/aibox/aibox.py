@@ -161,7 +161,7 @@ exec "$@"
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="aibox", description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
     p = sub.add_parser("prepare", help="Load coding image and explicitly build HIP runtime, no models")
     p.add_argument("--agent-only", action="store_true")

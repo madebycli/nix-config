@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("aibox", ROOT / "pkgs/aibox/aibox.py")
 aibox = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(aibox)
+entry_spec = importlib.util.spec_from_file_location("entrypoint", ROOT / "pkgs/aibox/entrypoint.py")
+entrypoint = importlib.util.module_from_spec(entry_spec)
+entry_spec.loader.exec_module(entrypoint)
 
 
 class ContainerPolicy(unittest.TestCase):
@@ -122,6 +125,27 @@ class ContainerPolicy(unittest.TestCase):
         self.assertNotIn("huggingface", text)
         self.assertIn("-DCMAKE_HIP_ARCHITECTURES=${GPU_ARCH}", text)
         self.assertIn("--target strata strata-device", text)
+
+    def test_mock_api_does_not_open_a_model(self):
+        with patch("sys.argv", ["entrypoint", "smoke"]), patch.object(entrypoint.os, "execv") as execute, patch.object(Path, "read_text") as read:
+            entrypoint.main()
+        read.assert_not_called()
+        self.assertIn("mock", execute.call_args.args[1])
+
+    def test_optional_server_tools_and_executables_are_rejected(self):
+        for extra in ("exe", "cwd", "mcp_servers", "tools", "images", "env"):
+            config = {"args": [], "tokenizer": "/models/tokenizer", extra: "untrusted"}
+            with self.subTest(extra=extra), patch("sys.argv", ["entrypoint", "serve"]), patch.object(Path, "is_file", return_value=True), patch.object(Path, "read_text", return_value=json.dumps(config)), patch.object(entrypoint.os, "execv") as execute:
+                with self.assertRaises(ValueError):
+                    entrypoint.main()
+                execute.assert_not_called()
+
+    def test_tokenizer_must_be_within_model_mount(self):
+        for tokenizer in ("/home/user/tokenizer", "relative", "/models/../etc"):
+            config = {"args": [], "tokenizer": tokenizer}
+            with self.subTest(tokenizer=tokenizer), patch("sys.argv", ["entrypoint", "serve"]), patch.object(Path, "is_file", return_value=True), patch.object(Path, "read_text", return_value=json.dumps(config)):
+                with self.assertRaises(ValueError):
+                    entrypoint.main()
 
 
 if __name__ == "__main__":

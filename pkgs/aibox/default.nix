@@ -4,8 +4,22 @@ let
   skills = pkgs.writeTextDir "share/aibox/SKILLS.md" (builtins.readFile ./SKILLS.md);
   agentRoot = pkgs.buildEnv {
     name = "aibox-agent-root";
-    paths = with pkgs; [ bashInteractive coreutils gitMinimal curl cacert jq python3 nodejs
-      ripgrep fd gnumake gcc codex skills ] ++ agentExtraPackages;
+    paths = with pkgs; [
+      bashInteractive
+      coreutils
+      gitMinimal
+      curl
+      cacert
+      jq
+      python3
+      nodejs
+      ripgrep
+      fd
+      gnumake
+      gcc
+      codex
+      skills
+    ] ++ agentExtraPackages;
     pathsToLink = [ "/bin" "/share" "/etc" ];
   };
   agentImage = pkgs.dockerTools.buildLayeredImage {
@@ -20,9 +34,13 @@ let
     config = {
       Cmd = [ "/bin/bash" ];
       WorkingDir = "/work";
-      Env = [ "PATH=/bin" "HOME=/home/agent" "LANG=C.UTF-8"
+      Env = [
+        "PATH=/bin"
+        "HOME=/home/agent"
+        "LANG=C.UTF-8"
         "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
-        "CURL_CA_BUNDLE=/etc/ssl/certs/ca-bundle.crt" ];
+        "CURL_CA_BUNDLE=/etc/ssl/certs/ca-bundle.crt"
+      ];
     };
   };
   support = pkgs.runCommand "aibox-support" { } ''
@@ -41,4 +59,5 @@ let
     '';
     meta.mainProgram = "aibox";
   };
-in { inherit aibox agentImage; }
+in
+{ inherit aibox agentImage; }

@@ -42,6 +42,27 @@ jobs:
               | jq -e '.substitute != false and .substituters == ["https://cache.nixos.org/"] and .fallback != true and .["require-sigs"] != false' >/dev/null
           done
 
+      - name: Local AI stays opt-in and does not add a model service
+        run: |
+          nix eval --impure --json --expr '
+            let
+              f = builtins.getFlake (toString ./.);
+              valid = host:
+                let
+                  normal = f.nixosConfigurations."ci-${host}".config;
+                  full = f.nixosConfigurations."ci-${host}-full".config;
+                in
+                  !normal.my.features.local-ai.enable
+                  && full.my.features.local-ai.enable
+                  && full.virtualisation.podman.enable
+                  && !full.virtualisation.podman.dockerCompat
+                  && !full.systemd.sockets.podman.enable
+                  && !full.systemd.user.sockets.podman.enable
+                  && full.my.features.local-ai.gpuArch == "gfx1030"
+                  && !(builtins.hasAttr "aibox" full.systemd.services);
+            in builtins.all valid [ "nyx" "aether" ]
+          ' | jq -e '. == true'
+
       - name: Both hosts select the standard Nixpkgs kernel
         run: |
           for host in ci-nyx ci-aether; do

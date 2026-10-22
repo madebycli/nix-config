@@ -2,7 +2,8 @@
 let
   cfg = config.my.features.local-ai;
   packages = import ../../pkgs/aibox { inherit pkgs lib; inherit (cfg) agentExtraPackages; };
-in {
+in
+{
   options.my.features.local-ai = {
     enable = lib.mkEnableOption "on-demand rootless Strata HIP and workspace coding containers, without models";
     gpuArch = lib.mkOption {
@@ -48,6 +49,12 @@ in {
       extraGroups = [ "render" "video" ];
     };
     environment.systemPackages = [ packages.aibox ];
+    # Podman's NixOS module normally enables both API sockets. This controller
+    # uses the local CLI only and must not activate a rootful or user API service.
+    systemd.sockets.podman.enable = false;
+    systemd.services.podman.enable = false;
+    systemd.user.sockets.podman.enable = false;
+    systemd.user.services.podman.enable = false;
     environment.etc."aibox.json".text = builtins.toJSON {
       inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs;
     };

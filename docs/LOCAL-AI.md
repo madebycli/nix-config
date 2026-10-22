@@ -141,7 +141,8 @@ promise follows merely from API routes existing.
 
 `python3 tests/aibox_test.py` covers argument boundaries, forbidden host mounts,
 root refusal, internal-network validation, model-free behavior and workspace
-selection. The dedicated Local AI workflow builds the actual HIP engine for
-gfx1030 without a GPU, exercises the real API's mock mode and checks a real
-rootless coding container. These checks do not replace nyx `aibox doctor`,
+selection. The dedicated Local AI workflow is configured to build the actual HIP
+engine for gfx1030 without a GPU, exercise the real API's mock mode and check a
+real rootless coding container. A workflow file alone is not evidence of a
+successful run. These checks do not replace nyx `aibox doctor`,
 real inference, memory-pressure measurement or complete client tool-loop tests.
