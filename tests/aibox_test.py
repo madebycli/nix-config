@@ -4,6 +4,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch, Mock
@@ -49,6 +51,36 @@ class ContainerPolicy(unittest.TestCase):
         args = aibox.agent_args(self.cfg, self.project, command)
         self.assertEqual(args[-3:], command)
         self.assertNotIn("--env-host", args)
+
+    def test_private_home_bootstrap_is_writable_and_does_not_share_state(self):
+        # Execute the real bootstrap without namespaces; only the image's skill
+        # file is replaced by a fixture. All generated homes stay inside the test.
+        skill = self.root / "SKILLS.md"
+        skill.write_text("fixture workflow")
+        args = aibox.agent_args(self.cfg, self.project, ["true"])
+        bootstrap = args[args.index("-c") + 1].replace("/share/aibox/SKILLS.md", str(skill))
+        probe = '''import json, os, stat
+from pathlib import Path
+p = Path.home()
+(p / "writable").write_text("ok")
+print(json.dumps({"home": str(p), "mode": stat.S_IMODE(p.stat().st_mode),
+"uid": p.stat().st_uid, "skills": (p / ".codex/AGENTS.md").read_text(),
+"config_mode": stat.S_IMODE((p / ".codex/config.toml").stat().st_mode)}))
+'''
+        homes = []
+        for _ in range(2):
+            result = subprocess.run(["bash", "-e", "-c", bootstrap, "aibox", sys.executable, "-c", probe],
+                                    env={**os.environ, "TMPDIR": str(self.root)},
+                                    capture_output=True, text=True, check=True)
+            data = json.loads(result.stdout)
+            self.assertEqual(data["mode"], 0o700)
+            self.assertEqual(data["config_mode"], 0o600)
+            self.assertEqual(data["uid"], os.getuid())
+            self.assertEqual(data["skills"], "fixture workflow")
+            self.assertTrue(Path(data["home"]).is_relative_to(self.root))
+            homes.append(data["home"])
+        self.assertNotEqual(*homes)
+        self.assertFalse(any(x.startswith("--tmpfs=") and ("uid=" in x or "gid=" in x) for x in args))
 
     def test_home_root_and_system_directories_are_rejected(self):
         for path in (Path.home(), "/", "/etc", "/nix" if Path("/nix").exists() else "/proc", "/run"):

@@ -34,7 +34,9 @@ runtime image when starting inference or opening a workspace.
 
 The shell already contains Codex, Git, Python, Node.js, GCC, Make, curl, jq,
 ripgrep and a planning/testing workflow in `$HOME/.codex/AGENTS.md`.
-Its writable home is temporary; project changes persist. Nothing is installed
+Its writable home is a private mode-0700 directory created by the container user
+inside the existing `/tmp` tmpfs; it is temporary and project changes persist.
+No Docker-specific `uid=`/`gid=` tmpfs options are needed. Nothing is installed
 into the project automatically. Codex is configured for Strata's Responses API;
 real model-specific tool loops still require acceptance with the eventual model.
 `aibox shell` alone does not start inference or make Codex functional without a model.
@@ -47,6 +49,12 @@ Containerfile explicitly supplies `/opt/rocm` as `CMAKE_PREFIX_PATH`, so CMake
 can find the SDK's HIP/BLAS package metadata as well as its compiler. Existing
 Podman images/caches do not need to be deleted. This corrects package discovery;
 it is not proof that subsequent compilation or GPU inference succeeds.
+
+If `aibox exec` or `shell` failed with `unknown mount option "uid=1000"`,
+update with `nx pull` and `nx switch`. The controller now creates its private
+temporary home inside `/tmp` instead of requesting an unsupported tmpfs owner
+option. The images and Strata engine are unchanged, so `aibox prepare` is not
+required solely for this controller fix.
 
 ```bash
 aibox smoke             # real API with mock answers, not an AI model

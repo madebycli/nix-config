@@ -138,14 +138,16 @@ def agent_args(cfg, project, command):
     path = safe_directory(project, workspace=True, model=cfg["modelDirectory"])
     args = base_run() + ["--rm", "--interactive",
             "--userns=keep-id:uid=1000,gid=1000", "--user=1000:1000",
-            "--tmpfs=/home/agent:rw,nosuid,nodev,uid=1000,gid=1000,mode=0700",
             "--mount", f"type=bind,src={path},target=/work,bind-nonrecursive",
             "--workdir=/work", "--env=OPENAI_BASE_URL=http://strata:8080/v1",
             "--env=OPENAI_API_KEY=local-only"]
     if sys.stdin.isatty() and sys.stdout.isatty():
         args += ["--tty"]
     # The shell is inside the container. No host command string is evaluated.
-    bootstrap = '''mkdir -p "$HOME/.codex"
+    bootstrap = '''umask 077
+export HOME
+HOME="$(mktemp -d "${TMPDIR:-/tmp}/aibox-home.XXXXXXXX")"
+mkdir -p "$HOME/.codex"
 cp /share/aibox/SKILLS.md "$HOME/.codex/AGENTS.md"
 cat > "$HOME/.codex/config.toml" <<'TOML'
 model_provider = "strata"
@@ -157,7 +159,7 @@ wire_api = "responses"
 TOML
 exec "$@"
 '''
-    return args + [os.environ["AIBOX_AGENT_IMAGE"], "/bin/bash", "-c", bootstrap, "aibox", *command]
+    return args + [os.environ["AIBOX_AGENT_IMAGE"], "/bin/bash", "-e", "-c", bootstrap, "aibox", *command]
 
 
 def main():
