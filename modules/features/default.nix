@@ -6,6 +6,7 @@
     ./local-ai.nix
     ./dots.nix
     ./gaming.nix
+    ./virtualisation.nix
     ./plymouth.nix
   ];
 }

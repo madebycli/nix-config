@@ -42,6 +42,10 @@ jobs:
               | jq -e '.substitute != false and .substituters == ["https://cache.nixos.org/"] and .fallback != true and .["require-sigs"] != false' >/dev/null
           done
 
+      - name: Virtualisation toggles the complete VM stack for AMD and Intel
+        run: |
+          nix eval --impure --json --file tests/virtualisation.nix | jq -e 'all(.[]; . == true)'
+
       - name: Local AI stays opt-in and does not add a model service
         run: |
           nix eval --impure --json --expr '

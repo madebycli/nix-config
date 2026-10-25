@@ -27,6 +27,7 @@
     ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/scheduler}="mq-deadline"
   '';
 
+  my.features.virtualisation.cpuVendor = "intel";
   hardware.cpu.intel.updateMicrocode = true;
   services.thermald.enable = true;
 

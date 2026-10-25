@@ -11,6 +11,7 @@
   my.features.dots.enable = true;
   my.features.flatpak.enable = true;
   my.features.gaming.enable = true;
+  my.features.virtualisation.enable = true;
 
   my.features.plymouth.enable = true;
   my.features.plymouth.theme = "zoot"; # Arknights-style terminal; live switch: sudo plmf theme set <name>

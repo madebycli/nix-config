@@ -21,6 +21,7 @@
     ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/scheduler}="mq-deadline"
   '';
 
+  my.features.virtualisation.cpuVendor = "amd";
   hardware.cpu.amd.updateMicrocode = true;
 
   my.features.ai.acceleration = "rocm";

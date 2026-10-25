@@ -61,6 +61,7 @@
             enable = lib.mkForce true;
             sshKeys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUMM ci" ];
           };
+          virtualisation.enable = lib.mkForce true;
           ai.enable = lib.mkForce true;
           local-ai.enable = lib.mkForce true;
         };
