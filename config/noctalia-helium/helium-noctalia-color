@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Apply Noctalia's current color once while Helium is closed."""
+import json
+import os
+from pathlib import Path
+import stat
+import sys
+import tempfile
+
+
+def main():
+    if len(sys.argv) > 1:
+        print('Aufruf: helium-noctalia-color\nHelium vorher vollständig schließen. Die Farbe stammt vom aktiven Noctalia-Plugin.')
+        return 0 if sys.argv[1:] in (['--help'], ['-h']) else 2
+    home = Path.home()
+    data_root = Path(os.environ.get('XDG_CONFIG_HOME', home / '.config')) / 'net.imput.helium'
+    data = Path(os.environ.get('XDG_DATA_HOME', home / '.local/share')) / 'noctalia/helium-wallpaper'
+    lock = data_root / 'SingletonLock'
+    prefs = data_root / 'Default/Preferences'
+    if os.path.lexists(lock):
+        print('Helium ist möglicherweise noch geöffnet. Bitte vollständig schließen.', file=sys.stderr)
+        return 1
+    state = json.loads((data / 'current.json').read_text())
+    color = state['color']
+    if not isinstance(color, str) or len(color) != 7 or not color.startswith('#'):
+        raise ValueError('Ungültige Noctalia-Farbe')
+    rgb = int(color[1:], 16)
+    raw = prefs.read_bytes()
+    settings = json.loads(raw)
+    current_theme = settings.get('extensions', {}).get('theme', {}).get('id', '')
+    if current_theme not in ('', 'user_color_theme_id'):
+        print('Ein anderes Browser-Theme ist aktiv. Bitte zuerst eine eigene Farbe in Helium wählen.', file=sys.stderr)
+        return 1
+    theme = settings.setdefault('browser', {}).setdefault('theme', {})
+    theme['user_color2'] = (0xff000000 | rgb) - 2**32
+    theme['color_variant2'] = 1
+    theme['is_grayscale2'] = False
+    theme['follows_system_colors'] = False
+    settings.setdefault('extensions', {}).setdefault('theme', {})['id'] = 'user_color_theme_id'
+    if state.get('auto_wallpaper'):
+        if not (data_root / 'Default/background.jpg').is_file():
+            raise ValueError('Synchronisiertes Helium-Wallpaper fehlt; bitte Plugin prüfen')
+        ntp = settings.setdefault('ntp', {})
+        ntp['custom_background_local_to_device'] = True
+        ntp['custom_background_inspiration'] = False
+        ntp.pop('custom_background_local_to_device_id', None)
+    fd, tmp = tempfile.mkstemp(prefix='.noctalia-color-', dir=prefs.parent)
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(settings, f, ensure_ascii=False, separators=(',', ':')); f.flush(); os.fsync(f.fileno())
+        os.chmod(tmp, stat.S_IMODE(prefs.stat().st_mode))
+        if os.path.lexists(lock) or prefs.read_bytes() != raw:
+            print('Helium-Profil ist inzwischen aktiv oder wurde geändert; keine Änderung vorgenommen.', file=sys.stderr)
+            return 1
+        os.replace(tmp, prefs)
+    finally:
+        if os.path.exists(tmp): os.unlink(tmp)
+    print(f'Noctalia-Farbe {color} gesetzt' + ('; Wallpaper aktiviert.' if state.get('auto_wallpaper') else '.') + ' Helium kann jetzt gestartet werden.')
+    return 0
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        print('Farbe konnte nicht gesetzt werden. Ist das Noctalia-Plugin aktiv?', exc, file=sys.stderr)
+        sys.exit(1)

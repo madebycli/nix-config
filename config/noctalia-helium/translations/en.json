@@ -1,0 +1,12 @@
+{
+  "wallpaper": "Automatically export wallpaper",
+  "folder": "Output folder",
+  "folder_desc": "The file is named noctalia-wallpaper.jpg and can be selected in Helium.",
+  "monitor": "Wallpaper monitor",
+  "monitor_desc": "Connector name, e.g. DP-3. Empty uses the first display.",
+  "blur": "Gaussian blur",
+  "radius": "Blur strength (pixels)",
+  "grain": "Film grain strength",
+  "auto_wallpaper": "Automatically sync wallpaper to Helium",
+  "auto_wallpaper_desc": "Updates the local background; activate it first using helium-noctalia-color while Helium is closed."
+}

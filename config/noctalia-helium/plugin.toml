@@ -1,0 +1,60 @@
+id = "local/helium-theme"
+name = "Wallpaper für Helium"
+version = "2.0.0"
+plugin_api = 31
+author = "local"
+description = "Erstellt ein bearbeitetes Noctalia-Wallpaper zur manuellen Auswahl im Browser."
+icon = "photo"
+
+[[setting]]
+key = "wallpaper"
+type = "bool"
+label_key = "wallpaper"
+default = true
+
+[[setting]]
+key = "auto_wallpaper"
+type = "bool"
+label_key = "auto_wallpaper"
+description_key = "auto_wallpaper_desc"
+default = true
+
+[[setting]]
+key = "folder"
+type = "folder"
+label_key = "folder"
+description_key = "folder_desc"
+default = "~/Bilder/Noctalia-Helium"
+
+[[setting]]
+key = "monitor"
+type = "string"
+label_key = "monitor"
+description_key = "monitor_desc"
+default = ""
+
+[[setting]]
+key = "blur"
+type = "bool"
+label_key = "blur"
+default = false
+
+[[setting]]
+key = "radius"
+type = "int"
+label_key = "radius"
+min = 0
+max = 50
+default = 12
+
+[[setting]]
+key = "grain"
+type = "int"
+label_key = "grain"
+min = 0
+max = 40
+default = 0
+
+[[service]]
+id = "sync"
+entry = "service.luau"

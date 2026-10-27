@@ -1,0 +1,7 @@
+[plugins]
+enabled = [ "local/helium-theme" ]
+
+[plugin_settings."local/helium-theme"]
+blur = true
+grain = 19
+radius = 16

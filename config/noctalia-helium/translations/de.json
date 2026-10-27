@@ -1,0 +1,12 @@
+{
+  "wallpaper": "Wallpaper-Datei automatisch erstellen",
+  "folder": "Ausgabeordner",
+  "folder_desc": "Die Datei heißt noctalia-wallpaper.jpg und kann in Helium ausgewählt werden.",
+  "monitor": "Wallpaper-Monitor",
+  "monitor_desc": "Anschlussname, z. B. DP-3. Leer verwendet den ersten Bildschirm.",
+  "blur": "Gaußsche Unschärfe",
+  "radius": "Stärke der Unschärfe (Pixel)",
+  "grain": "Stärke der Filmkörnung",
+  "auto_wallpaper": "Wallpaper automatisch in Helium übernehmen",
+  "auto_wallpaper_desc": "Aktualisiert das lokale Hintergrundbild; die erste Aktivierung erfolgt mit helium-noctalia-color bei geschlossenem Helium."
+}
