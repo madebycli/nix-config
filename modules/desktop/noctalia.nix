@@ -1,10 +1,11 @@
-{ config, lib, pkgs, inputs, ... }:
+{ config, lib, pkgs, ... }:
 
 {
-  # Keep the NixOS module from nixpkgs and use the upstream shell package only.
+  # Keep the existing nixpkgs NixOS module and all desktop-shell switches.
   config.programs.noctalia = lib.mkIf (config.my.desktop.shell == "noctalia") {
     enable = true;
-    package = inputs.noctalia.packages.${pkgs.stdenv.hostPlatform.system}.default;
+    # Former source: inputs.noctalia.packages.${pkgs.stdenv.hostPlatform.system}.default;
+    package = pkgs.noctalia; # nixos-unstable via the root nixpkgs input
     recommendedServices.enable = false;
     systemd.enable = false;
   };

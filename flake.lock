@@ -291,26 +291,6 @@
         "type": "github"
       }
     },
-    "noctalia": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1792314209,
-        "narHash": "sha256-+9RYq8m94AI/xU9gtUwv0GHjo9tgBiDOjYIbAX3Hcns=",
-        "owner": "noctalia-dev",
-        "repo": "noctalia",
-        "rev": "e37d7145b95a51b801db9bb20d1c600f35111e0b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "noctalia-dev",
-        "repo": "noctalia",
-        "type": "github"
-      }
-    },
     "quickshell": {
       "inputs": {
         "nixpkgs": [
@@ -339,8 +319,7 @@
         "mango": "mango",
         "microvm": "microvm",
         "nix-cachyos-kernel": "nix-cachyos-kernel",
-        "nixpkgs": "nixpkgs_2",
-        "noctalia": "noctalia"
+        "nixpkgs": "nixpkgs_2"
       }
     },
     "scenefx": {

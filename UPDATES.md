@@ -33,9 +33,11 @@ change, without activating it.
 nx check                  # what is outdated?
 nx update                 # refresh every input, build, diff, confirm, switch
 nx update base            # nixpkgs + CachyOS kernel
-nx update desktop         # home-manager, mango, noctalia, caelestia-shell
+nx update desktop         # home-manager, mango, nixpkgs (Noctalia + Greeter), caelestia-shell
 nx update apps            # microvm
 nx update mango nixpkgs   # specific inputs
+nx update noctalia        # alias: update nixpkgs for the Noctalia shell + Greeter
+nx update noctalia-greeter # alias: update nixpkgs for the Greeter + shell
 nx update all             # every input
 nx update --profiles      # also `nix profile upgrade --all`
 nx update profiles        # only user-profile packages; no system rebuild
@@ -72,11 +74,14 @@ keeps the new local lock after activation and restores the previous lock on
 failure or cancellation. Fresh installs therefore resolve current upstream
 versions rather than relying only on the repository's committed lock.
 
-The Noctalia shell comes from its own upstream `noctalia` flake input, without
-an additional binary cache. `nx update noctalia` or `nx update desktop` updates
-the shell. The Noctalia Greeter stays in `nixpkgs` and updates with `nx update base`.
+The former upstream `noctalia` flake input is disabled. Both `noctalia` and
+`noctalia-greeter` are installed from the root `nixpkgs` input tracking
+`nixos-unstable`. `nx update noctalia`, `nx update noctalia-greeter`,
+`nx update desktop` and `nx update base` all update that same Nixpkgs input.
+This also updates other Nixpkgs packages, not just Noctalia. Versions remain
+pinned by `flake.lock` until the input is updated. No extra cache is configured.
 Groups: `base` = nixpkgs, nix-cachyos-kernel; `desktop` = home-manager, mango,
-noctalia, caelestia-shell; `apps` = microvm.
+nixpkgs, caelestia-shell; `apps` = microvm.
 
 ## Features and desktop
 

@@ -33,6 +33,14 @@ LOCK = {
 }
 
 
+class NoctaliaUpdateGroupTests(unittest.TestCase):
+    def test_shell_and_greeter_update_through_nixpkgs(self):
+        self.assertIn("nixpkgs", nx.GROUPS["desktop"])
+        self.assertNotIn("noctalia", nx.GROUPS["desktop"])
+        self.assertEqual(nx.GROUPS["noctalia"], ["nixpkgs"])
+        self.assertEqual(nx.GROUPS["noctalia-greeter"], ["nixpkgs"])
+
+
 class LockTests(unittest.TestCase):
     def test_follows_resolution(self):
         self.assertEqual(nx.resolve_node(LOCK, ["nixpkgs"]), "nixpkgs_2")

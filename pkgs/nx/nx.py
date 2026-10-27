@@ -29,8 +29,16 @@ CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "nx
 SYSTEM_PROFILE = Path("/nix/var/nix/profiles/system")
 GROUPS = {
     "base": ["nixpkgs", "nix-cachyos-kernel"],
-    "desktop": ["home-manager", "mango", "noctalia", "caelestia-shell"],
+    "desktop": [
+        "home-manager", "mango",
+        # "noctalia",  # former standalone upstream Flake input
+        "nixpkgs",  # now supplies noctalia and noctalia-greeter
+        "caelestia-shell",
+    ],
     "apps": ["microvm"],
+    # Preserve old update command and permit selecting the greeter directly.
+    "noctalia": ["nixpkgs"],
+    "noctalia-greeter": ["nixpkgs"],
 }
 CACHE_TTL = 600  # seconds a `check` result counts as fresh for `status`
 

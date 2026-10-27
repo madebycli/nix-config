@@ -9,11 +9,14 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Shell only; the greeter stays in nixpkgs. No additional binary cache.
-    #noctalia = {
-    #  url = "github:noctalia-dev/noctalia";
-    #  inputs.nixpkgs.follows = "nixpkgs";
-    #};
+    # Former upstream shell Flake, intentionally disabled.
+    # noctalia = {
+    #   url = "github:noctalia-dev/noctalia";
+    #   inputs.nixpkgs.follows = "nixpkgs";
+    # };
+    # Active Noctalia + noctalia-greeter packages come from the existing
+    # nixpkgs (nixos-unstable) input; see modules/desktop/*.nix.
+    # nx update desktop (and nx update noctalia) refreshes this nixpkgs input.
 
     caelestia-shell = {
       url = "github:caelestia-dots/shell";

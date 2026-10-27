@@ -1,9 +1,10 @@
 { config, pkgs, ... }:
 
 {
-  # Module and package come from nixpkgs (unstable); no separate Flake input.
+  # Keep the nixpkgs module, greetd integration and desktop-session selection.
   services.displayManager.noctalia-greeter = {
     enable = true;
+    package = pkgs.noctalia-greeter; # nixos-unstable via the root nixpkgs input
     extraArgs = [ "--session" config.my.desktop.defaultSession ];
 
     cursorTheme = {
