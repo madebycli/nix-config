@@ -237,9 +237,10 @@ can be inspected separately. See [diagnostics and report options](UPDATES.md#dia
 
 ## Optional local coding AI
 
-`my.features.local-ai.enable` adds on-demand rootless Strata HIP and an offline
+`my.features.local-ai.enable` adds on-demand rootless Prism llama.cpp/Strata HIP and an offline
 workspace coding container. It is disabled on both hosts and includes no models
-or automatic model downloads. See [setup, isolation and model-free tests](docs/LOCAL-AI.md).
+or automatic model downloads. See [IQ4_XS/Bonsai profiles, Q8 KV, MTP depth 2 and setup](docs/LOCAL-AI-PROFILES.md)
+and [legacy isolation/model-free tests](docs/LOCAL-AI.md).
 
 ## Layout
 

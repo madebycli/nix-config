@@ -45,6 +45,9 @@ let
   };
   support = pkgs.runCommand "aibox-support" { } ''
     mkdir -p $out
+    cp ${./LlamaContainerfile} $out/LlamaContainerfile
+    cp ${./require-mtp.py} $out/require-mtp.py
+    cp ${./profiles.json} $out/profiles.json
     cp ${./Containerfile} $out/Containerfile
     cp ${./entrypoint.py} $out/entrypoint.py
     cp ${./ManagerContainerfile} $out/ManagerContainerfile
@@ -53,7 +56,7 @@ let
   aibox = pkgs.writeShellApplication {
     name = "aibox";
     inheritPath = true;
-    runtimeInputs = [ pkgs.python3 pkgs.podman pkgs.crun pkgs.xdg-utils ];
+    runtimeInputs = [ pkgs.python3 pkgs.curl pkgs.podman pkgs.crun pkgs.xdg-utils ];
     text = ''
       export AIBOX_AGENT_ARCHIVE=${agentImage}
       export AIBOX_AGENT_IMAGE=${lib.escapeShellArg "${agentImage.imageName}:${agentImage.imageTag}"}

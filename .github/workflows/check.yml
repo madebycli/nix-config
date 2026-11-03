@@ -63,6 +63,8 @@ jobs:
                   && !full.systemd.sockets.podman.enable
                   && !full.systemd.user.sockets.podman.enable
                   && full.my.features.local-ai.gpuArch == "gfx1030"
+                  && full.my.features.local-ai.defaultProfile == "qwen27-iq4xs"
+                  && full.my.features.local-ai.contextSize == 16384
                   && !(builtins.hasAttr "aibox" full.systemd.services);
             in builtins.all valid [ "nyx" "aether" ]
           ' | jq -e '. == true'
@@ -160,6 +162,7 @@ jobs:
         run: |
           python3 tests/aibox_test.py
           python3 tests/aibox_ui_test.py
+          python3 tests/aibox_profiles_test.py
 
       - name: nx debug bounds, redaction and read-only reports
         run: python3 tests/nx_debug_test.py

@@ -1,9 +1,13 @@
+> Default commands now serve the selected IQ4_XS/Bonsai profiles through Prism
+> llama.cpp. Start with [current profile setup](LOCAL-AI-PROFILES.md). This page
+> documents the retained **legacy Strata** path and shared isolation boundaries.
+
 # Local AI containers, without bundled models
 
 Optional NixOS infrastructure for nyx (RX 6800, gfx1030). Both hosts keep
 `my.features.local-ai.enable = false;` by default. The existing Ollama `ai`
 feature and MicroVM `agentbox` remain separate. Neither model selection nor a
-model download is performed by NixOS activation, boot, CI or `aibox prepare`.
+model download is performed by NixOS activation, boot, CI or `aibox prepare --strata`.
 
 ## Enable and prepare
 
@@ -18,8 +22,8 @@ nx switch
 Log out and back in after adding render/video group membership. Then:
 
 ```bash
-aibox prepare          # explicitly builds HIP runtime and imports coding image
-aibox doctor           # actual GPU enumeration, no model required
+aibox prepare --strata          # explicitly builds HIP runtime and imports coding image
+aibox doctor --strata           # actual GPU enumeration, no model required
 aibox status
 mkdir -p ~/projects/ai-test
 aibox shell ~/projects/ai-test
@@ -52,12 +56,12 @@ After `nx pull` and `nx switch`, using your already prepared HIP runtime:
 ```bash
 aibox stop
 aibox prepare-ui        # build full app layer; no HIP recompile or model weights
-aibox ui                # opens http://127.0.0.1:8766
+aibox ui --strata                # opens http://127.0.0.1:8766
 ```
 
 `prepare-ui` reuses the existing engine image and builds the pinned app's frontend
 with Node 24.19.0 and its npm lockfile. It downloads web/build dependencies, not
-model weights. If the underlying runtime is missing, run `aibox prepare` first.
+model weights. If the underlying runtime is missing, run `aibox prepare --strata` first.
 `ui` never implicitly builds or pulls images. The original runtime image identity
 is unchanged by this addition, so its successful HIP build stays reusable.
 
@@ -86,8 +90,8 @@ mount. Its management API is reachable by the coding container on the private
 network, so treat those containers as one trust domain for model management.
 
 ```bash
-aibox ui --no-open       # print the address without launching the browser
-aibox ui --port 8767     # another unprivileged local port
+aibox ui --strata --no-open       # print the address without launching the browser
+aibox ui --strata --port 8767     # another unprivileged local port
 aibox status
 aibox logs
 aibox stop              # stop manager and its inference children
@@ -103,14 +107,14 @@ End-to-end coding/tool loops require acceptance with the actual chosen model.
 
 ## Private manual server
 
-`aibox start` continues to use read-only models and a manually supplied
+`aibox start --strata` continues to use read-only models and a manually supplied
 `server.json`, without any host-published port. `aibox smoke` is still a mock API
 connectivity test; its `loaded: true` response does not mean weights are loaded.
 
 ## Model-free tests
 
 If preparation stopped at `find_package(hip)` with `hipConfig.cmake` not found,
-update the configuration and rebuild before retrying `aibox prepare`. The
+update the configuration and rebuild before retrying `aibox prepare --strata`. The
 Containerfile explicitly supplies `/opt/rocm` as `CMAKE_PREFIX_PATH`, so CMake
 can find the SDK's HIP/BLAS package metadata as well as its compiler. Existing
 Podman images/caches do not need to be deleted. This corrects package discovery;
@@ -119,7 +123,7 @@ it is not proof that subsequent compilation or GPU inference succeeds.
 If `aibox exec` or `shell` failed with `unknown mount option "uid=1000"`,
 update with `nx pull` and `nx switch`. The controller now creates its private
 temporary home inside `/tmp` instead of requesting an unsupported tmpfs owner
-option. The images and Strata engine are unchanged, so `aibox prepare` is not
+option. The images and Strata engine are unchanged, so `aibox prepare --strata` is not
 required solely for this controller fix.
 
 ```bash
@@ -151,7 +155,7 @@ as a successful GPU run.
   private PID/IPC namespaces and the default seccomp policy. No unconfined
   seccomp, host network, host IPC, memory locking bypass or device cgroup bypass.
 - An internal, labelled container network connects coding to `strata:8080`.
-  No host port is published in the default CLI profile. Explicit `aibox ui`
+  No host port is published in the default CLI profile. Explicit `aibox ui --strata`
   publishes the UI/API on 127.0.0.1 only; no LAN port is published. The controller verifies an existing network's
   internal policy. Proxy variables from the host are not inherited.
 - The coding profile is **offline**. Internet package installation and cloud
@@ -188,7 +192,7 @@ ROCm's default `7.2.3-complete` tag and Ubuntu apt repositories can change;
 this runtime is not a fully reproducible Nix derivation. Supply a verified
 registry digest using `hipBaseImage` for a stricter base-image pin.
 
-After changing tools, `nx switch` rebuilds the coding image. `aibox prepare`
+After changing tools, `nx switch` rebuilds the coding image. `aibox prepare --strata`
 imports it and builds the matching inference image when necessary. Runtime
 tags incorporate their build inputs, so a changed configuration requires
 preparation instead of silently using an old tag. Stop before changing a
@@ -197,7 +201,7 @@ prunes user images or Nix generations.
 
 ## Supplying a model later
 
-For the private manual `aibox start` path, no `server.json` is created automatically.
+For the private manual `aibox start --strata` path, no `server.json` is created automatically.
 The full manager creates its storage directory on explicit startup. When a model
 has been selected and prepared, place its files in `modelDirectory` and add a
 `server.json` with only `args`, `tokenizer` and `model_name`. All paths must
@@ -216,7 +220,7 @@ Actual arguments differ between Gyro and conventional GGUF packs. The model
 needs its own tokenizer, metadata, PLE/expert files and optional MTP artifacts;
 renaming a GGUF or using a random pack is insufficient. Prepare that separately
 when the model is chosen. The controller does not download, convert or guess it.
-`aibox start` refuses missing configuration; `aibox logs` shows engine errors.
+`aibox start --strata` refuses missing configuration; `aibox logs` shows engine errors.
 The runtime fixes the executable, working directory and HIP backend, and refuses
 extra server settings such as MCP, file tools or image generation. Reasoning
 and tool-call quality remain model/client-dependent. No Claude compatibility
@@ -232,5 +236,5 @@ configured to build the full app layer and probe its real Control/catalog endpoi
 without downloading weights, build the actual HIP
 engine for gfx1030 without a GPU, exercise the real API's mock mode and check a
 real rootless coding container. A workflow file alone is not evidence of a
-successful run. These checks do not replace nyx `aibox doctor`,
+successful run. These checks do not replace nyx `aibox doctor --strata`,
 real inference, memory-pressure measurement or complete client tool-loop tests.

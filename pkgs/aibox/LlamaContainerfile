@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+# Runtime/UI only: model acquisition is a separate, explicit aibox fetch action.
+ARG BASE=docker.io/rocm/dev-ubuntu-24.04:7.2.3-complete
+FROM docker.io/library/node:24.19.0-bookworm-slim AS frontend
+ARG LLAMA_REV=a15369706017f177cae8aa40b6b8592259a48806
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -r /run/secrets/proxy_ca ]; then export GIT_SSL_CAINFO=/run/secrets/proxy_ca; fi; \
+    git init /opt/llama && cd /opt/llama \
+    && git remote add origin https://github.com/PrismML-Eng/llama.cpp.git \
+    && git fetch --depth 1 origin ${LLAMA_REV} && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${LLAMA_REV}"
+WORKDIR /opt/llama/tools/ui
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -r /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm ci && npm run build && rm -rf node_modules
+FROM ${BASE}
+ARG GPU_ARCH=gfx1030
+ARG BUILD_JOBS=2
+ENV DEBIAN_FRONTEND=noninteractive PYTHONDONTWRITEBYTECODE=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build python3 ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=frontend /opt/llama /opt/llama
+COPY require-mtp.py /opt/require-mtp.py
+RUN python3 /opt/require-mtp.py /opt/llama \
+    && cmake -S /opt/llama -B /opt/llama/build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/rocm \
+      -DGGML_HIP=ON -DCMAKE_HIP_ARCHITECTURES=${GPU_ARCH} \
+      -DGGML_NATIVE=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_OPENSSL=OFF \
+      -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
+    && cmake --build /opt/llama/build --target llama-server -j${BUILD_JOBS} \
+    && /opt/llama/build/bin/llama-server --help > /opt/llama-server-help.txt
+ENV PATH=/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    HOME=/tmp/aibox
+WORKDIR /tmp
+ENTRYPOINT ["/opt/llama/build/bin/llama-server"]
+CMD ["--list-devices"]

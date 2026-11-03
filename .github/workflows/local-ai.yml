@@ -24,6 +24,7 @@ jobs:
         run: |
           python3 tests/aibox_test.py
           python3 tests/aibox_ui_test.py
+          python3 tests/aibox_profiles_test.py
       - name: Build packaged CLI and coding image, without models
         run: |
           nix build --no-write-lock-file --no-link .#aibox .#aibox-agent-image
@@ -111,3 +112,18 @@ jobs:
       - name: Container logs
         if: always()
         run: docker logs strata-ci || true
+
+  prism-hip-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned Prism HIP gfx1030 server and UI, without models
+        run: docker build --tag nx-ai-llama-ci --file pkgs/aibox/LlamaContainerfile pkgs/aibox
+      - name: Check real server flags without model or GPU inference
+        run: |
+          docker run --rm nx-ai-llama-ci --help > /tmp/llama-help.txt
+          grep -- '--spec-draft-n-max' /tmp/llama-help.txt
+          grep -- '--spec-draft-type-v' /tmp/llama-help.txt
+          grep -- '--cache-type-k' /tmp/llama-help.txt
+          docker run --rm --entrypoint sh nx-ai-llama-ci -c 'test -f /opt/llama/tools/ui/dist/index.html'

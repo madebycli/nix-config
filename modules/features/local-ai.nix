@@ -5,7 +5,17 @@ let
 in
 {
   options.my.features.local-ai = {
-    enable = lib.mkEnableOption "on-demand rootless Strata HIP and workspace coding containers, without models";
+    enable = lib.mkEnableOption "on-demand rootless llama.cpp/Strata HIP and workspace coding containers, without models";
+    defaultProfile = lib.mkOption {
+      type = lib.types.enum [ "qwen27-iq4xs" "bonsai27-pq2" ];
+      default = "qwen27-iq4xs";
+      description = "Pinned model selected by aibox start/ui/fetch. Models are downloaded only by explicit fetch.";
+    };
+    contextSize = lib.mkOption {
+      type = lib.types.ints.between 2048 262144;
+      default = 16384;
+      description = "Explicit context per single inference slot. K/V caches are q8_0; MTP max draft depth is 2. Allocation failure does not reduce context or offload weights automatically.";
+    };
     gpuArch = lib.mkOption {
       type = lib.types.enum [ "gfx1030" "gfx1100" "gfx1101" "gfx1200" "gfx1201" ];
       default = "gfx1030";
@@ -56,7 +66,7 @@ in
     systemd.user.sockets.podman.enable = false;
     systemd.user.services.podman.enable = false;
     environment.etc."aibox.json".text = builtins.toJSON {
-      inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs;
+      inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs defaultProfile contextSize;
     };
   };
 }
