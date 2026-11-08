@@ -29,11 +29,16 @@ in
           genReserve = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "VRAM KV generation workspace (tokens, multiple of 128)."; };
           hostKvMiB = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "Hard KVMem host-RAM KV quota in MiB."; };
           containerRamMiB = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "Hard container RAM cap in MiB; swap is disabled for it."; };
-          kvDtype = lib.mkOption { type = lib.types.nullOr (lib.types.enum [ "q8_0" "q5_0" ]); default = null; description = "KV cache type for long-context mode. Null keeps the requested q8_0; q5_0 is an explicit opt-in (the KVMem IQ4 reference recipe) that frees VRAM for a larger window."; };
+          kvDtype = lib.mkOption { type = lib.types.nullOr (lib.types.enum [ "q8_0" "q5_0" "k8v4" "q4_0" ]); default = null; description = "KV type for long-context mode. Null keeps the preset (q8_0, or k8v4 for lc256-iq3). q5_0 is the KVMem IQ4 reference recipe; k8v4 = K q8_0 / V q4_0 (mixed); q4_0 is 4-bit K and V and the most lossy. Never changed automatically."; };
           vramHeadroomMiB = lib.mkOption { type = lib.types.ints.unsigned; default = 256; description = "Free VRAM required beyond the estimate before start."; };
           ramHeadroomMiB = lib.mkOption { type = lib.types.ints.unsigned; default = 2048; description = "Free host RAM required beyond the container cap before start."; };
         };
       };
+    };
+    kvCacheType = lib.mkOption {
+      type = lib.types.enum [ "q8_0" "k8v4" "q4_0" ];
+      default = "q8_0";
+      description = "KV cache type for the default Prism path (target and MTP draft). Default keeps q8_0; k8v4 = K q8_0 / V q4_0; q4_0 is 4-bit K and V. Quality impact is unmeasured. Never changed automatically.";
     };
     gpuArch = lib.mkOption {
       type = lib.types.enum [ "gfx1030" "gfx1100" "gfx1101" "gfx1200" "gfx1201" ];
@@ -85,7 +90,7 @@ in
     systemd.user.sockets.podman.enable = false;
     systemd.user.services.podman.enable = false;
     environment.etc."aibox.json".text = builtins.toJSON {
-      inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs defaultProfile contextSize longContext;
+      inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs defaultProfile contextSize kvCacheType longContext;
     };
   };
 }

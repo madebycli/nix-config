@@ -81,6 +81,24 @@ Host KV quotas are generous over the estimate (2.3 / 4.5 / 9 / 18 GiB). `lc512` 
 normally be refused on 32 GB RAM; it needs `--allow-experimental`.
 Everything is overridable in Nix (`my.features.local-ai.longContext.*`).
 
+## Extra option: IQ3 + Q4-class KV + KVMem 256K (`lc256-iq3`)
+
+Requested as an additional option; the IQ4_XS presets above stay as they are.
+
+- Preset: workspace 262,144, VRAM pool 32768 + 12288, KV `k8v4`, host KV 12 GiB, container 20 GiB.
+- `k8v4` = K q8_0 / V q4_0. Opinion: better than plain `q4_0` (4-bit K and V), because
+  K precision matters most for attention and retrieval; KVMem validates the mixed form. Plain
+  `q4_0` stays selectable via `longContext.kvDtype` but is the most lossy.
+- Estimated KV pool: 45,056 tokens x ~28 KiB = ~1.2 GiB. With IQ3 weights (~11 GiB, size
+  unconfirmed) this should leave real headroom. This is the closest match to KVMem's own
+  validated 16 GiB recipe (IQ3, 28K window, 256K). Still UNVERIFIED on gfx1030.
+- **Blocked on pins:** the IQ3 file (revision, size, sha256) is not in `profiles.json` because
+  Hugging Face was unreachable from the build session. `aibox plan lc256-iq3` and `ui
+  --long-context lc256-iq3` refuse with a clear message until `qwen27-iq3` is added. Nothing is
+  substituted. IQ3 is a quantization change you approved for this option only.
+- The default Prism path accepts `my.features.local-ai.kvCacheType = "k8v4"` (or `"q4_0"`) for
+  a larger plain context without KVMem. Quality impact is unmeasured.
+
 ## Safety behaviour
 
 - `aibox start/ui --long-context PRESET` runs `plan` first: it refuses (exit with

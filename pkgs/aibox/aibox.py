@@ -353,7 +353,16 @@ def prepare_llama(cfg):
     print("Prism llama.cpp HIP runtime and embedded UI prepared. No models downloaded.")
 
 
-KVMEM_KV_BYTES_PER_TOKEN = {"q8_0": 36864, "q5_0": 23808}  # assumed main + MTP draft KV per token (16 attention layers); estimate only
+# Assumed main + MTP draft KV bytes per token (16 attention layers); planning estimate only.
+KVMEM_KV_BYTES_PER_TOKEN = {"q8_0": 36864, "q5_0": 23808, "q4_0": 20608, "k8v4": 28800}
+
+
+def kv_types(dtype):
+    """(main K, main V, draft). k8v4 = K q8_0 / V q4_0, the mixed form KVMem validates.
+    The tiny MTP draft cache stays q8_0 when main is 4-bit; RDNA2 needs a quantized draft cache."""
+    if dtype == "k8v4":
+        return "q8_0", "q4_0", "q8_0"
+    return dtype, dtype, ("q8_0" if dtype == "q4_0" else dtype)
 KVMEM_COMPUTE_OVERHEAD_MIB = 512   # assumed compute buffers + HIP context + replay state; an RX 6800 measurement is still required
 KVMEM_UI = "/opt/kvmem-build/share/kvmem/ui"
 
@@ -390,9 +399,9 @@ def longcontext_settings(cfg, preset, *, allow_experimental=False):
     for key in ("gpuBudget", "genReserve", "hostKvMiB", "containerRamMiB"):
         if overrides.get(key) is not None:
             settings[key] = overrides[key]
-    settings["kvDtype"] = overrides.get("kvDtype") or "q8_0"
+    settings["kvDtype"] = overrides.get("kvDtype") or settings.get("kvDtype", "q8_0")
     if settings["kvDtype"] not in KVMEM_KV_BYTES_PER_TOKEN:
-        raise ValueError("kvDtype must be q8_0 (default) or q5_0; it is never changed automatically")
+        raise ValueError("kvDtype must be one of q8_0 (default), q5_0, k8v4, q4_0; it is never changed automatically")
     settings["vramHeadroomMiB"] = overrides.get("vramHeadroomMiB", 256)
     settings["ramHeadroomMiB"] = overrides.get("ramHeadroomMiB", 2048)
     for key in ("workspace", "gpuBudget", "genReserve", "hostKvMiB", "containerRamMiB",
@@ -412,19 +421,31 @@ def longcontext_settings(cfg, preset, *, allow_experimental=False):
     return settings
 
 
+def longcontext_profile(cfg, preset, requested=None):
+    """Profile of a preset. A preset never silently switches model: a mismatching request is refused."""
+    wanted = longcontext_presets().get(preset, {}).get("profile", "qwen27-iq4xs")
+    if requested and requested != wanted:
+        raise ValueError(f"Preset {preset} is defined for {wanted}, not {requested}")
+    if wanted not in profiles():
+        raise ValueError(f"Preset {preset} needs profile {wanted}, whose pinned files are not in profiles.json yet; "
+                         "see docs/LOCAL-AI-LONGCONTEXT.md. Nothing is substituted")
+    return wanted
+
+
 def kvmem_server_args(cfg, name, settings, *, vision=True):
     _, files = profile_files(cfg, name, verify=False, vision=vision)
     args = ["--model", f"/models/{files['model']['name']}", "--alias", "local",
             "--host", "0.0.0.0", "--port", "8080", "--ctx-size", str(settings["workspace"]),
             "--parallel", "1", "--batch-size", "256", "--ubatch-size", "128",
             "--device", "ROCm0", "--gpu-layers", "999", "--load-mode", "none",
-            "--flash-attn", "on", "--kv-dtype", settings["kvDtype"],
+            "--flash-attn", "on", "--cache-type-k", kv_types(settings["kvDtype"])[0],
+            "--cache-type-v", kv_types(settings["kvDtype"])[1],
             "--kvmem", "--kvmem-budget", str(settings["gpuBudget"]),
             "--kvmem-gen-reserve", str(settings["genReserve"]),
             "--kvmem-block-tokens", "128", "--kvmem-query-policy", "user",
             "--kvmem-host-mib", str(settings["hostKvMiB"]),
             "--spec-type", "draft-mtp", "--spec-draft-n-max", "2",
-            "--spec-kv-dtype", settings["kvDtype"], "--kvmem-mtp-state", "replay",
+            "--spec-kv-dtype", kv_types(settings["kvDtype"])[2], "--kvmem-mtp-state", "replay",
             "--jinja", "--webui", "--ui-dir", KVMEM_UI]
     if vision:
         # Projector on CPU: keeps it out of the tight 16 GiB; image encoding is slower.
@@ -495,15 +516,19 @@ def llama_server_args(cfg, name, *, vision=True):
     context = cfg.get("contextSize", 16384)
     if type(context) is not int or not 2048 <= context <= 262144:
         raise ValueError("contextSize must be an integer between 2048 and 262144")
+    dtype = cfg.get("kvCacheType") or "q8_0"
+    if dtype not in ("q8_0", "k8v4", "q4_0"):
+        raise ValueError("kvCacheType must be q8_0 (default), k8v4 or q4_0; it is never changed automatically")
+    kv = kv_types(dtype)
     args = ["--model", f"/models/{files['model']['name']}", "--alias", "local",
             "--host", "0.0.0.0", "--port", "8080", "--ctx-size", str(context),
             "--parallel", "1", "--batch-size", "256", "--ubatch-size", "128",
             "--device", "ROCm0", "--gpu-layers", "999", "--fit", "off",
-            "--flash-attn", "on", "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
+            "--flash-attn", "on", "--cache-type-k", kv[0], "--cache-type-v", kv[1],
             "--spec-type", "draft-mtp", "--spec-draft-n-max", "2",
             "--spec-draft-n-min", "0", "--spec-draft-p-min", "0",
             "--spec-draft-device", "ROCm0", "--spec-draft-ngl", "999",
-            "--spec-draft-type-k", "q8_0", "--spec-draft-type-v", "q8_0",
+            "--spec-draft-type-k", kv[2], "--spec-draft-type-v", kv[2],
             "--load-mode", "none", "--jinja", "--temp", "1.0",
             "--top-p", "0.95", "--top-k", "20", "--min-p", "0.05"]
     if vision:
@@ -559,13 +584,14 @@ def wait_for_kvmem(timeout=300):
 
 def start_llama(cfg, name=None, *, port=None, no_open=True, vision=True, long_context=None,
                 allow_experimental=False):
+    if long_context:
+        name = longcontext_profile(cfg, long_context, name)
     name, entry = profile(cfg, name)
     if port is not None and (type(port) is not int or not 1024 <= port <= 65535):
         raise ValueError("UI port must be between 1024 and 65535")
     settings = longcontext_settings(cfg, long_context, allow_experimental=allow_experimental) if long_context else None
-    if settings and name != "qwen27-iq4xs":
-        raise ValueError("The KVMem long-context mode is qualified for qwen27-iq4xs only; "
-                         "Bonsai needs the Prism runtime (use the default 16K mode)")
+    if settings and name == "bonsai27-pq2":
+        raise ValueError("Bonsai needs the Prism runtime (use the default 16K mode)")
     server_args = kvmem_server_args(cfg, name, settings, vision=vision) if settings else llama_server_args(cfg, name, vision=vision)
     engine = "kvmem" if settings else "prism"
     old = owned_server()
@@ -610,7 +636,7 @@ def start_llama(cfg, name=None, *, port=None, no_open=True, vision=True, long_co
     if settings:
         print(f"Loading {entry['name']} via KVMem: preset={settings['preset']}, workspace={settings['workspace']}, "
               f"GPU pool={settings['gpuBudget']}+{settings['genReserve']}, host KV={settings['hostKvMiB']} MiB, "
-              "K/V={settings['kvDtype']}, MTP max=2, vision on CPU.", flush=True)
+              "KV={settings['kvDtype']}, MTP max=2, vision on CPU.", flush=True)
         print("No automatic context reduction, CPU weight offload or swap. Rollback: aibox stop && aibox ui", flush=True)
         wait_for_kvmem()
         print("Server healthy; MTP sampler active. Run the probe to verify retrieval, tools, vision and speed.")
@@ -687,7 +713,7 @@ def main():
     p.add_argument("--strata", action="store_true", help="Open legacy Strata manager instead")
     p.add_argument("--profile", choices=("qwen27-iq4xs", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true", help="Explicitly omit the vision projector")
-    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512"),
+    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"),
                    help="Optional KVMem mode (qwen27-iq4xs); omitted = unchanged 16K Prism path")
     p.add_argument("--allow-experimental", action="store_true")
     p.add_argument("--port", type=int, default=8766)
@@ -696,11 +722,11 @@ def main():
     p.add_argument("--strata", action="store_true")
     p.add_argument("--profile", choices=("qwen27-iq4xs", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true")
-    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512"))
+    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"))
     p.add_argument("--allow-experimental", action="store_true")
     p = sub.add_parser("plan", help="Print the memory plan and checks for a long-context preset; starts nothing")
-    p.add_argument("preset", choices=("lc64", "lc128", "lc256", "lc512"))
-    p.add_argument("--profile", choices=("qwen27-iq4xs",))
+    p.add_argument("preset", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"))
+    p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3"))
     p.add_argument("--text-only", action="store_true")
     for name in ("stop", "status", "logs"):
         sub.add_parser(name)
@@ -719,7 +745,7 @@ def main():
         else:
             prepare(cfg, args.agent_only) if args.agent_only or args.strata else prepare_llama(cfg)
     elif args.action == "plan":
-        name, _ = profile(cfg, args.profile or "qwen27-iq4xs")
+        name, _ = profile(cfg, longcontext_profile(cfg, args.preset, args.profile))
         settings = longcontext_settings(cfg, args.preset, allow_experimental=True)
         plan, problems = longcontext_plan(cfg, name, settings, vision=not args.text_only)
         print(json.dumps({**plan, "problems": problems, "server_args": kvmem_server_args(cfg, name, settings, vision=not args.text_only)}, indent=2))

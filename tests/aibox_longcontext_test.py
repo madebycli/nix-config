@@ -34,27 +34,49 @@ class LongContext(unittest.TestCase):
     def test_presets_cover_64k_128k_256k_and_500k_experimental(self):
         presets = aibox.longcontext_presets()
         self.assertEqual({k: v["workspace"] for k, v in presets.items()},
-                         {"lc64": 65536, "lc128": 131072, "lc256": 262144, "lc512": 524288})
+                         {"lc64": 65536, "lc128": 131072, "lc256": 262144, "lc512": 524288, "lc256-iq3": 262144})
         self.assertEqual([k for k, v in presets.items() if v["experimental"]], ["lc512"])
         with self.assertRaises(ValueError):
             aibox.longcontext_settings(self.cfg, "lc512")
 
     def test_server_args_keep_q8_mtp2_explicit_memory_and_no_fit_or_offload_flags(self):
         settings, args = self.args()
-        for flag, value in (("--ctx-size", "262144"), ("--kv-dtype", "q8_0"), ("--spec-type", "draft-mtp"),
+        for flag, value in (("--ctx-size", "262144"), ("--spec-type", "draft-mtp"),
                             ("--spec-draft-n-max", "2"), ("--spec-kv-dtype", "q8_0"), ("--kvmem-mtp-state", "replay"),
                             ("--kvmem-budget", "12288"), ("--kvmem-gen-reserve", "4096"), ("--kvmem-host-mib", "12288"),
                             ("--gpu-layers", "999"), ("--load-mode", "none"), ("--device", "ROCm0")):
             self.assertEqual(args[args.index(flag) + 1], value, flag)
+        self.assertEqual(args[args.index("--cache-type-k") + 1], "q8_0")
+        self.assertEqual(args[args.index("--cache-type-v") + 1], "q8_0")
         self.assertIn("--no-mmproj-offload", args)
         self.assertNotIn("--fit", args)
 
     def test_q5_kv_is_explicit_opt_in_and_shrinks_estimate(self):
         _, q5 = self.args(longContext={"kvDtype": "q5_0"})
-        self.assertEqual(q5[q5.index("--kv-dtype") + 1], "q5_0")
+        self.assertEqual(q5[q5.index("--cache-type-k") + 1], "q5_0")
         self.assertEqual(q5[q5.index("--spec-kv-dtype") + 1], "q5_0")
         with self.assertRaises(ValueError):
-            aibox.longcontext_settings({**self.cfg, "longContext": {"kvDtype": "q4_0"}}, "lc64")
+            aibox.longcontext_settings({**self.cfg, "longContext": {"kvDtype": "q2_0"}}, "lc64")
+
+    def test_k8v4_and_q4_types_and_iq3_preset_fail_closed_without_pins(self):
+        _, mixed = self.args(longContext={"kvDtype": "k8v4"})
+        self.assertEqual((mixed[mixed.index("--cache-type-k") + 1], mixed[mixed.index("--cache-type-v") + 1],
+                          mixed[mixed.index("--spec-kv-dtype") + 1]), ("q8_0", "q4_0", "q8_0"))
+        _, four = self.args(longContext={"kvDtype": "q4_0"})
+        self.assertEqual(four[four.index("--cache-type-k") + 1], "q4_0")
+        self.assertEqual(four[four.index("--spec-kv-dtype") + 1], "q8_0")
+        preset = aibox.longcontext_settings(self.cfg, "lc256-iq3")
+        self.assertEqual((preset["kvDtype"], preset["gpuBudget"], preset["workspace"]), ("k8v4", 32768, 262144))
+        with self.assertRaisesRegex(ValueError, "pinned files are not in profiles.json"):
+            aibox.longcontext_profile(self.cfg, "lc256-iq3")
+        with self.assertRaises(ValueError):
+            aibox.longcontext_profile(self.cfg, "lc256-iq3", "qwen27-iq4xs")
+
+    def test_prism_path_kv_type_is_opt_in(self):
+        a = aibox.llama_server_args({**self.cfg, "kvCacheType": "k8v4"}, "qwen27-iq4xs")
+        self.assertEqual((a[a.index("--cache-type-k") + 1], a[a.index("--cache-type-v") + 1]), ("q8_0", "q4_0"))
+        with self.assertRaises(ValueError):
+            aibox.llama_server_args({**self.cfg, "kvCacheType": "q2_0"}, "qwen27-iq4xs")
 
     def test_vision_can_be_omitted_only_explicitly(self):
         settings, _ = self.args()
