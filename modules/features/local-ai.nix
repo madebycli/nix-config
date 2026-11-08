@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.my.features.local-ai;
-  packages = import ../../pkgs/aibox { inherit pkgs lib; inherit (cfg) agentExtraPackages; };
+  packages = import ../../pkgs/aibox { inherit pkgs lib; inherit (cfg) agentExtraPackages agentToolsets; };
 in
 {
   options.my.features.local-ai = {
@@ -68,6 +68,16 @@ in
       type = lib.types.ints.between 1 64;
       default = 2;
       description = "Parallel engine compilation jobs during explicit preparation, not an inference CPU limit.";
+    };
+    agentToolsets = lib.mkOption {
+      type = lib.types.listOf (lib.types.enum [ "web" "jvm" ]);
+      default = [ "web" "jvm" ];
+      description = ''
+        Tool bundles baked into the isolated coding image (large; set to [ ] to keep it small).
+        web = headless Chromium plus a `shot URL OUT.png` command, so the agent can look at its own pages.
+        jvm = JDK 21, Gradle, Kotlin, Maven. Android SDK is deliberately not included yet: it needs
+        an explicit Google licence acceptance and a larger setup.
+      '';
     };
     agentExtraPackages = lib.mkOption {
       type = lib.types.listOf lib.types.package;

@@ -57,6 +57,33 @@ class ContainerPolicy(unittest.TestCase):
         for forbidden in ("--privileged", "--network=host", "--device"):
             self.assertFalse(any(x == forbidden or x.startswith(forbidden + "=") for x in online))
 
+    def test_full_access_only_sets_agent_policy_and_keeps_the_container_boundary(self):
+        args = aibox.agent_args(self.cfg, self.project, ["true"], full_access=True)
+        self.assertIn("--env=AIBOX_FULL_ACCESS=1", args)
+        self.assertNotIn("--env=AIBOX_FULL_ACCESS=1", aibox.agent_args(self.cfg, self.project, ["true"]))
+        for kept in ("--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges"):
+            self.assertIn(kept, args)
+        self.assertEqual([args[i + 1] for i, a in enumerate(args) if a == "--mount"],
+                         [f"type=bind,src={self.project},target=/work,bind-nonrecursive"])
+
+    def test_bootstrap_writes_valid_codex_config_with_and_without_full_access(self):
+        import tomllib
+        skill = self.root / "SKILLS.md"
+        skill.write_text("x")
+        for flag in ("", "1"):
+            home = self.root / ("home" + flag)
+            home.mkdir()
+            args = aibox.agent_args(self.cfg, self.project, ["true"], full_access=bool(flag))
+            script = args[args.index("-c") + 1].replace("/share/aibox/SKILLS.md", str(skill)).replace('exec "$@"', "true")
+            subprocess.run(["bash", "-c", script, "aibox"], check=True,
+                           env={"PATH": os.environ["PATH"], "TMPDIR": str(home), "AIBOX_FULL_ACCESS": flag})
+            written = next(home.glob("aibox-home.*")) / ".codex/config.toml"
+            data = tomllib.loads(written.read_text())
+            self.assertEqual(data["model_providers"]["strata"]["wire_api"], "responses")
+            self.assertEqual(data.get("approval_policy"), "never" if flag else None)
+            self.assertEqual(data.get("sandbox_mode"), "danger-full-access" if flag else None)
+            self.assertEqual("/work" in data.get("projects", {}), bool(flag))
+
     def test_argument_text_is_not_host_shell_code(self):
         command = ["bash", "-c", "printf '%s' '$HOME; touch /host-sentinel'"]
         args = aibox.agent_args(self.cfg, self.project, command)

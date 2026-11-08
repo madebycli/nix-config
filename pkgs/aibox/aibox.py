@@ -676,7 +676,7 @@ def show_llama_ui(port, no_open):
             print("Open the URL above manually.")
 
 
-def agent_args(cfg, project, command, *, online=False):
+def agent_args(cfg, project, command, *, online=False, full_access=False):
     path = safe_directory(project, workspace=True, model=cfg["modelDirectory"])
     manager = Path(cfg["modelDirectory"]).expanduser().resolve().parent / "manager"
     if path.is_relative_to(manager) or manager.is_relative_to(path):
@@ -686,6 +686,9 @@ def agent_args(cfg, project, command, *, online=False):
             "--mount", f"type=bind,src={path},target=/work,bind-nonrecursive",
             "--workdir=/work", "--env=OPENAI_BASE_URL=http://strata:8080/v1",
             "--env=OPENAI_API_KEY=local-only"]
+    if full_access:
+        # Only changes the agent's own approval prompts inside the container; mounts and caps stay.
+        args += ["--env=AIBOX_FULL_ACCESS=1"]
     if online:
         # Explicit opt-in: the same container additionally joins the NAT network, so package
         # downloads work. Still only PROJECT is mounted; the model API stays on the private net.
@@ -698,14 +701,24 @@ export HOME
 HOME="$(mktemp -d "${TMPDIR:-/tmp}/aibox-home.XXXXXXXX")"
 mkdir -p "$HOME/.codex"
 cp /share/aibox/SKILLS.md "$HOME/.codex/AGENTS.md"
-cat > "$HOME/.codex/config.toml" <<'TOML'
-model_provider = "strata"
-model = "local"
+{
+  echo 'model_provider = "strata"'
+  echo 'model = "local"'
+  if [ "${AIBOX_FULL_ACCESS:-}" = 1 ]; then
+    # The container is the sandbox. Codex's own nested sandbox cannot start inside it.
+    echo 'approval_policy = "never"'
+    echo 'sandbox_mode = "danger-full-access"'
+  fi
+  cat <<'TOML'
 [model_providers.strata]
 name = "Local Strata"
 base_url = "http://strata:8080/v1"
 wire_api = "responses"
 TOML
+  if [ "${AIBOX_FULL_ACCESS:-}" = 1 ]; then
+    printf '[projects."/work"]\ntrust_level = "trusted"\n'
+  fi
+} > "$HOME/.codex/config.toml"
 exec "$@"
 '''
     return args + [os.environ["AIBOX_AGENT_IMAGE"], "/bin/bash", "-e", "-c", bootstrap, "aibox", *command]
@@ -749,9 +762,11 @@ def main():
         sub.add_parser(name)
     p = sub.add_parser("shell", help="Open offline coding shell sharing only PROJECT")
     p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
+    p.add_argument("--full-access", action="store_true", help="Agent runs without approval prompts; the container stays the only boundary")
     p.add_argument("project")
     p = sub.add_parser("exec", help="Run a command inside the offline coding container")
     p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
+    p.add_argument("--full-access", action="store_true", help="Agent runs without approval prompts; the container stays the only boundary")
     p.add_argument("project")
     p.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -820,7 +835,7 @@ def main():
             command = command[1:]
         if not command:
             raise ValueError("Expected a command after PROJECT")
-        result = run(*agent_args(cfg, args.project, command, online=args.online), check=False)
+        result = run(*agent_args(cfg, args.project, command, online=args.online, full_access=args.full_access), check=False)
         return result.returncode
     elif args.action == "stop":
         if owned_server():

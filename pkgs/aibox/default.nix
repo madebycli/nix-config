@@ -1,6 +1,24 @@
-{ pkgs, lib ? pkgs.lib, agentExtraPackages ? [ ] }:
+{ pkgs, lib ? pkgs.lib, agentExtraPackages ? [ ], agentToolsets ? [ ] }:
 
 let
+  # Screenshots for the agent: headless Chromium inside the container (no host display, no GPU).
+  shot = pkgs.writeShellApplication {
+    name = "shot";
+    runtimeInputs = [ pkgs.chromium pkgs.coreutils ];
+    text = ''
+      if [ "$#" -lt 2 ]; then echo "usage: shot URL OUT.png [WIDTHxHEIGHT]" >&2; exit 2; fi
+      size="''${3:-1280x800}"
+      profile="$(mktemp -d)"
+      chromium --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+        --user-data-dir="$profile" --window-size="''${size%x*},''${size#*x}" \
+        --virtual-time-budget=5000 --screenshot="$2" "$1"
+    '';
+  };
+  toolsets = {
+    web = [ pkgs.chromium shot ];
+    jvm = [ pkgs.jdk21 pkgs.gradle pkgs.kotlin pkgs.maven ];
+  };
+  selectedTools = lib.concatMap (name: toolsets.${name} or (throw "unknown agent toolset ${name}")) agentToolsets;
   skills = pkgs.writeTextDir "share/aibox/SKILLS.md" (builtins.readFile ./SKILLS.md);
   probe = pkgs.writeTextDir "share/aibox/longctx_probe.py" (builtins.readFile ./longctx_probe.py);
   agentRoot = pkgs.buildEnv {
@@ -12,7 +30,7 @@ let
       curl
       cacert
       jq
-      python3
+      (python3.withPackages (ps: [ ps.pip ps.virtualenv ]))
       nodejs
       ripgrep
       fd
@@ -21,7 +39,7 @@ let
       codex
       skills
       probe
-    ] ++ agentExtraPackages;
+    ] ++ selectedTools ++ agentExtraPackages;
     pathsToLink = [ "/bin" "/share" "/etc" ];
   };
   agentImage = pkgs.dockerTools.buildLayeredImage {

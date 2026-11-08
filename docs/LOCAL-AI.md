@@ -239,3 +239,18 @@ engine for gfx1030 without a GPU, exercise the real API's mock mode and check a
 real rootless coding container. A workflow file alone is not evidence of a
 successful run. These checks do not replace nyx `aibox doctor --strata`,
 real inference, memory-pressure measurement or complete client tool-loop tests.
+
+## Full access, tools and online mode for the coding agent
+
+```bash
+aibox shell --online --full-access ~/projects/NAME
+codex          # inside the container
+```
+
+- `--online` adds outbound internet for that session. `--full-access` only switches off the agent's own
+  approval prompts and its nested sandbox (which cannot start inside the container). The container
+  remains the boundary: one mounted project folder, read-only root, no capabilities, no GPU.
+- `my.features.local-ai.agentToolsets` (default `web`, `jvm`) bakes Chromium plus `shot URL OUT.png`,
+  JDK 21, Gradle, Kotlin and Maven into the image. Generic downloaded binaries (Playwright browsers,
+  Android build tools) do not run on this Nix-built image, so tools are provided declaratively.
+  After `nx switch` run `aibox prepare --agent-only`. The Android SDK is not included yet.
