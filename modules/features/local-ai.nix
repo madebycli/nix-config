@@ -16,6 +16,25 @@ in
       default = 16384;
       description = "Explicit context per single inference slot. K/V caches are q8_0; MTP max draft depth is 2. Allocation failure does not reduce context or offload weights automatically.";
     };
+    longContext = lib.mkOption {
+      description = ''
+        Optional KVMem long-context test mode (aibox prepare --kvmem; aibox ui --long-context lc64|lc128|lc256|lc512).
+        Does nothing unless selected on the command line; the 16K Prism path stays the default and rollback.
+        Null values keep the preset; nothing is ever reduced automatically when memory is short.
+      '';
+      default = { };
+      type = lib.types.submodule {
+        options = {
+          gpuBudget = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "VRAM KV history window (tokens, multiple of 128)."; };
+          genReserve = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "VRAM KV generation workspace (tokens, multiple of 128)."; };
+          hostKvMiB = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "Hard KVMem host-RAM KV quota in MiB."; };
+          containerRamMiB = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "Hard container RAM cap in MiB; swap is disabled for it."; };
+          kvDtype = lib.mkOption { type = lib.types.nullOr (lib.types.enum [ "q8_0" "q5_0" ]); default = null; description = "KV cache type for long-context mode. Null keeps the requested q8_0; q5_0 is an explicit opt-in (the KVMem IQ4 reference recipe) that frees VRAM for a larger window."; };
+          vramHeadroomMiB = lib.mkOption { type = lib.types.ints.unsigned; default = 256; description = "Free VRAM required beyond the estimate before start."; };
+          ramHeadroomMiB = lib.mkOption { type = lib.types.ints.unsigned; default = 2048; description = "Free host RAM required beyond the container cap before start."; };
+        };
+      };
+    };
     gpuArch = lib.mkOption {
       type = lib.types.enum [ "gfx1030" "gfx1100" "gfx1101" "gfx1200" "gfx1201" ];
       default = "gfx1030";
@@ -66,7 +85,7 @@ in
     systemd.user.sockets.podman.enable = false;
     systemd.user.services.podman.enable = false;
     environment.etc."aibox.json".text = builtins.toJSON {
-      inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs defaultProfile contextSize;
+      inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs defaultProfile contextSize longContext;
     };
   };
 }

@@ -353,6 +353,143 @@ def prepare_llama(cfg):
     print("Prism llama.cpp HIP runtime and embedded UI prepared. No models downloaded.")
 
 
+KVMEM_KV_BYTES_PER_TOKEN = {"q8_0": 36864, "q5_0": 23808}  # assumed main + MTP draft KV per token (16 attention layers); estimate only
+KVMEM_COMPUTE_OVERHEAD_MIB = 512   # assumed compute buffers + HIP context + replay state; an RX 6800 measurement is still required
+KVMEM_UI = "/opt/kvmem-build/share/kvmem/ui"
+
+
+def kvmem_image(cfg):
+    support = Path(os.environ["AIBOX_SUPPORT"])
+    digest = hashlib.sha256((support / "KvmemContainerfile").read_bytes())
+    digest.update(json.dumps({k: cfg[k] for k in ("gpuArch", "hipBaseImage", "buildJobs")}, sort_keys=True).encode())
+    return "localhost/nx-ai-kvmem:" + digest.hexdigest()[:20]
+
+
+def prepare_kvmem(cfg):
+    run("load", "--input", os.environ["AIBOX_AGENT_ARCHIVE"])
+    support = os.environ["AIBOX_SUPPORT"]
+    run("build", "--tag", kvmem_image(cfg), "--file", f"{support}/KvmemContainerfile",
+        "--build-arg", f"BASE={cfg['hipBaseImage']}",
+        "--build-arg", f"GPU_ARCH={cfg['gpuArch']}",
+        "--build-arg", f"BUILD_JOBS={cfg['buildJobs']}", support)
+    print("KVMem long-context runtime prepared (separate image; Prism runtime unchanged). No models downloaded.")
+
+
+def longcontext_presets():
+    data = json.loads((Path(os.environ["AIBOX_SUPPORT"]) / "longcontext.json").read_text())
+    return {k: v for k, v in data.items() if not k.startswith("_")}
+
+
+def longcontext_settings(cfg, preset, *, allow_experimental=False):
+    """Explicit preset plus optional Nix overrides. Never adjusted to fit memory."""
+    presets = longcontext_presets()
+    if preset not in presets:
+        raise ValueError(f"Unknown long-context preset {preset!r}; choose from: {', '.join(presets)}")
+    settings = dict(presets[preset])
+    overrides = cfg.get("longContext") or {}
+    for key in ("gpuBudget", "genReserve", "hostKvMiB", "containerRamMiB"):
+        if overrides.get(key) is not None:
+            settings[key] = overrides[key]
+    settings["kvDtype"] = overrides.get("kvDtype") or "q8_0"
+    if settings["kvDtype"] not in KVMEM_KV_BYTES_PER_TOKEN:
+        raise ValueError("kvDtype must be q8_0 (default) or q5_0; it is never changed automatically")
+    settings["vramHeadroomMiB"] = overrides.get("vramHeadroomMiB", 256)
+    settings["ramHeadroomMiB"] = overrides.get("ramHeadroomMiB", 2048)
+    for key in ("workspace", "gpuBudget", "genReserve", "hostKvMiB", "containerRamMiB",
+                "vramHeadroomMiB", "ramHeadroomMiB"):
+        if type(settings[key]) is not int or settings[key] < 0:
+            raise ValueError(f"{key} must be a non-negative integer")
+    if settings["gpuBudget"] % 128 or settings["genReserve"] % 128 or settings["gpuBudget"] < 4096 or settings["genReserve"] < 1024:
+        raise ValueError("gpuBudget/genReserve must be multiples of the 128-token KVMem block (>= 4096 / >= 1024)")
+    if settings["gpuBudget"] + settings["genReserve"] > settings["workspace"]:
+        raise ValueError("gpuBudget + genReserve must not exceed the logical workspace")
+    if settings["hostKvMiB"] < 1 or settings["containerRamMiB"] <= settings["hostKvMiB"]:
+        raise ValueError("containerRamMiB must be larger than hostKvMiB")
+    if settings["experimental"] and not allow_experimental:
+        raise ValueError(f"Preset {preset} is experimental (host KV is likely to exceed this machine's RAM); "
+                         "pass --allow-experimental to attempt it")
+    settings["preset"] = preset
+    return settings
+
+
+def kvmem_server_args(cfg, name, settings, *, vision=True):
+    _, files = profile_files(cfg, name, verify=False, vision=vision)
+    args = ["--model", f"/models/{files['model']['name']}", "--alias", "local",
+            "--host", "0.0.0.0", "--port", "8080", "--ctx-size", str(settings["workspace"]),
+            "--parallel", "1", "--batch-size", "256", "--ubatch-size", "128",
+            "--device", "ROCm0", "--gpu-layers", "999", "--load-mode", "none",
+            "--flash-attn", "on", "--kv-dtype", settings["kvDtype"],
+            "--kvmem", "--kvmem-budget", str(settings["gpuBudget"]),
+            "--kvmem-gen-reserve", str(settings["genReserve"]),
+            "--kvmem-block-tokens", "128", "--kvmem-query-policy", "user",
+            "--kvmem-host-mib", str(settings["hostKvMiB"]),
+            "--spec-type", "draft-mtp", "--spec-draft-n-max", "2",
+            "--spec-kv-dtype", settings["kvDtype"], "--kvmem-mtp-state", "replay",
+            "--jinja", "--webui", "--ui-dir", KVMEM_UI]
+    if vision:
+        # Projector on CPU: keeps it out of the tight 16 GiB; image encoding is slower.
+        args += ["--mmproj", f"/models/{files['projector']['name']}", "--no-mmproj-offload",
+                 "--image-max-tokens", "512"]
+    return args
+
+
+def meminfo_mib():
+    values = {}
+    for line in Path("/proc/meminfo").read_text().splitlines():
+        key, _, rest = line.partition(":")
+        values[key] = int(rest.split()[0]) // 1024
+    return values
+
+
+def vram_mib(cfg):
+    base = Path("/sys/class/drm") / Path(cfg["renderDevice"]).name / "device"
+    try:
+        return (int((base / "mem_info_vram_total").read_text()) >> 20,
+                int((base / "mem_info_vram_used").read_text()) >> 20)
+    except (OSError, ValueError):
+        return None
+
+
+def longcontext_plan(cfg, name, settings, *, vision=True):
+    """Explicit memory plan. Returns (plan, problems); the caller refuses on problems."""
+    _, files = profile_files(cfg, name, verify=False, vision=vision)
+    weights = -(-files["model"]["size"] // (1 << 20))
+    pool = settings["gpuBudget"] + settings["genReserve"]
+    kv = -(-pool * KVMEM_KV_BYTES_PER_TOKEN[settings["kvDtype"]] // (1 << 20))
+    need_vram = weights + kv + KVMEM_COMPUTE_OVERHEAD_MIB + settings["vramHeadroomMiB"]
+    plan = {"profile": name, "preset": settings["preset"], "workspace_tokens": settings["workspace"],
+            "vram_working_pool_tokens": pool, "estimate_mib": {"weights": weights, "kv_pool": kv,
+            "compute_overhead_assumed": KVMEM_COMPUTE_OVERHEAD_MIB, "headroom": settings["vramHeadroomMiB"],
+            "vram_total_needed": need_vram, "host_kv_quota": settings["hostKvMiB"],
+            "container_ram_cap": settings["containerRamMiB"]},
+            "vision": "cpu projector" if vision else "off",
+            "kv_dtype": settings["kvDtype"],
+            "note": "Estimates only; weights from the pinned file size, KV from an assumed per-token size incl. MTP. Verify with aibox status/logs on nyx."}
+    problems = []
+    vram = vram_mib(cfg)
+    if vram is None:
+        plan["vram_free_mib"] = None
+        plan["warning"] = "VRAM could not be read from sysfs; fit is unverified"
+    else:
+        plan["vram_free_mib"] = vram[0] - vram[1]
+        if vram[0] - vram[1] < need_vram:
+            problems.append(f"VRAM: ~{need_vram} MiB needed (weights {weights} + KV pool {kv} + compute "
+                            f"{KVMEM_COMPUTE_OVERHEAD_MIB} + headroom {settings['vramHeadroomMiB']}), "
+                            f"{vram[0] - vram[1]} MiB free of {vram[0]}. Close GPU users or choose a smaller "
+                            "gpuBudget/genReserve explicitly; nothing is reduced or offloaded automatically")
+    try:
+        mem = meminfo_mib()
+        plan["ram_available_mib"] = mem["MemAvailable"]
+        plan["host_swap_total_mib"] = mem.get("SwapTotal", 0)
+        if mem["MemAvailable"] < settings["containerRamMiB"] + settings["ramHeadroomMiB"]:
+            problems.append(f"RAM: container cap {settings['containerRamMiB']} MiB + headroom "
+                            f"{settings['ramHeadroomMiB']} MiB exceeds MemAvailable {mem['MemAvailable']} MiB. "
+                            "Choose a smaller workspace preset or free memory; swap is never used for KV")
+    except (OSError, KeyError, ValueError):
+        plan["ram_available_mib"] = None
+    return plan, problems
+
+
 def llama_server_args(cfg, name, *, vision=True):
     _, files = profile_files(cfg, name, verify=False, vision=vision)
     context = cfg.get("contextSize", 16384)
@@ -393,44 +530,96 @@ def wait_for_llama(timeout=180):
     raise ValueError("Model still loading; inspect aibox logs/status. Container left running; no success claimed")
 
 
-def start_llama(cfg, name=None, *, port=None, no_open=True, vision=True):
+def wait_for_kvmem(timeout=300):
+    """Ready only when /health is ok and every slot reports an active speculative (MTP) sampler."""
+    deadline = time.monotonic() + timeout
+    probe = ("import json, urllib.request as u\n"
+             "h = json.load(u.urlopen('http://127.0.0.1:8080/health', timeout=2))\n"
+             "s = json.load(u.urlopen('http://127.0.0.1:8080/slots', timeout=2))\n"
+             "print(json.dumps({'health': h, 'slots': [bool(x.get('speculative')) for x in s]}))")
+    while time.monotonic() < deadline:
+        data = owned_server()
+        if not data or not data.get("State", {}).get("Running"):
+            run("logs", "--tail=100", SERVER, check=False)
+            raise ValueError("Long-context server exited (see logs above; KVMEM_STARTUP_ERROR lines name the cause). "
+                             "No setting was weakened. Roll back with: aibox stop && aibox ui")
+        result = run("exec", SERVER, "python3", "-I", "-c", probe, check=False, capture=True)
+        if result.returncode == 0:
+            state = json.loads(result.stdout)
+            if state["health"].get("status") != "ok":
+                time.sleep(1)
+                continue
+            if not state["slots"] or not all(state["slots"]):
+                run("stop", "--time=10", SERVER)
+                raise ValueError("MTP is not active in the KVMem server; server stopped (no silent fallback)")
+            return
+        time.sleep(1)
+    raise ValueError("Model still loading; inspect aibox logs/status. Container left running; no success claimed")
+
+
+def start_llama(cfg, name=None, *, port=None, no_open=True, vision=True, long_context=None,
+                allow_experimental=False):
     name, entry = profile(cfg, name)
     if port is not None and (type(port) is not int or not 1024 <= port <= 65535):
         raise ValueError("UI port must be between 1024 and 65535")
+    settings = longcontext_settings(cfg, long_context, allow_experimental=allow_experimental) if long_context else None
+    if settings and name != "qwen27-iq4xs":
+        raise ValueError("The KVMem long-context mode is qualified for qwen27-iq4xs only; "
+                         "Bonsai needs the Prism runtime (use the default 16K mode)")
+    server_args = kvmem_server_args(cfg, name, settings, vision=vision) if settings else llama_server_args(cfg, name, vision=vision)
+    engine = "kvmem" if settings else "prism"
     old = owned_server()
     if old and old.get("State", {}).get("Running"):
         labels = old.get("Config", {}).get("Labels", {})
         if (port is not None and labels.get(f"{LABEL}.mode") == "llama"
                 and labels.get(f"{LABEL}.profile") == name
+                and labels.get(f"{LABEL}.engine", "prism") == engine
                 and ui_binding(old) == f"http://127.0.0.1:{port}"
-                and old.get("Config", {}).get("Cmd") == llama_server_args(cfg, name, vision=vision)):
-            wait_for_llama()
+                and old.get("Config", {}).get("Cmd") == server_args):
+            (wait_for_kvmem if settings else wait_for_llama)()
             show_llama_ui(port, no_open)
             return
         raise ValueError("Inference is running; run aibox stop before changing profiles, settings or UI mode")
-    image = llama_image(cfg)
+    image = kvmem_image(cfg) if settings else llama_image(cfg)
     if not exists("image", image):
-        raise ValueError("Prism HIP runtime missing. Run aibox prepare first")
+        raise ValueError("KVMem runtime missing. Run aibox prepare --kvmem first" if settings
+                         else "Prism HIP runtime missing. Run aibox prepare first")
     # Verify before replacing an existing container; no network downloads on start.
     directory, _ = profile_files(cfg, name, vision=vision)
-    server_args = llama_server_args(cfg, name, vision=vision)
+    memory = []
+    if settings:
+        plan, problems = longcontext_plan(cfg, name, settings, vision=vision)
+        print(json.dumps(plan, indent=2), flush=True)
+        if problems:
+            raise ValueError("Insufficient memory for the requested configuration:\n  - " + "\n  - ".join(problems))
+        # Hard container cap; swap equal to the cap means no swapping of KV or weights.
+        memory = [f"--memory={settings['containerRamMiB']}m", f"--memory-swap={settings['containerRamMiB']}m"]
     devices = gpu_args(cfg)
     ensure_network()
     if old:
         run("rm", SERVER)
     args = base_run(SERVER) + ["--detach", "--network-alias=strata",
             "--label", f"{LABEL}.mode=llama", "--label", f"{LABEL}.profile={name}",
+            "--label", f"{LABEL}.engine={engine}", *memory,
             "--userns=keep-id", "--user", f"{os.getuid()}:{os.getgid()}", *devices,
             "--env=HIP_VISIBLE_DEVICES=0",
             "--mount", f"type=bind,src={directory},target=/models,ro,bind-nonrecursive"]
     if port is not None:
         args += ["--publish", f"127.0.0.1:{port}:8080"]
     run(*args, image, *server_args)
-    print(f"Loading {entry['name']}; context={cfg.get('contextSize', 16384)}, K/V=q8_0, MTP max=2.", flush=True)
-    if name == "qwen27-iq4xs":
-        print("RX 6800: IQ4_XS + vision + MTP may exceed VRAM. No automatic CPU offload/context reduction.", flush=True)
-    wait_for_llama()
-    print("Server healthy; draft-mtp initialized. Acceptance/speed must be measured with real requests.")
+    if settings:
+        print(f"Loading {entry['name']} via KVMem: preset={settings['preset']}, workspace={settings['workspace']}, "
+              f"GPU pool={settings['gpuBudget']}+{settings['genReserve']}, host KV={settings['hostKvMiB']} MiB, "
+              "K/V={settings['kvDtype']}, MTP max=2, vision on CPU.", flush=True)
+        print("No automatic context reduction, CPU weight offload or swap. Rollback: aibox stop && aibox ui", flush=True)
+        wait_for_kvmem()
+        print("Server healthy; MTP sampler active. Run the probe to verify retrieval, tools, vision and speed.")
+    else:
+        print(f"Loading {entry['name']}; context={cfg.get('contextSize', 16384)}, K/V=q8_0, MTP max=2.", flush=True)
+        if name == "qwen27-iq4xs":
+            print("RX 6800: IQ4_XS + vision + MTP may exceed VRAM. No automatic CPU offload/context reduction.", flush=True)
+        wait_for_llama()
+        print("Server healthy; draft-mtp initialized. Acceptance/speed must be measured with real requests.")
     if port is not None:
         show_llama_ui(port, no_open)
     else:
@@ -485,6 +674,7 @@ def main():
     p = sub.add_parser("prepare", help="Load coding image and explicitly build HIP runtime, no models")
     p.add_argument("--agent-only", action="store_true")
     p.add_argument("--strata", action="store_true", help="Prepare legacy Strata instead of Prism llama.cpp")
+    p.add_argument("--kvmem", action="store_true", help="Build the optional KVMem long-context runtime (separate image)")
     p = sub.add_parser("doctor", help="List HIP devices without loading a model")
     p.add_argument("--strata", action="store_true")
     sub.add_parser("models", help="List pinned model profiles; no download")
@@ -497,11 +687,20 @@ def main():
     p.add_argument("--strata", action="store_true", help="Open legacy Strata manager instead")
     p.add_argument("--profile", choices=("qwen27-iq4xs", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true", help="Explicitly omit the vision projector")
+    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512"),
+                   help="Optional KVMem mode (qwen27-iq4xs); omitted = unchanged 16K Prism path")
+    p.add_argument("--allow-experimental", action="store_true")
     p.add_argument("--port", type=int, default=8766)
     p.add_argument("--no-open", action="store_true", help="Print the address without launching a browser")
     p = sub.add_parser("start", help="Start a pinned model on the private network")
     p.add_argument("--strata", action="store_true")
     p.add_argument("--profile", choices=("qwen27-iq4xs", "bonsai27-pq2"))
+    p.add_argument("--text-only", action="store_true")
+    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512"))
+    p.add_argument("--allow-experimental", action="store_true")
+    p = sub.add_parser("plan", help="Print the memory plan and checks for a long-context preset; starts nothing")
+    p.add_argument("preset", choices=("lc64", "lc128", "lc256", "lc512"))
+    p.add_argument("--profile", choices=("qwen27-iq4xs",))
     p.add_argument("--text-only", action="store_true")
     for name in ("stop", "status", "logs"):
         sub.add_parser(name)
@@ -515,12 +714,22 @@ def main():
         raise ValueError("Run aibox as your normal user, without sudo")
     cfg = load_config()
     if args.action == "prepare":
-        prepare(cfg, args.agent_only) if args.agent_only or args.strata else prepare_llama(cfg)
+        if args.kvmem:
+            prepare_kvmem(cfg)
+        else:
+            prepare(cfg, args.agent_only) if args.agent_only or args.strata else prepare_llama(cfg)
+    elif args.action == "plan":
+        name, _ = profile(cfg, args.profile or "qwen27-iq4xs")
+        settings = longcontext_settings(cfg, args.preset, allow_experimental=True)
+        plan, problems = longcontext_plan(cfg, name, settings, vision=not args.text_only)
+        print(json.dumps({**plan, "problems": problems, "server_args": kvmem_server_args(cfg, name, settings, vision=not args.text_only)}, indent=2))
+        return 1 if problems else 0
     elif args.action == "prepare-ui":
         prepare_ui(cfg)
     elif args.action == "models":
         print(json.dumps({"selected": profile(cfg)[0], "context": cfg.get("contextSize", 16384),
-                          "kv_k": "q8_0", "kv_v": "q8_0", "mtp_max": 2, "profiles": profiles()}, indent=2))
+                          "kv_k": "q8_0", "kv_v": "q8_0", "mtp_max": 2, "profiles": profiles(),
+                          "long_context_presets": longcontext_presets()}, indent=2))
     elif args.action == "fetch":
         fetch_profile(cfg, args.profile)
     elif args.action == "verify":
@@ -547,12 +756,14 @@ def main():
         if args.action == "smoke" or args.strata:
             start(cfg, smoke=args.action == "smoke")
         else:
-            start_llama(cfg, args.profile, vision=not args.text_only)
+            start_llama(cfg, args.profile, vision=not args.text_only, long_context=args.long_context,
+                        allow_experimental=args.allow_experimental)
     elif args.action == "ui":
         if args.strata:
             ui(cfg, port=args.port, no_open=args.no_open)
         else:
-            start_llama(cfg, args.profile, port=args.port, no_open=args.no_open, vision=not args.text_only)
+            start_llama(cfg, args.profile, port=args.port, no_open=args.no_open, vision=not args.text_only,
+                        long_context=args.long_context, allow_experimental=args.allow_experimental)
     elif args.action in ("shell", "exec"):
         ensure_image(os.environ["AIBOX_AGENT_IMAGE"])
         ensure_network()
@@ -575,6 +786,8 @@ def main():
         print(json.dumps({"inference": data.get("State") if data else None,
                           "image_prepared": exists("image", image_name(cfg)),
                           "llama_image_prepared": exists("image", llama_image(cfg)),
+                          "kvmem_image_prepared": exists("image", kvmem_image(cfg)),
+                          "engine": (data or {}).get("Config", {}).get("Labels", {}).get(f"{LABEL}.engine"),
                           "profile": (data or {}).get("Config", {}).get("Labels", {}).get(f"{LABEL}.profile"),
                           "command": (data or {}).get("Config", {}).get("Cmd"),
                           "model_config_present": (Path(cfg["modelDirectory"]).expanduser() / "server.json").is_file(),

@@ -2,6 +2,7 @@
 
 let
   skills = pkgs.writeTextDir "share/aibox/SKILLS.md" (builtins.readFile ./SKILLS.md);
+  probe = pkgs.writeTextDir "share/aibox/longctx_probe.py" (builtins.readFile ./longctx_probe.py);
   agentRoot = pkgs.buildEnv {
     name = "aibox-agent-root";
     paths = with pkgs; [
@@ -19,6 +20,7 @@ let
       gcc
       codex
       skills
+      probe
     ] ++ agentExtraPackages;
     pathsToLink = [ "/bin" "/share" "/etc" ];
   };
@@ -47,6 +49,8 @@ let
     mkdir -p $out
     cp ${./LlamaContainerfile} $out/LlamaContainerfile
     cp ${./require-mtp.py} $out/require-mtp.py
+    cp ${./KvmemContainerfile} $out/KvmemContainerfile
+    cp ${./longcontext.json} $out/longcontext.json
     cp ${./profiles.json} $out/profiles.json
     cp ${./Containerfile} $out/Containerfile
     cp ${./entrypoint.py} $out/entrypoint.py

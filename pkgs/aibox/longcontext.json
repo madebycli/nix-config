@@ -1,0 +1,7 @@
+{
+  "_comment": "Test presets for the optional KVMem long-context mode. workspace is the logical context kept mostly in host RAM. gpuBudget+genReserve is the VRAM KV working pool (same 16384-token pool as the 16K profile, so VRAM need is comparable). hostKvMiB is the hard KVMem host-KV quota, containerRamMiB the hard container cap (swap disabled). Nothing here is measured on an RX 6800.",
+  "lc64":  {"workspace": 65536,  "gpuBudget": 12288, "genReserve": 4096, "hostKvMiB": 4096,  "containerRamMiB": 12288, "experimental": false},
+  "lc128": {"workspace": 131072, "gpuBudget": 12288, "genReserve": 4096, "hostKvMiB": 6144,  "containerRamMiB": 14336, "experimental": false},
+  "lc256": {"workspace": 262144, "gpuBudget": 12288, "genReserve": 4096, "hostKvMiB": 12288, "containerRamMiB": 20480, "experimental": false},
+  "lc512": {"workspace": 524288, "gpuBudget": 12288, "genReserve": 4096, "hostKvMiB": 22528, "containerRamMiB": 28672, "experimental": true}
+}

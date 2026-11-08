@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+# Optional long-context runtime (KVMem on llama.cpp, HIP). Separate image: the
+# Prism runtime in LlamaContainerfile is untouched and remains the rollback path.
+# Model acquisition stays a separate, explicit `aibox fetch`.
+ARG BASE=docker.io/rocm/dev-ubuntu-24.04:7.2.3-complete
+FROM docker.io/library/node:22.20.0-bookworm-slim AS source
+# kvmem/kvmem main 0.19.0. The pinned upstream llama.cpp base commit and the
+# ordered patch series (with tree hashes) are verified by scripts/prepare-backends.py.
+ARG KVMEM_REV=deb8e76582892a3f6f61bae0b728701b3b41cce7
+ARG LLAMA_BASE=cd959bae99ff4bed22bef2604f45241c09bbb8c8
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 \
+    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -r /run/secrets/proxy_ca ]; then export GIT_SSL_CAINFO=/run/secrets/proxy_ca NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    git init /opt/kvmem && cd /opt/kvmem \
+    && git remote add origin https://github.com/kvmem/kvmem.git \
+    && git fetch --depth 1 origin ${KVMEM_REV} && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${KVMEM_REV}" \
+    && git submodule update --init --depth 1 -- backends/llamacpp \
+    && test "$(git -C backends/llamacpp rev-parse HEAD)" = "${LLAMA_BASE}" \
+    && python3 scripts/prepare-backends.py --backend llamacpp \
+    && python3 scripts/prepare-backends.py --backend llamacpp --check \
+    && python3 scripts/build-webui.py --full-ui --output /opt/kvmem-ui
+FROM ${BASE}
+ARG GPU_ARCH=gfx1030
+ARG BUILD_JOBS=2
+ENV DEBIAN_FRONTEND=noninteractive PYTHONDONTWRITEBYTECODE=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build python3 ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=source /opt/kvmem /opt/kvmem
+COPY --from=source /opt/kvmem-ui /opt/kvmem-build/share/kvmem/ui
+RUN cd /opt/kvmem \
+    && python3 scripts/build-rocm.py --linux --rocm /opt/rocm --gpu-targets ${GPU_ARCH} \
+         --build-dir /opt/kvmem-build --jobs ${BUILD_JOBS} \
+    && test -x /opt/kvmem-build/bin/llama-kvmem-server \
+    && /opt/kvmem-build/bin/llama-kvmem-server --help > /opt/kvmem-server-help.txt 2>&1 \
+    && for flag in --kvmem --kvmem-budget --kvmem-gen-reserve --kvmem-host-mib --kvmem-mtp-state \
+                   --spec-kv-dtype --no-mmproj-offload --list-devices; do \
+         grep -q -- "$flag" /opt/kvmem-server-help.txt || { echo "missing server flag $flag" >&2; exit 1; }; done
+ENV PATH=/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    LD_LIBRARY_PATH=/opt/kvmem-build/lib:/opt/kvmem-build/bin:/opt/rocm/lib \
+    HOME=/tmp/aibox
+WORKDIR /tmp
+ENTRYPOINT ["/opt/kvmem-build/bin/llama-kvmem-server"]
+CMD ["--list-devices"]
