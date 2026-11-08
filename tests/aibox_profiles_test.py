@@ -68,7 +68,7 @@ class Profiles(unittest.TestCase):
 
     def test_manifest_has_immutable_revisions_hashes_and_distinct_projectors(self):
         entries = aibox.profiles()
-        self.assertEqual(set(entries), {"qwen27-iq4xs", "bonsai27-pq2"})
+        self.assertEqual(set(entries), {"qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"})
         for entry in entries.values():
             self.assertEqual({x["role"] for x in entry["files"]}, {"model", "projector"})
             for item in entry["files"]:

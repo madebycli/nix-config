@@ -7,7 +7,7 @@ in
   options.my.features.local-ai = {
     enable = lib.mkEnableOption "on-demand rootless llama.cpp/Strata HIP and workspace coding containers, without models";
     defaultProfile = lib.mkOption {
-      type = lib.types.enum [ "qwen27-iq4xs" "bonsai27-pq2" ];
+      type = lib.types.enum [ "qwen27-iq4xs" "qwen27-iq3" "bonsai27-pq2" ];
       default = "qwen27-iq4xs";
       description = "Pinned model selected by aibox start/ui/fetch. Models are downloaded only by explicit fetch.";
     };

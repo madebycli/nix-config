@@ -67,7 +67,9 @@ class LongContext(unittest.TestCase):
         self.assertEqual(four[four.index("--spec-kv-dtype") + 1], "q8_0")
         preset = aibox.longcontext_settings(self.cfg, "lc256-iq3")
         self.assertEqual((preset["kvDtype"], preset["gpuBudget"], preset["workspace"]), ("k8v4", 32768, 262144))
-        with self.assertRaisesRegex(ValueError, "pinned files are not in profiles.json"):
+        self.assertEqual(aibox.longcontext_profile(self.cfg, "lc256-iq3"), "qwen27-iq3")
+        with patch.object(aibox, "profiles", return_value={}), \
+             self.assertRaisesRegex(ValueError, "pinned files are not in profiles.json"):
             aibox.longcontext_profile(self.cfg, "lc256-iq3")
         with self.assertRaises(ValueError):
             aibox.longcontext_profile(self.cfg, "lc256-iq3", "qwen27-iq4xs")

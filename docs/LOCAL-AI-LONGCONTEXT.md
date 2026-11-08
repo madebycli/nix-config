@@ -92,7 +92,7 @@ Requested as an additional option; the IQ4_XS presets above stay as they are.
 - Estimated KV pool: 45,056 tokens x ~28 KiB = ~1.2 GiB. With IQ3 weights (~11 GiB, size
   unconfirmed) this should leave real headroom. This is the closest match to KVMem's own
   validated 16 GiB recipe (IQ3, 28K window, 256K). Still UNVERIFIED on gfx1030.
-- **Blocked on pins:** the IQ3 file (revision, size, sha256) is not in `profiles.json` because
+- **Pinned (2026-11-08):** `qwen27-iq3` = ISTA-DASLab GSQ-RCO IQ3_S with embedded MTP (12,120,016,960 B, 11.29 GiB) plus HermiHg Q5_K-MIX projector (0.32 GiB), revisions and SHA256 in `profiles.json`. Third-party quantization; quality vs IQ4_XS is unmeasured.
   Hugging Face was unreachable from the build session. `aibox plan lc256-iq3` and `ui
   --long-context lc256-iq3` refuse with a clear message until `qwen27-iq3` is added. Nothing is
   substituted. IQ3 is a quantization change you approved for this option only.

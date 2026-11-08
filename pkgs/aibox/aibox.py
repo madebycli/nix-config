@@ -712,7 +712,7 @@ def main():
     sub.add_parser("prepare-ui", help="Build legacy Strata manager on its prepared HIP image, no models")
     p = sub.add_parser("ui", help="Start selected model and open llama.cpp chat UI on localhost")
     p.add_argument("--strata", action="store_true", help="Open legacy Strata manager instead")
-    p.add_argument("--profile", choices=("qwen27-iq4xs", "bonsai27-pq2"))
+    p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true", help="Explicitly omit the vision projector")
     p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"),
                    help="Optional KVMem mode (qwen27-iq4xs); omitted = unchanged 16K Prism path")
@@ -721,7 +721,7 @@ def main():
     p.add_argument("--no-open", action="store_true", help="Print the address without launching a browser")
     p = sub.add_parser("start", help="Start a pinned model on the private network")
     p.add_argument("--strata", action="store_true")
-    p.add_argument("--profile", choices=("qwen27-iq4xs", "bonsai27-pq2"))
+    p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true")
     p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"))
     p.add_argument("--allow-experimental", action="store_true")

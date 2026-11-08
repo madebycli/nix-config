@@ -3,16 +3,66 @@
     "name": "Qwen3.8-27B IQ4_XS with embedded MTP",
     "provenance": "bartowski quantization, embedded Q4_0 MTP head",
     "files": [
-      {"role":"model", "repo":"bartowski/Qwen3.8-27B-GGUF", "revision":"87410e7b9a5c21e6ca70c0c9cc5237de909fe621", "name":"Qwen3.8-27B-IQ4_XS.gguf", "size":15475951328, "sha256":"4b927360fa7c4aa41a734302f0795ca45df0e8b8a258bc76cc5fbf9d98a484db"},
-      {"role":"projector", "repo":"bartowski/Qwen3.8-27B-GGUF", "revision":"87410e7b9a5c21e6ca70c0c9cc5237de909fe621", "name":"mmproj-Qwen3.8-27B-f16.gguf", "size":927607008, "sha256":"cb0a71fe9b84af2552fc6260acf8e9773a29d115c683aba01c72a7ac537b212b"}
+      {
+        "role": "model",
+        "repo": "bartowski/Qwen3.8-27B-GGUF",
+        "revision": "87410e7b9a5c21e6ca70c0c9cc5237de909fe621",
+        "name": "Qwen3.8-27B-IQ4_XS.gguf",
+        "size": 15475951328,
+        "sha256": "4b927360fa7c4aa41a734302f0795ca45df0e8b8a258bc76cc5fbf9d98a484db"
+      },
+      {
+        "role": "projector",
+        "repo": "bartowski/Qwen3.8-27B-GGUF",
+        "revision": "87410e7b9a5c21e6ca70c0c9cc5237de909fe621",
+        "name": "mmproj-Qwen3.8-27B-f16.gguf",
+        "size": 927607008,
+        "sha256": "cb0a71fe9b84af2552fc6260acf8e9773a29d115c683aba01c72a7ac537b212b"
+      }
     ]
   },
   "bonsai27-pq2": {
     "name": "Ternary Bonsai 2 27B PQ2_0 with trained Q8_0 MTP head",
     "provenance": "Independent ProCreations r3-mtp community bundle, not an official Prism ML release; original Bonsai base tensors unchanged",
     "files": [
-      {"role":"model", "repo":"ProCreations/Ternary-Bonsai-2-27B-MTP", "revision":"efffdea64c1f9e93cc7fa6bb24f72ae9d66ecf51", "name":"Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf", "size":7657489728, "sha256":"3cb3f0056d2e34ee44245a64396004a21f8492573d6ce1266ec4b7222c131dd4"},
-      {"role":"projector", "repo":"prism-ml/Ternary-Bonsai-2-27B-gguf", "revision":"94dd51cdbbec5309ed8b76a12f3268bc4fdceb93", "name":"Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf", "size":629246976, "sha256":"6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903"}
+      {
+        "role": "model",
+        "repo": "ProCreations/Ternary-Bonsai-2-27B-MTP",
+        "revision": "efffdea64c1f9e93cc7fa6bb24f72ae9d66ecf51",
+        "name": "Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf",
+        "size": 7657489728,
+        "sha256": "3cb3f0056d2e34ee44245a64396004a21f8492573d6ce1266ec4b7222c131dd4"
+      },
+      {
+        "role": "projector",
+        "repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+        "revision": "94dd51cdbbec5309ed8b76a12f3268bc4fdceb93",
+        "name": "Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf",
+        "size": 629246976,
+        "sha256": "6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903"
+      }
+    ]
+  },
+  "qwen27-iq3": {
+    "name": "Qwen3.8-27B GSQ-RCO IQ3_S with embedded MTP",
+    "provenance": "ISTA-DASLab GSQ-RCO quantization (third party, not bartowski/unsloth), embedded MTP head; projector Q5_K-MIX by HermiHg, the pair KVMem documents for IQ3. Quality vs IQ4_XS unmeasured",
+    "files": [
+      {
+        "role": "model",
+        "repo": "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF",
+        "revision": "d562806dbafae37109975e970aae91b43e73b440",
+        "name": "Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf",
+        "size": 12120016960,
+        "sha256": "58fd826723939933dc86f45b7fe04545cbc2de1c70f6fe2cdd3858c87a98c12f"
+      },
+      {
+        "role": "projector",
+        "repo": "HermiHg/Qwen3.8-27B-mmproj-Q5_K-MIX-GGUF",
+        "revision": "dbf78ac52891f19cf175abb8813997267adb0e92",
+        "name": "mmproj-Qwen3.8-27B-Q5_K-MIX.gguf",
+        "size": 347213792,
+        "sha256": "023c9b484ba6c2c22dd64623cfe286dd4a888170e68bfad6745957e4bd045c8f"
+      }
     ]
   }
 }
