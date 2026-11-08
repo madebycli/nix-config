@@ -402,10 +402,11 @@ def longcontext_settings(cfg, preset, *, allow_experimental=False):
     settings["kvDtype"] = overrides.get("kvDtype") or settings.get("kvDtype", "q8_0")
     if settings["kvDtype"] not in KVMEM_KV_BYTES_PER_TOKEN:
         raise ValueError("kvDtype must be one of q8_0 (default), q5_0, k8v4, q4_0; it is never changed automatically")
+    settings["computeOverheadMiB"] = overrides.get("computeOverheadMiB", KVMEM_COMPUTE_OVERHEAD_MIB)
     settings["vramHeadroomMiB"] = overrides.get("vramHeadroomMiB", 256)
     settings["ramHeadroomMiB"] = overrides.get("ramHeadroomMiB", 2048)
     for key in ("workspace", "gpuBudget", "genReserve", "hostKvMiB", "containerRamMiB",
-                "vramHeadroomMiB", "ramHeadroomMiB"):
+                "vramHeadroomMiB", "ramHeadroomMiB", "computeOverheadMiB"):
         if type(settings[key]) is not int or settings[key] < 0:
             raise ValueError(f"{key} must be a non-negative integer")
     if settings["gpuBudget"] % 128 or settings["genReserve"] % 128 or settings["gpuBudget"] < 4096 or settings["genReserve"] < 1024:
@@ -477,10 +478,10 @@ def longcontext_plan(cfg, name, settings, *, vision=True):
     weights = -(-files["model"]["size"] // (1 << 20))
     pool = settings["gpuBudget"] + settings["genReserve"]
     kv = -(-pool * KVMEM_KV_BYTES_PER_TOKEN[settings["kvDtype"]] // (1 << 20))
-    need_vram = weights + kv + KVMEM_COMPUTE_OVERHEAD_MIB + settings["vramHeadroomMiB"]
+    need_vram = weights + kv + settings["computeOverheadMiB"] + settings["vramHeadroomMiB"]
     plan = {"profile": name, "preset": settings["preset"], "workspace_tokens": settings["workspace"],
             "vram_working_pool_tokens": pool, "estimate_mib": {"weights": weights, "kv_pool": kv,
-            "compute_overhead_assumed": KVMEM_COMPUTE_OVERHEAD_MIB, "headroom": settings["vramHeadroomMiB"],
+            "compute_overhead_assumed": settings["computeOverheadMiB"], "headroom": settings["vramHeadroomMiB"],
             "vram_total_needed": need_vram, "host_kv_quota": settings["hostKvMiB"],
             "container_ram_cap": settings["containerRamMiB"]},
             "vision": "cpu projector" if vision else "off",
@@ -495,7 +496,7 @@ def longcontext_plan(cfg, name, settings, *, vision=True):
         plan["vram_free_mib"] = vram[0] - vram[1]
         if vram[0] - vram[1] < need_vram:
             problems.append(f"VRAM: ~{need_vram} MiB needed (weights {weights} + KV pool {kv} + compute "
-                            f"{KVMEM_COMPUTE_OVERHEAD_MIB} + headroom {settings['vramHeadroomMiB']}), "
+                            f"{settings['computeOverheadMiB']} + headroom {settings['vramHeadroomMiB']}), "
                             f"{vram[0] - vram[1]} MiB free of {vram[0]}. Close GPU users or choose a smaller "
                             "gpuBudget/genReserve explicitly; nothing is reduced or offloaded automatically")
     try:

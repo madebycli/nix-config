@@ -30,6 +30,7 @@ in
           hostKvMiB = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "Hard KVMem host-RAM KV quota in MiB."; };
           containerRamMiB = lib.mkOption { type = lib.types.nullOr lib.types.ints.positive; default = null; description = "Hard container RAM cap in MiB; swap is disabled for it."; };
           kvDtype = lib.mkOption { type = lib.types.nullOr (lib.types.enum [ "q8_0" "q5_0" "k8v4" "q4_0" ]); default = null; description = "KV type for long-context mode. Null keeps the preset (q8_0, or k8v4 for lc256-iq3). q5_0 is the KVMem IQ4 reference recipe; k8v4 = K q8_0 / V q4_0 (mixed); q4_0 is 4-bit K and V and the most lossy. Never changed automatically."; };
+          computeOverheadMiB = lib.mkOption { type = lib.types.ints.unsigned; default = 512; description = "Assumed compute-buffer/HIP-context VRAM in the start check. An estimate: lower it only to test the real limit; an allocation failure is then reported by the server, never worked around."; };
           vramHeadroomMiB = lib.mkOption { type = lib.types.ints.unsigned; default = 256; description = "Free VRAM required beyond the estimate before start."; };
           ramHeadroomMiB = lib.mkOption { type = lib.types.ints.unsigned; default = 2048; description = "Free host RAM required beyond the container cap before start."; };
         };
