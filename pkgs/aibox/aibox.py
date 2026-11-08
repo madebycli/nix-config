@@ -649,7 +649,7 @@ def start_llama(cfg, name=None, *, port=None, no_open=True, vision=True, long_co
     if settings:
         print(f"Loading {entry['name']} via KVMem: preset={settings['preset']}, workspace={settings['workspace']}, "
               f"GPU pool={settings['gpuBudget']}+{settings['genReserve']}, host KV={settings['hostKvMiB']} MiB, "
-              "KV={settings['kvDtype']}, MTP max=2, vision on CPU.", flush=True)
+              f"KV={settings['kvDtype']}, MTP max=2, vision on CPU.", flush=True)
         print("No automatic context reduction, CPU weight offload or swap. Rollback: aibox stop && aibox ui", flush=True)
         wait_for_kvmem()
         print("Server healthy; MTP sampler active. Run the probe to verify retrieval, tools, vision and speed.")
