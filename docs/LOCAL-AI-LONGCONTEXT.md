@@ -99,6 +99,21 @@ Requested as an additional option; the IQ4_XS presets above stay as they are.
 - The default Prism path accepts `my.features.local-ai.kvCacheType = "k8v4"` (or `"q4_0"`) for
   a larger plain context without KVMem. Quality impact is unmeasured.
 
+## Measured on nyx (2026-11-08, `lc256-iq3`, RX 6800 with desktop on the card)
+
+One user-supplied session; not a benchmark suite.
+
+| Item | Result |
+|---|---|
+| Start | loads, MTP active (`/slots` speculative=true), no OOM |
+| VRAM used (sysfs, incl. ~0.9 GiB desktop) | 15.0 to 15.26 GiB peak seen, ~1.1 GiB free; implies ~1.5 GiB compute overhead (now the plan default) |
+| Container RAM | 4.1 GB at the time of `podman stats`; system RAM 12.2 of 31 GiB used |
+| Decode (chat, thinking on) | 35 to 48 t/s, mostly 36 to 44; 32 to 38 t/s for short samples after 8K/50K/85K prompts |
+| Prefill, cold | 330 to 345 t/s at start, 254 t/s average at 50K (212 s total), 222 t/s at 85.6K (385 s) |
+| Retrieval | single needle at 50 % depth in 8,136 and 49,933 tokens: correct (49.9K exceeds the 44K VRAM pool) |
+
+Not yet measured: needles at 5 %/95 %, 110K/230K prompts, tool calls, vision, MTP acceptance, long-range code quality.
+
 ## Safety behaviour
 
 - `aibox start/ui --long-context PRESET` runs `plan` first: it refuses (exit with

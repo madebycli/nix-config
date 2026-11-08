@@ -112,7 +112,7 @@ class LongContext(unittest.TestCase):
         self.assertGreater(plan["estimate_mib"]["weights"], 14000)
 
     def test_plan_passes_with_free_memory_and_warns_when_vram_unreadable(self):
-        settings = aibox.longcontext_settings(self.cfg, "lc128")
+        settings = aibox.longcontext_settings({**self.cfg, "longContext": {"computeOverheadMiB": 512}}, "lc128")
         with patch.object(aibox, "vram_mib", return_value=(16368, 20)), \
              patch.object(aibox, "meminfo_mib", return_value={"MemAvailable": 28000, "SwapTotal": 0}):
             self.assertEqual(aibox.longcontext_plan(self.cfg, "qwen27-iq4xs", settings)[1], [])
