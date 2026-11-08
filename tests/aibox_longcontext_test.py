@@ -80,6 +80,13 @@ class LongContext(unittest.TestCase):
         with self.assertRaises(ValueError):
             aibox.llama_server_args({**self.cfg, "kvCacheType": "q2_0"}, "qwen27-iq4xs")
 
+    def test_image_token_bounds_are_explicit_and_default_unchanged(self):
+        _, base = self.args()
+        self.assertEqual(base[base.index("--image-max-tokens") + 1], "512")
+        self.assertNotIn("--image-min-tokens", base)
+        _, big = self.args(longContext={"imageMinTokens": 1024, "imageMaxTokens": 2048})
+        self.assertEqual((big[big.index("--image-min-tokens") + 1], big[big.index("--image-max-tokens") + 1]), ("1024", "2048"))
+
     def test_vision_can_be_omitted_only_explicitly(self):
         settings, _ = self.args()
         text = aibox.kvmem_server_args(self.cfg, "qwen27-iq4xs", settings, vision=False)

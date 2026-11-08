@@ -411,10 +411,12 @@ def longcontext_settings(cfg, preset, *, allow_experimental=False):
     if settings["kvDtype"] not in KVMEM_KV_BYTES_PER_TOKEN:
         raise ValueError("kvDtype must be one of q8_0 (default), q5_0, k8v4, q4_0; it is never changed automatically")
     settings["computeOverheadMiB"] = overrides.get("computeOverheadMiB", KVMEM_COMPUTE_OVERHEAD_MIB)
+    settings["imageMaxTokens"] = overrides.get("imageMaxTokens") or 512
+    settings["imageMinTokens"] = overrides.get("imageMinTokens") or 0
     settings["vramHeadroomMiB"] = overrides.get("vramHeadroomMiB", 256)
     settings["ramHeadroomMiB"] = overrides.get("ramHeadroomMiB", 2048)
     for key in ("workspace", "gpuBudget", "genReserve", "hostKvMiB", "containerRamMiB",
-                "vramHeadroomMiB", "ramHeadroomMiB", "computeOverheadMiB"):
+                "vramHeadroomMiB", "ramHeadroomMiB", "computeOverheadMiB", "imageMaxTokens", "imageMinTokens"):
         if type(settings[key]) is not int or settings[key] < 0:
             raise ValueError(f"{key} must be a non-negative integer")
     if settings["gpuBudget"] % 128 or settings["genReserve"] % 128 or settings["gpuBudget"] < 4096 or settings["genReserve"] < 1024:
@@ -459,7 +461,9 @@ def kvmem_server_args(cfg, name, settings, *, vision=True):
     if vision:
         # Projector on CPU: keeps it out of the tight 16 GiB; image encoding is slower.
         args += ["--mmproj", f"/models/{files['projector']['name']}", "--no-mmproj-offload",
-                 "--image-max-tokens", "512"]
+                 "--image-max-tokens", str(settings["imageMaxTokens"])]
+        if settings["imageMinTokens"]:
+            args += ["--image-min-tokens", str(settings["imageMinTokens"])]
     return args
 
 
