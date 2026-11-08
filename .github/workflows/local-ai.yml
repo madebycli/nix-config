@@ -25,6 +25,8 @@ jobs:
           python3 tests/aibox_test.py
           python3 tests/aibox_ui_test.py
           python3 tests/aibox_profiles_test.py
+          python3 tests/aibox_longcontext_test.py
+          python3 tests/aibox_ws_test.py
       - name: Build packaged CLI and coding image, without models
         run: |
           nix build --no-write-lock-file --no-link .#aibox .#aibox-agent-image

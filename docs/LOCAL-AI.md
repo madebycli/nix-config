@@ -272,3 +272,25 @@ codex
 - Boundary unchanged: read-only root, no capabilities, no GPU, only PROJECT and `/tools` mounted,
   and no allow-list for the internet. The agent is told never to accept third-party licences (Android SDK)
   without asking. Unverified on nyx: image build, Codex against the KVMem server, Gradle/Android builds.
+
+### Workspaces: one sandbox profile per project
+
+```bash
+aibox prepare --dev                                   # once
+aibox ws new chat-app --template android              # own project folder, tools and chat history
+aibox ws new nixos --template nix --path ~/nix-config
+aibox ws list
+aibox ws codex chat-app                               # start Codex there
+aibox ws codex chat-app -- resume                     # pick up an older chat of that workspace
+aibox ws shell nixos
+aibox ws rm chat-app --yes                            # removes chats and tools, keeps the project folder
+aibox ws rm chat-app --yes --with-project             # also deletes the project folder
+```
+
+Each workspace has its own project folder (default `~/projects/NAME`), its own `/tools` (so different
+Gradle/JDK versions do not mix; `--tools-group NAME` shares one deliberately, e.g. one Android SDK), and
+its own persistent agent home (`/state`) that keeps the Codex chat history. The container sees only those
+three folders. `workspace.json` is not mounted, so the agent cannot change its own mounts or settings.
+Defaults: internet on and agent approvals off inside the container (`--offline`, `--ask` change that).
+The nix template cannot evaluate or build: there is no nix inside the sandbox. A browser UI for
+managing workspaces is not implemented.

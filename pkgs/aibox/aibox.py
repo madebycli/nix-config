@@ -4,6 +4,8 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -703,7 +705,7 @@ def tools_directory(cfg, workspace):
     return path
 
 
-def agent_args(cfg, project, command, *, online=False, full_access=False, dev=False):
+def agent_args(cfg, project, command, *, online=False, full_access=False, dev=False, tools=None, state=None):
     path = safe_directory(project, workspace=True, model=cfg["modelDirectory"])
     manager = Path(cfg["modelDirectory"]).expanduser().resolve().parent / "manager"
     if path.is_relative_to(manager) or manager.is_relative_to(path):
@@ -714,7 +716,11 @@ def agent_args(cfg, project, command, *, online=False, full_access=False, dev=Fa
             "--workdir=/work", "--env=OPENAI_BASE_URL=http://strata:8080/v1",
             "--env=OPENAI_API_KEY=local-only"]
     if dev:
-        args += ["--mount", f"type=bind,src={tools_directory(cfg, path)},target=/tools,bind-nonrecursive"]
+        args += ["--mount", f"type=bind,src={tools or tools_directory(cfg, path)},target=/tools,bind-nonrecursive"]
+    if state:
+        # Persistent agent home (chat history, config) of one workspace, never shared with others.
+        args += ["--mount", f"type=bind,src={state},target=/state,bind-nonrecursive",
+                 "--env=AIBOX_STATE_HOME=/state"]
     if full_access:
         # Only changes the agent's own approval prompts inside the container; mounts and caps stay.
         args += ["--env=AIBOX_FULL_ACCESS=1"]
@@ -727,7 +733,11 @@ def agent_args(cfg, project, command, *, online=False, full_access=False, dev=Fa
     # The shell is inside the container. No host command string is evaluated.
     bootstrap = '''umask 077
 export HOME
-HOME="$(mktemp -d "${TMPDIR:-/tmp}/aibox-home.XXXXXXXX")"
+if [ -n "${AIBOX_STATE_HOME:-}" ]; then
+  HOME="$AIBOX_STATE_HOME"
+else
+  HOME="$(mktemp -d "${TMPDIR:-/tmp}/aibox-home.XXXXXXXX")"
+fi
 mkdir -p "$HOME/.codex"
 cp /share/aibox/SKILLS.md "$HOME/.codex/AGENTS.md"
 {
@@ -752,6 +762,113 @@ exec "$@"
 '''
     image = dev_image(cfg) if dev else os.environ["AIBOX_AGENT_IMAGE"]
     return args + [image, "/bin/bash", "-e", "-c", bootstrap, "aibox", *command]
+
+
+
+WS_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+WS_TEMPLATES = {
+    "plain": "",
+    "web": "Web project. Node and Vite are available; build to dist/. Use `shot URL OUT.png` to look at pages.\n",
+    "android": ("Android/Kotlin project. Use the project's ./gradlew; Gradle, JDKs and the Android command line tools "
+                "live in /tools (ANDROID_HOME=/tools/android-sdk). Never accept Android SDK licences without asking the user.\n"),
+    "nix": ("NixOS configuration project. The sandbox has no nix: edit files and check syntax by reading, "
+            "but do not claim an evaluation or build passed. Keep the repository's conventions (see its AGENTS.md).\n"),
+}
+
+
+def ws_root(cfg):
+    root = Path(cfg["modelDirectory"]).expanduser().resolve().parent / "workspaces"
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return safe_directory(root)
+
+
+def ws_dir(cfg, name, *, must_exist=True):
+    if not WS_NAME.match(name or ""):
+        raise ValueError("Workspace names use a-z, 0-9 and '-', at most 40 characters")
+    path = ws_root(cfg) / name
+    if path.is_symlink():
+        raise ValueError("Workspace directory must not be a symlink")
+    if must_exist and not (path / "workspace.json").is_file():
+        raise ValueError(f"Unknown workspace {name!r}; see aibox ws list")
+    return path
+
+
+def ws_load(cfg, name):
+    data = json.loads((ws_dir(cfg, name) / "workspace.json").read_text())
+    if data.get("name") != name:
+        raise ValueError("Workspace metadata does not match its directory")
+    return data
+
+
+def ws_new(cfg, name, *, template="plain", path=None, tools_group=None, online=True, full_access=True):
+    if template not in WS_TEMPLATES:
+        raise ValueError(f"Unknown template {template!r}; choose from: {', '.join(WS_TEMPLATES)}")
+    group = tools_group or name
+    if not WS_NAME.match(group):
+        raise ValueError("Tools group names use a-z, 0-9 and '-'")
+    directory = ws_dir(cfg, name, must_exist=False)
+    if directory.exists():
+        raise ValueError(f"Workspace {name!r} already exists")
+    project = Path(path).expanduser() if path else Path.home() / "projects" / name
+    created = not project.exists()
+    project.mkdir(parents=True, exist_ok=True)
+    project = safe_directory(project, workspace=True, model=cfg["modelDirectory"])
+    root = ws_root(cfg)
+    if project.is_relative_to(root) or root.is_relative_to(project):
+        raise ValueError("The project folder must not overlap the aibox workspace area")
+    (directory / "home").mkdir(mode=0o700, parents=True)
+    (root / "_tools" / group).mkdir(mode=0o700, parents=True, exist_ok=True)
+    agents = project / "AGENTS.md"
+    if WS_TEMPLATES[template] and not agents.exists():
+        agents.write_text(f"# {name}\n\n{WS_TEMPLATES[template]}")
+    meta = {"name": name, "template": template, "project": str(project), "toolsGroup": group,
+            "online": online, "fullAccess": full_access, "created": int(time.time())}
+    (directory / "workspace.json").write_text(json.dumps(meta, indent=2) + "\n")
+    return meta, created
+
+
+def ws_list(cfg):
+    items = []
+    for entry in sorted(ws_root(cfg).iterdir()):
+        if entry.name.startswith("_") or not (entry / "workspace.json").is_file():
+            continue
+        try:
+            items.append(ws_load(cfg, entry.name))
+        except (ValueError, OSError, json.JSONDecodeError):
+            items.append({"name": entry.name, "error": "unreadable metadata"})
+    return items
+
+
+def ws_agent_args(cfg, name, command):
+    meta = ws_load(cfg, name)
+    root = ws_root(cfg)
+    if not WS_NAME.match(str(meta.get("toolsGroup", ""))):
+        raise ValueError("Invalid tools group in workspace metadata")
+    tools = root / "_tools" / meta["toolsGroup"]
+    tools.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # Only the home subfolder is mounted: the agent can never edit workspace.json (project path, settings).
+    state = ws_dir(cfg, name) / "home"
+    return agent_args(cfg, meta["project"], command, online=meta["online"], full_access=meta["fullAccess"],
+                      dev=True, tools=tools.resolve(), state=state.resolve())
+
+
+def ws_remove(cfg, name, *, with_project=False):
+    meta = ws_load(cfg, name)
+    directory = ws_dir(cfg, name)
+    root = ws_root(cfg)
+    if not directory.resolve().is_relative_to(root):
+        raise ValueError("Refusing to delete outside the workspace area")
+    shutil.rmtree(directory)
+    group = meta["toolsGroup"]
+    shared = any(item.get("toolsGroup") == group for item in ws_list(cfg))
+    if not shared and (root / "_tools" / group).is_dir():
+        shutil.rmtree(root / "_tools" / group)
+    if with_project:
+        project = Path(meta["project"]).resolve()
+        if project == Path.home().resolve() or not project.is_relative_to(Path.home().resolve()):
+            raise ValueError("Refusing to delete this project folder")
+        shutil.rmtree(project)
+    return meta, not shared
 
 
 def main():
@@ -791,6 +908,25 @@ def main():
     p.add_argument("--text-only", action="store_true")
     for name in ("stop", "status", "logs"):
         sub.add_parser(name)
+    wsp = sub.add_parser("ws", help="Named workspaces: own project, tools, chat history and sandbox settings")
+    wsub = wsp.add_subparsers(dest="ws_action", required=True)
+    q = wsub.add_parser("new", help="Create a workspace")
+    q.add_argument("name")
+    q.add_argument("--template", default="plain", choices=tuple(WS_TEMPLATES))
+    q.add_argument("--path", help="Project folder (default ~/projects/NAME)")
+    q.add_argument("--tools-group", help="Share the /tools folder with other workspaces of the same group")
+    q.add_argument("--offline", action="store_true", help="No internet for this workspace")
+    q.add_argument("--ask", action="store_true", help="Keep the agent's approval prompts")
+    q = wsub.add_parser("list", help="List workspaces")
+    q.add_argument("--json", action="store_true")
+    for action, text in (("shell", "Open a shell in the workspace sandbox"), ("codex", "Start Codex in the workspace sandbox")):
+        q = wsub.add_parser(action, help=text)
+        q.add_argument("name")
+        q.add_argument("rest", nargs=argparse.REMAINDER, help="Extra arguments for codex, for example: resume")
+    q = wsub.add_parser("rm", help="Delete a workspace: its chats and tools; the project folder only with --with-project")
+    q.add_argument("name")
+    q.add_argument("--with-project", action="store_true")
+    q.add_argument("--yes", action="store_true")
     p = sub.add_parser("shell", help="Open offline coding shell sharing only PROJECT")
     p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
     p.add_argument("--full-access", action="store_true", help="Agent runs without approval prompts; the container stays the only boundary")
@@ -858,6 +994,33 @@ def main():
         else:
             start_llama(cfg, args.profile, port=args.port, no_open=args.no_open, vision=not args.text_only,
                         long_context=args.long_context, allow_experimental=args.allow_experimental)
+    elif args.action == "ws":
+        if args.ws_action == "new":
+            meta, created = ws_new(cfg, args.name, template=args.template, path=args.path, tools_group=args.tools_group,
+                                   online=not args.offline, full_access=not args.ask)
+            print(f"Workspace {args.name} created. Project: {meta['project']}{' (new folder)' if created else ''}")
+            print(f"Image missing? aibox prepare --dev   |   Start: aibox ws codex {args.name}")
+        elif args.ws_action == "list":
+            items = ws_list(cfg)
+            if args.json:
+                print(json.dumps(items, indent=2))
+            else:
+                for item in items:
+                    print(f"{item['name']:<20} {item.get('template', '?'):<8} {item.get('project', item.get('error'))}")
+        elif args.ws_action == "rm":
+            meta = ws_load(cfg, args.name)
+            if not args.yes:
+                raise ValueError(f"This deletes the chats and tools of {args.name!r}"
+                                 f"{' AND the project folder ' + meta['project'] if args.with_project else ''}. Repeat with --yes")
+            ws_remove(cfg, args.name, with_project=args.with_project)
+            print(f"Workspace {args.name} removed." + ("" if args.with_project else f" Project folder kept: {meta['project']}"))
+        else:
+            ensure_image(dev_image(cfg))
+            ensure_network()
+            ensure_outbound_network() if ws_load(cfg, args.name)["online"] else None
+            rest = args.rest[1:] if args.rest and args.rest[0] == "--" else args.rest
+            command = ["/bin/bash"] if args.ws_action == "shell" else ["codex", *rest]
+            return run(*ws_agent_args(cfg, args.name, command), check=False).returncode
     elif args.action in ("shell", "exec"):
         dev = args.dev
         online, full_access = args.online or dev, args.full_access or dev
