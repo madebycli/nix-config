@@ -84,6 +84,38 @@ class ContainerPolicy(unittest.TestCase):
             self.assertEqual(data.get("sandbox_mode"), "danger-full-access" if flag else None)
             self.assertEqual("/work" in data.get("projects", {}), bool(flag))
 
+    def test_dev_mode_adds_only_the_tools_volume_and_uses_the_dev_image(self):
+        support = self.root / "support"
+        support.mkdir()
+        for name in ("DevContainerfile", "shot.sh", "SKILLS.md", "longctx_probe.py"):
+            (support / name).write_text(name)
+        with patch.dict(os.environ, {"AIBOX_SUPPORT": str(support)}):
+            args = aibox.agent_args(self.cfg, self.project, ["true"], dev=True)
+            image = aibox.dev_image(self.cfg)
+        tools = (self.models.parent / "agent-tools").resolve()
+        mounts = [args[i + 1] for i, a in enumerate(args) if a == "--mount"]
+        self.assertEqual(mounts, [f"type=bind,src={self.project},target=/work,bind-nonrecursive",
+                                  f"type=bind,src={tools},target=/tools,bind-nonrecursive"])
+        self.assertIn(image, args)
+        self.assertTrue(image.startswith("localhost/nx-ai-dev:"))
+        self.assertNotIn(os.environ.get("AIBOX_AGENT_IMAGE", "x"), args)
+        for kept in ("--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges"):
+            self.assertIn(kept, args)
+        self.assertEqual(oct(tools.stat().st_mode & 0o777), "0o700")
+
+    def test_tools_directory_never_overlaps_the_project(self):
+        inside = self.models.parent / "agent-tools" / "proj"
+        inside.mkdir(parents=True)
+        with self.assertRaises(ValueError):
+            aibox.tools_directory(self.cfg, inside.resolve())
+
+    def test_dev_containerfile_pins_codex_and_persists_tool_dirs_outside_the_image(self):
+        text = (ROOT / "pkgs/aibox/DevContainerfile").read_text()
+        self.assertRegex(text, r"CODEX_VERSION=\d+\.\d+\.\d+")
+        self.assertIn("USER 1000:1000", text)
+        for variable in ("GRADLE_USER_HOME=/tools/gradle", "ANDROID_HOME=/tools/android-sdk", "npm_config_cache=/tools/npm-cache"):
+            self.assertIn(variable, text)
+
     def test_argument_text_is_not_host_shell_code(self):
         command = ["bash", "-c", "printf '%s' '$HOME; touch /host-sentinel'"]
         args = aibox.agent_args(self.cfg, self.project, command)

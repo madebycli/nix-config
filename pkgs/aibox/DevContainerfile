@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1
+# Optional "dev" coding image: ordinary Debian userland so that downloaded standard Linux binaries
+# (Gradle, JDKs, Android SDK tools, Playwright/Chromium, Node versions) run. The agent installs
+# project-specific tool versions into the persistent /tools volume, never into the image.
+# Built explicitly with `aibox prepare --dev` (needs internet). No root at runtime: no apt in the sandbox.
+FROM docker.io/library/node:22.20.0-bookworm-slim
+ARG CODEX_VERSION=0.167.0
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git unzip zip xz-utils bzip2 file less procps jq ripgrep fd-find \
+      build-essential cmake pkg-config python3 python3-pip python3-venv python3-dev \
+      openjdk-17-jdk-headless chromium fonts-liberation \
+    && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+    && rm -rf /var/lib/apt/lists/*
+RUN npm install -g @openai/codex@${CODEX_VERSION} && npm cache clean --force
+COPY SKILLS.md longctx_probe.py /share/aibox/
+COPY shot.sh /usr/local/bin/shot
+RUN chmod 0755 /usr/local/bin/shot && mkdir -p /work /tools && chmod 0777 /work
+ENV LANG=C.UTF-8 CHROME_BIN=/usr/bin/chromium \
+    GRADLE_USER_HOME=/tools/gradle ANDROID_HOME=/tools/android-sdk ANDROID_SDK_ROOT=/tools/android-sdk \
+    MAVEN_ARGS=-Dmaven.repo.local=/tools/m2 \
+    npm_config_cache=/tools/npm-cache npm_config_prefix=/tools/npm-global \
+    PIP_CACHE_DIR=/tools/pip-cache UV_CACHE_DIR=/tools/uv-cache XDG_CACHE_HOME=/tools/cache \
+    MISE_DATA_DIR=/tools/mise MISE_CACHE_DIR=/tools/mise-cache CARGO_HOME=/tools/cargo RUSTUP_HOME=/tools/rustup \
+    PATH=/tools/bin:/tools/npm-global/bin:/tools/mise/shims:/tools/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+WORKDIR /work
+USER 1000:1000
+CMD ["/bin/bash"]

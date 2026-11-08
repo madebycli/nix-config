@@ -14,3 +14,12 @@ For game development verify geometry, units, transforms, coordinate conventions
 and numerical edge cases with executable examples or existing engine tests.
 
 This workflow guides the agent; it does not increase a model's capabilities.
+
+## Tools (dev mode)
+
+In dev mode `/tools` is a persistent folder for tools you download: install the tool versions a project
+needs there (Gradle distributions, JDKs, Node versions, Android command line tools, caches). Download
+and unpack with curl/unzip, or use a version manager you install under /tools. Prefer the version a
+project pins (gradle wrapper, .nvmrc, toolchain files). You are not root: do not try apt.
+Never accept third-party licences (for example the Android SDK licences) on the user's behalf:
+stop and ask the user first. Take screenshots of web output with `shot URL OUT.png`.

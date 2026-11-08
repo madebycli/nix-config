@@ -68,6 +68,10 @@ let
     cp ${./LlamaContainerfile} $out/LlamaContainerfile
     cp ${./require-mtp.py} $out/require-mtp.py
     cp ${./KvmemContainerfile} $out/KvmemContainerfile
+    cp ${./DevContainerfile} $out/DevContainerfile
+    cp ${./shot.sh} $out/shot.sh
+    cp ${./SKILLS.md} $out/SKILLS.md
+    cp ${./longctx_probe.py} $out/longctx_probe.py
     cp ${./longcontext.json} $out/longcontext.json
     cp ${./profiles.json} $out/profiles.json
     cp ${./Containerfile} $out/Containerfile

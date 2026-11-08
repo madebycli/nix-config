@@ -65,7 +65,8 @@ def image_name(cfg):
 
 def ensure_image(image):
     if not exists("image", image):
-        command = ("aibox prepare-ui" if "nx-ai-manager" in image else
+        command = ("aibox prepare --dev" if "nx-ai-dev" in image else
+                   "aibox prepare-ui" if "nx-ai-manager" in image else
                    "aibox prepare --agent-only" if "nx-ai-agent" in image else "aibox prepare --strata")
         raise ValueError(f"Image missing: {image}. Run {command}")
 
@@ -676,7 +677,33 @@ def show_llama_ui(port, no_open):
             print("Open the URL above manually.")
 
 
-def agent_args(cfg, project, command, *, online=False, full_access=False):
+def dev_image(cfg):
+    support = Path(os.environ["AIBOX_SUPPORT"])
+    digest = hashlib.sha256()
+    for name in ("DevContainerfile", "shot.sh", "SKILLS.md", "longctx_probe.py"):
+        digest.update((support / name).read_bytes())
+    return "localhost/nx-ai-dev:" + digest.hexdigest()[:20]
+
+
+def prepare_dev(cfg):
+    support = os.environ["AIBOX_SUPPORT"]
+    run("build", "--tag", dev_image(cfg), "--file", f"{support}/DevContainerfile", support)
+    print("Dev coding image prepared (Debian userland, Codex, Chromium, JDK 17). No models downloaded.")
+
+
+def tools_directory(cfg, workspace):
+    """Persistent download area for the dev agent, separate from project, models and manager state."""
+    models = Path(cfg["modelDirectory"]).expanduser().resolve()
+    base = models.parent / "agent-tools"
+    base.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = safe_directory(base)
+    for other in (models, models.parent / "manager", workspace):
+        if path.is_relative_to(other) or other.is_relative_to(path):
+            raise ValueError(f"Agent tools directory must not overlap {other}")
+    return path
+
+
+def agent_args(cfg, project, command, *, online=False, full_access=False, dev=False):
     path = safe_directory(project, workspace=True, model=cfg["modelDirectory"])
     manager = Path(cfg["modelDirectory"]).expanduser().resolve().parent / "manager"
     if path.is_relative_to(manager) or manager.is_relative_to(path):
@@ -686,6 +713,8 @@ def agent_args(cfg, project, command, *, online=False, full_access=False):
             "--mount", f"type=bind,src={path},target=/work,bind-nonrecursive",
             "--workdir=/work", "--env=OPENAI_BASE_URL=http://strata:8080/v1",
             "--env=OPENAI_API_KEY=local-only"]
+    if dev:
+        args += ["--mount", f"type=bind,src={tools_directory(cfg, path)},target=/tools,bind-nonrecursive"]
     if full_access:
         # Only changes the agent's own approval prompts inside the container; mounts and caps stay.
         args += ["--env=AIBOX_FULL_ACCESS=1"]
@@ -721,7 +750,8 @@ TOML
 } > "$HOME/.codex/config.toml"
 exec "$@"
 '''
-    return args + [os.environ["AIBOX_AGENT_IMAGE"], "/bin/bash", "-e", "-c", bootstrap, "aibox", *command]
+    image = dev_image(cfg) if dev else os.environ["AIBOX_AGENT_IMAGE"]
+    return args + [image, "/bin/bash", "-e", "-c", bootstrap, "aibox", *command]
 
 
 def main():
@@ -731,6 +761,7 @@ def main():
     p.add_argument("--agent-only", action="store_true")
     p.add_argument("--strata", action="store_true", help="Prepare legacy Strata instead of Prism llama.cpp")
     p.add_argument("--kvmem", action="store_true", help="Build the optional KVMem long-context runtime (separate image)")
+    p.add_argument("--dev", action="store_true", help="Build the optional Debian dev coding image (needs internet)")
     p = sub.add_parser("doctor", help="List HIP devices without loading a model")
     p.add_argument("--strata", action="store_true")
     sub.add_parser("models", help="List pinned model profiles; no download")
@@ -763,6 +794,7 @@ def main():
     p = sub.add_parser("shell", help="Open offline coding shell sharing only PROJECT")
     p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
     p.add_argument("--full-access", action="store_true", help="Agent runs without approval prompts; the container stays the only boundary")
+    p.add_argument("--dev", action="store_true", help="Debian dev image with a persistent /tools folder; implies --online and --full-access")
     p.add_argument("project")
     p = sub.add_parser("exec", help="Run a command inside the offline coding container")
     p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
@@ -774,7 +806,9 @@ def main():
         raise ValueError("Run aibox as your normal user, without sudo")
     cfg = load_config()
     if args.action == "prepare":
-        if args.kvmem:
+        if args.dev:
+            prepare_dev(cfg)
+        elif args.kvmem:
             prepare_kvmem(cfg)
         else:
             prepare(cfg, args.agent_only) if args.agent_only or args.strata else prepare_llama(cfg)
@@ -825,17 +859,20 @@ def main():
             start_llama(cfg, args.profile, port=args.port, no_open=args.no_open, vision=not args.text_only,
                         long_context=args.long_context, allow_experimental=args.allow_experimental)
     elif args.action in ("shell", "exec"):
-        ensure_image(os.environ["AIBOX_AGENT_IMAGE"])
+        dev = args.dev
+        online, full_access = args.online or dev, args.full_access or dev
+        ensure_image(dev_image(cfg) if dev else os.environ["AIBOX_AGENT_IMAGE"])
         ensure_network()
-        if args.online:
+        if online:
             ensure_outbound_network()
-            print("ONLINE: this container can reach the internet. Only the project folder is shared.", file=sys.stderr)
+            shared = "the project folder and the persistent /tools folder are" if dev else "only the project folder is"
+            print(f"ONLINE: this container can reach the internet; {shared} shared.", file=sys.stderr)
         command = ["/bin/bash"] if args.action == "shell" else args.command
         if command and command[0] == "--":
             command = command[1:]
         if not command:
             raise ValueError("Expected a command after PROJECT")
-        result = run(*agent_args(cfg, args.project, command, online=args.online, full_access=args.full_access), check=False)
+        result = run(*agent_args(cfg, args.project, command, online=online, full_access=full_access, dev=dev), check=False)
         return result.returncode
     elif args.action == "stop":
         if owned_server():

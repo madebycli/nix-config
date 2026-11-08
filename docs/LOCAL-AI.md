@@ -254,3 +254,21 @@ codex          # inside the container
   JDK 21, Gradle, Kotlin and Maven into the image. Generic downloaded binaries (Playwright browsers,
   Android build tools) do not run on this Nix-built image, so tools are provided declaratively.
   After `nx switch` run `aibox prepare --agent-only`. The Android SDK is not included yet.
+
+### Dev mode: the agent fetches the tool versions a project needs
+
+```bash
+aibox prepare --dev                       # once: builds a Debian dev image (internet; Codex 0.167.0 pinned)
+aibox shell --dev ~/projects/NAME         # = --online --full-access, Debian image, persistent /tools
+codex
+```
+
+- `/tools` is `~/.local/share/nx-ai/agent-tools` (0700, separate from the project and models). Gradle
+  distributions, JDKs, Node versions, Android command line tools and caches go there and survive the session.
+  Environment variables point Gradle/Maven/npm/pip/mise/cargo caches into it.
+- The image is ordinary Debian, so downloaded standard Linux binaries run. It contains JDK 17, Node 22, Python,
+  build tools, Chromium and `shot URL OUT.png`. Projects needing other versions pull them into `/tools`.
+- No root: `apt` is unavailable at runtime. A missing system library is added to `DevContainerfile`.
+- Boundary unchanged: read-only root, no capabilities, no GPU, only PROJECT and `/tools` mounted,
+  and no allow-list for the internet. The agent is told never to accept third-party licences (Android SDK)
+  without asking. Unverified on nyx: image build, Codex against the KVMem server, Gradle/Android builds.
