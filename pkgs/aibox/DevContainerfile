@@ -4,7 +4,7 @@
 # project-specific tool versions into the persistent /tools volume, never into the image.
 # Built explicitly with `aibox prepare --dev` (needs internet). No root at runtime: no apt in the sandbox.
 FROM docker.io/library/node:22.20.0-bookworm-slim
-ARG CODEX_VERSION=0.167.0
+ARG OPENCODE_VERSION=1.19.5
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git unzip zip xz-utils bzip2 file less procps jq ripgrep fd-find \
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       openjdk-17-jdk-headless chromium fonts-liberation \
     && ln -s /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
-RUN npm install -g @openai/codex@${CODEX_VERSION} && npm cache clean --force
+RUN npm install -g opencode-ai@${OPENCODE_VERSION} && npm cache clean --force
 COPY SKILLS.md longctx_probe.py /share/aibox/
 COPY shot.sh /usr/local/bin/shot
 RUN chmod 0755 /usr/local/bin/shot && mkdir -p /work /tools && chmod 0777 /work

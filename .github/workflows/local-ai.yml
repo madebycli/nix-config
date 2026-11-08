@@ -62,8 +62,8 @@ jobs:
             test ! -S /run/podman/podman.sock
             test ! -e /dev/kfd
             test ! -e /dev/dri/renderD128
-            test -f "$HOME/.codex/AGENTS.md"
-            codex --version
+            test -f "$HOME/.config/opencode/AGENTS.md"
+            test -f "$HOME/.config/opencode/opencode.json"
             python3 --version
             printf "project write\n" > /work/result.txt
             if curl --noproxy "*" --max-time 3 --connect-timeout 2 -s http://1.1.1.1/; then exit 1; fi

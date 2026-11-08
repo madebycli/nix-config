@@ -141,7 +141,7 @@ selected process is llama-server. `ui` additionally publishes only
 Stop a running service before switching between private and UI modes. Models
 are selected by the profile command, not downloaded by this chat UI.
 
-The existing coding image still contains Codex and the previously configured
+The dev coding image contains OpenCode and the previously configured
 tools. A full browser/screenshot/build agent loop is separate work; adding the
 vision projector alone does not implement that workflow.
 

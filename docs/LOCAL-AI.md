@@ -36,14 +36,14 @@ space and build time for the ROCm development image. `buildJobs` defaults to
 The first build can take tens of minutes. The CLI never silently pulls a
 runtime image when starting inference or opening a workspace.
 
-The shell already contains Codex, Git, Python, Node.js, GCC, Make, curl, jq,
-ripgrep and a planning/testing workflow in `$HOME/.codex/AGENTS.md`.
+The shell already contains Git, Python, Node.js, GCC, Make, curl, jq,
+ripgrep and a planning/testing workflow in `$HOME/.config/opencode/AGENTS.md`. The coding agent (OpenCode) lives in the dev image (`aibox prepare --dev`).
 Its writable home is a private mode-0700 directory created by the container user
 inside the existing `/tmp` tmpfs; it is temporary and project changes persist.
 No Docker-specific `uid=`/`gid=` tmpfs options are needed. Nothing is installed
-into the project automatically. Codex is configured for Strata's Responses API;
+into the project automatically. OpenCode is configured for the local OpenAI-compatible API;
 real model-specific tool loops still require acceptance with the eventual model.
-`aibox shell` alone does not start inference or make Codex functional without a model.
+`aibox shell` alone does not start inference or make the agent functional without a model.
 
 ## Full Strata model manager
 
@@ -100,7 +100,7 @@ aibox stop              # stop manager and its inference children
 The command waits for the full host's `/api/health` endpoint. It refuses to
 replace a running private `start`/`smoke` server; stop that first. Browser closure
 does not stop the manager. The API remains `http://strata:8080/v1` inside aibox.
-For Codex, use the loaded model's exact API model ID (`codex -m MODEL_ID`) or give
+For legacy Strata, use the loaded model's exact API model ID or give
 it the alias `local` in Strata. If you enable an API key in Strata, clients must
 supply that key themselves; the wrapper does not read your saved app secrets.
 End-to-end coding/tool loops require acceptance with the actual chosen model.
@@ -160,7 +160,7 @@ as a successful GPU run.
   internal policy. Proxy variables from the host are not inherited.
 - The coding profile is **offline by default**; `aibox shell --online DIR` / `aibox exec --online DIR -- CMD` additionally joins
   the labelled NAT network for that one session (no allow-list; only DIR is still shared). Otherwise internet package installation and cloud
-  Claude/Codex providers do not work directly inside it. The manager has outbound
+  cloud providers do not work directly inside it. The manager has outbound
   access, and its upstream integrations can access the internet.
   Add dependencies declaratively through `agentExtraPackages` and rebuild.
 - Container isolation shares the host kernel and GPU driver. It is not an
@@ -244,7 +244,7 @@ real inference, memory-pressure measurement or complete client tool-loop tests.
 
 ```bash
 aibox shell --online --full-access ~/projects/NAME
-codex          # inside the container
+opencode       # inside the container (dev image)
 ```
 
 - `--online` adds outbound internet for that session. `--full-access` only switches off the agent's own
@@ -258,9 +258,9 @@ codex          # inside the container
 ### Dev mode: the agent fetches the tool versions a project needs
 
 ```bash
-aibox prepare --dev                       # once: builds a Debian dev image (internet; Codex 0.167.0 pinned)
+aibox prepare --dev                       # once: builds a Debian dev image (internet; OpenCode 1.19.5 pinned)
 aibox shell --dev ~/projects/NAME         # = --online --full-access, Debian image, persistent /tools
-codex
+opencode
 ```
 
 - `/tools` is `~/.local/share/nx-ai/agent-tools` (0700, separate from the project and models). Gradle
@@ -271,7 +271,7 @@ codex
 - No root: `apt` is unavailable at runtime. A missing system library is added to `DevContainerfile`.
 - Boundary unchanged: read-only root, no capabilities, no GPU, only PROJECT and `/tools` mounted,
   and no allow-list for the internet. The agent is told never to accept third-party licences (Android SDK)
-  without asking. Unverified on nyx: image build, Codex against the KVMem server, Gradle/Android builds.
+  without asking. Unverified on nyx: OpenCode against the KVMem server, Gradle/Android builds.
 
 ### Workspaces: one sandbox profile per project
 
@@ -280,8 +280,8 @@ aibox prepare --dev                                   # once
 aibox ws new chat-app --template android              # own project folder, tools and chat history
 aibox ws new nixos --template nix --path ~/nix-config
 aibox ws list
-aibox ws codex chat-app                               # start Codex there
-aibox ws codex chat-app -- resume                     # pick up an older chat of that workspace
+aibox ws code chat-app                                # start OpenCode there (needs the server running)
+aibox ws code chat-app -- --continue                  # continue the last chat of that workspace
 aibox ws shell nixos
 aibox ws rm chat-app --yes                            # removes chats and tools, keeps the project folder
 aibox ws rm chat-app --yes --with-project             # also deletes the project folder
@@ -289,7 +289,7 @@ aibox ws rm chat-app --yes --with-project             # also deletes the project
 
 Each workspace has its own project folder (default `~/projects/NAME`), its own `/tools` (so different
 Gradle/JDK versions do not mix; `--tools-group NAME` shares one deliberately, e.g. one Android SDK), and
-its own persistent agent home (`/state`) that keeps the Codex chat history. The container sees only those
+its own persistent agent home (`/state`) that keeps the OpenCode chat history. The container sees only those
 three folders. `workspace.json` is not mounted, so the agent cannot change its own mounts or settings.
 Defaults: internet on and agent approvals off inside the container (`--offline`, `--ask` change that).
 The nix template cannot evaluate or build: there is no nix inside the sandbox. A browser UI for
@@ -299,3 +299,14 @@ managing workspaces is not implemented.
 versions, SDKs, caches, chat history) is stored visibly in `~/projects/_aibox/` (`my.features.local-ai.workspaceRoot`),
 next to the project folders. The AI Box itself is not stored there: models stay in
 `~/.local/share/nx-ai/models`, and container images in Podman's own storage.
+
+### Local server connection (default)
+
+The agent config is written at every start into the workspace's persistent home
+(`~/.config/opencode/opencode.json`): provider `local` = `http://strata:8080/v1`, model `local/local`,
+`enabled_providers = ["local"]` (no other provider can be selected), autoupdate and sharing off, request
+timeout off (long prompts take minutes). Context size and image support are read from the running server,
+so a 256K KVMem server and a 16K Prism server both get correct limits. `aibox ws code NAME` refuses to start
+when no server is running. The first start downloads the `@ai-sdk/openai-compatible` provider package into
+`/tools/cache`, so it needs internet once. With `--full-access` (default in workspaces) edit, bash and web
+fetch are allowed without prompts, and access outside `/work` stays denied.

@@ -43,7 +43,7 @@ Bonsai PQ2_0, so the mode is restricted to `qwen27-iq4xs` (Bonsai is rejected).
 | Vision | KVMem on ROCm runs the projector on CPU (`--no-mmproj-offload`); this saves ~0.86 GiB VRAM but image encoding is slower. The f16 projector with this server is untested. |
 | MTP | `draft-mtp`, max 2, ReplaySSM (`--kvmem-mtp-state replay`). The controller checks `/slots` and stops the server if the speculative sampler is not active. Acceptance with KVMem retrieval is unmeasured. |
 | Q8 KV | Requested type, default. `kvDtype = "q5_0"` is an explicit opt-in (KVMem's IQ4 recipe). |
-| Streaming / tools | KVMem server provides OpenAI chat/responses with streaming and tools (jinja); Codex uses `responses`. The probe checks a tool call; coding-agent loops are unverified. |
+| Streaming / tools | KVMem server provides OpenAI chat/responses with streaming and tools (jinja); OpenCode uses chat completions. The probe checks a tool call; coding-agent loops are unverified. |
 | Templates | `--jinja` with the GGUF template; unverified against KVMem's own Qwen template handling. |
 
 ## The real bottleneck
@@ -115,7 +115,7 @@ One user-supplied session; not a benchmark suite.
 Second session (same day): needles at 5 % and 95 % of 49,933 tokens both correct (209 s each, 240 t/s average prefill; VRAM peak 15.0 GiB incl. desktop, ~1.35 GiB free).
 Probe at 8,115 tokens (2,300 reused from the shared snapshot cache): TTFT 18.4 s; 138 tokens in 3.99 s = 34.6 t/s; MTP accepted 74 of 130 drafts (56.9 %), 2.12 tokens per round, 61 ms per round, 0 fallbacks; tool call (write_file) correct; red/blue test image described correctly with the CPU projector.
 
-Not yet measured: 110K/230K prompts, screenshot text reading, a same-conditions baseline of the 16K Prism path, long-range code quality, the Codex agent loop.
+Not yet measured: 110K/230K prompts, screenshot text reading, a same-conditions baseline of the 16K Prism path, long-range code quality, the OpenCode agent loop.
 
 ## Safety behaviour
 
@@ -151,7 +151,7 @@ and RAM with `podman stats --no-stream nx-ai-inference` while running. For the b
 use the unchanged path (`aibox ui --profile qwen27-iq4xs`) and the probe with
 `--tokens 12000 --skip vision`. The probe covers needle retrieval at three depths,
 streamed TTFT/decode rate with MTP statistics, a tool call and a red/blue image. For
-real screenshots and agent loops use the UI/Codex manually.
+real screenshots and agent loops use the UI/OpenCode manually.
 
 ## Rollback
 

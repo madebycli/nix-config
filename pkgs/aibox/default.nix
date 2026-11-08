@@ -36,7 +36,6 @@ let
       fd
       gnumake
       gcc
-      codex
       skills
       probe
     ] ++ selectedTools ++ agentExtraPackages;

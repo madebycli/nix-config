@@ -690,7 +690,7 @@ def dev_image(cfg):
 def prepare_dev(cfg):
     support = os.environ["AIBOX_SUPPORT"]
     run("build", "--tag", dev_image(cfg), "--file", f"{support}/DevContainerfile", support)
-    print("Dev coding image prepared (Debian userland, Codex, Chromium, JDK 17). No models downloaded.")
+    print("Dev coding image prepared (Debian userland, OpenCode, Chromium, JDK 17). No models downloaded.")
 
 
 def tools_directory(cfg, workspace):
@@ -705,7 +705,8 @@ def tools_directory(cfg, workspace):
     return path
 
 
-def agent_args(cfg, project, command, *, online=False, full_access=False, dev=False, tools=None, state=None):
+def agent_args(cfg, project, command, *, online=False, full_access=False, dev=False, tools=None, state=None,
+               context=None, vision=None):
     path = safe_directory(project, workspace=True, model=cfg["modelDirectory"])
     manager = Path(cfg["modelDirectory"]).expanduser().resolve().parent / "manager"
     if path.is_relative_to(manager) or manager.is_relative_to(path):
@@ -721,6 +722,10 @@ def agent_args(cfg, project, command, *, online=False, full_access=False, dev=Fa
         # Persistent agent home (chat history, config) of one workspace, never shared with others.
         args += ["--mount", f"type=bind,src={state},target=/state,bind-nonrecursive",
                  "--env=AIBOX_STATE_HOME=/state"]
+    if context:
+        args += [f"--env=AIBOX_CONTEXT={int(context)}"]
+    if vision is not None:
+        args += [f"--env=AIBOX_VISION={'1' if vision else '0'}"]
     if full_access:
         # Only changes the agent's own approval prompts inside the container; mounts and caps stay.
         args += ["--env=AIBOX_FULL_ACCESS=1"]
@@ -738,26 +743,35 @@ if [ -n "${AIBOX_STATE_HOME:-}" ]; then
 else
   HOME="$(mktemp -d "${TMPDIR:-/tmp}/aibox-home.XXXXXXXX")"
 fi
-mkdir -p "$HOME/.codex"
-cp /share/aibox/SKILLS.md "$HOME/.codex/AGENTS.md"
-{
-  echo 'model_provider = "strata"'
-  echo 'model = "local"'
-  if [ "${AIBOX_FULL_ACCESS:-}" = 1 ]; then
-    # The container is the sandbox. Codex's own nested sandbox cannot start inside it.
-    echo 'approval_policy = "never"'
-    echo 'sandbox_mode = "danger-full-access"'
-  fi
-  cat <<'TOML'
-[model_providers.strata]
-name = "Local Strata"
-base_url = "http://strata:8080/v1"
-wire_api = "responses"
-TOML
-  if [ "${AIBOX_FULL_ACCESS:-}" = 1 ]; then
-    printf '[projects."/work"]\ntrust_level = "trusted"\n'
-  fi
-} > "$HOME/.codex/config.toml"
+mkdir -p "$HOME/.config/opencode"
+cp /share/aibox/SKILLS.md "$HOME/.config/opencode/AGENTS.md"
+python3 - <<'PY'
+import json, os
+ctx = int(os.environ.get("AIBOX_CONTEXT") or 16384)
+vision = os.environ.get("AIBOX_VISION") == "1"
+config = {
+    "$schema": "https://opencode.ai/config.json",
+    "autoupdate": False,
+    "share": "disabled",
+    "enabled_providers": ["local"],
+    "model": "local/local",
+    "provider": {"local": {
+        "npm": "@ai-sdk/openai-compatible",
+        "name": "Local (AI Box)",
+        "options": {"baseURL": "http://strata:8080/v1", "apiKey": "local-only", "timeout": False},
+        "models": {"local": {
+            "name": "Local model", "attachment": vision, "tool_call": True, "reasoning": True,
+            "limit": {"context": ctx, "output": min(16384, max(1024, ctx // 4))},
+            "modalities": {"input": ["text", "image"] if vision else ["text"], "output": ["text"]}}}}},
+}
+if os.environ.get("AIBOX_FULL_ACCESS") == "1":
+    # The container is the sandbox: no approval prompts inside it, but never outside /work.
+    config["permission"] = {"edit": "allow", "bash": "allow", "webfetch": "allow",
+                            "doom_loop": "allow", "external_directory": "deny"}
+path = os.path.join(os.environ["HOME"], ".config/opencode/opencode.json")
+with open(path, "w") as stream:
+    json.dump(config, stream, indent=2)
+PY
 exec "$@"
 '''
     image = dev_image(cfg) if dev else os.environ["AIBOX_AGENT_IMAGE"]
@@ -841,7 +855,20 @@ def ws_list(cfg):
     return items
 
 
-def ws_agent_args(cfg, name, command):
+def server_features():
+    """Context size and vision support of the running inference server, for the agent's model limits."""
+    data = owned_server()
+    if not data or not data.get("State", {}).get("Running"):
+        raise ValueError("Inference is not running. Start it first, for example: aibox ui --long-context lc256-iq3")
+    cmd = data.get("Config", {}).get("Cmd") or []
+    try:
+        context = int(cmd[cmd.index("--ctx-size") + 1])
+    except (ValueError, IndexError):
+        context = 16384
+    return context, "--mmproj" in cmd
+
+
+def ws_agent_args(cfg, name, command, *, context=None, vision=None):
     meta = ws_load(cfg, name)
     root = ws_root(cfg)
     if not WS_NAME.match(str(meta.get("toolsGroup", ""))):
@@ -851,7 +878,8 @@ def ws_agent_args(cfg, name, command):
     # Only the home subfolder is mounted: the agent can never edit workspace.json (project path, settings).
     state = ws_dir(cfg, name) / "home"
     return agent_args(cfg, meta["project"], command, online=meta["online"], full_access=meta["fullAccess"],
-                      dev=True, tools=tools.resolve(), state=state.resolve())
+                      dev=True, tools=tools.resolve(), state=state.resolve(),
+                      context=context, vision=vision)
 
 
 def ws_remove(cfg, name, *, with_project=False):
@@ -921,10 +949,10 @@ def main():
     q.add_argument("--ask", action="store_true", help="Keep the agent's approval prompts")
     q = wsub.add_parser("list", help="List workspaces")
     q.add_argument("--json", action="store_true")
-    for action, text in (("shell", "Open a shell in the workspace sandbox"), ("codex", "Start Codex in the workspace sandbox")):
+    for action, text in (("shell", "Open a shell in the workspace sandbox"), ("code", "Start OpenCode in the workspace sandbox")):
         q = wsub.add_parser(action, help=text)
         q.add_argument("name")
-        q.add_argument("rest", nargs=argparse.REMAINDER, help="Extra arguments for codex, for example: resume")
+        q.add_argument("rest", nargs=argparse.REMAINDER, help="Extra arguments for opencode, for example: --continue")
     q = wsub.add_parser("rm", help="Delete a workspace: its chats and tools; the project folder only with --with-project")
     q.add_argument("name")
     q.add_argument("--with-project", action="store_true")
@@ -1001,7 +1029,7 @@ def main():
             meta, created = ws_new(cfg, args.name, template=args.template, path=args.path, tools_group=args.tools_group,
                                    online=not args.offline, full_access=not args.ask)
             print(f"Workspace {args.name} created. Project: {meta['project']}{' (new folder)' if created else ''}")
-            print(f"Image missing? aibox prepare --dev   |   Start: aibox ws codex {args.name}")
+            print(f"Image missing? aibox prepare --dev   |   Start: aibox ws code {args.name}")
         elif args.ws_action == "list":
             items = ws_list(cfg)
             if args.json:
@@ -1021,8 +1049,10 @@ def main():
             ensure_network()
             ensure_outbound_network() if ws_load(cfg, args.name)["online"] else None
             rest = args.rest[1:] if args.rest and args.rest[0] == "--" else args.rest
-            command = ["/bin/bash"] if args.ws_action == "shell" else ["codex", *rest]
-            return run(*ws_agent_args(cfg, args.name, command), check=False).returncode
+            command = ["/bin/bash"] if args.ws_action == "shell" else ["opencode", *rest]
+            features = server_features() if args.ws_action == "code" else (None, None)
+            return run(*ws_agent_args(cfg, args.name, command, context=features[0], vision=features[1]),
+                       check=False).returncode
     elif args.action in ("shell", "exec"):
         dev = args.dev
         online, full_access = args.online or dev, args.full_access or dev

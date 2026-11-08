@@ -66,58 +66,44 @@ class ContainerPolicy(unittest.TestCase):
         self.assertEqual([args[i + 1] for i, a in enumerate(args) if a == "--mount"],
                          [f"type=bind,src={self.project},target=/work,bind-nonrecursive"])
 
-    def test_bootstrap_writes_valid_codex_config_with_and_without_full_access(self):
-        import tomllib
+    def test_bootstrap_writes_a_valid_opencode_config_for_the_local_server(self):
         skill = self.root / "SKILLS.md"
         skill.write_text("x")
-        for flag in ("", "1"):
-            home = self.root / ("home" + flag)
+        cases = [("", None, None), ("1", 262144, True), ("", 16384, False)]
+        for index, (full, context, vision) in enumerate(cases):
+            home = self.root / f"home{index}"
             home.mkdir()
-            args = aibox.agent_args(self.cfg, self.project, ["true"], full_access=bool(flag))
+            args = aibox.agent_args(self.cfg, self.project, ["true"], full_access=bool(full), context=context, vision=vision)
             script = args[args.index("-c") + 1].replace("/share/aibox/SKILLS.md", str(skill)).replace('exec "$@"', "true")
-            subprocess.run(["bash", "-c", script, "aibox"], check=True,
-                           env={"PATH": os.environ["PATH"], "TMPDIR": str(home), "AIBOX_FULL_ACCESS": flag})
-            written = next(home.glob("aibox-home.*")) / ".codex/config.toml"
-            data = tomllib.loads(written.read_text())
-            self.assertEqual(data["model_providers"]["strata"]["wire_api"], "responses")
-            self.assertEqual(data.get("approval_policy"), "never" if flag else None)
-            self.assertEqual(data.get("sandbox_mode"), "danger-full-access" if flag else None)
-            self.assertEqual("/work" in data.get("projects", {}), bool(flag))
+            env = {"PATH": os.environ["PATH"], "TMPDIR": str(home), "AIBOX_FULL_ACCESS": full}
+            if context:
+                env["AIBOX_CONTEXT"] = str(context)
+            if vision is not None:
+                env["AIBOX_VISION"] = "1" if vision else "0"
+            subprocess.run(["bash", "-c", script, "aibox"], check=True, env=env)
+            written = next(home.glob("aibox-home.*")) / ".config/opencode"
+            data = json.loads((written / "opencode.json").read_text())
+            provider = data["provider"]["local"]
+            self.assertEqual(provider["options"]["baseURL"], "http://strata:8080/v1")
+            self.assertIs(provider["options"]["timeout"], False)  # prefill of long prompts takes minutes
+            self.assertEqual(data["enabled_providers"], ["local"])
+            self.assertEqual(data["model"], "local/local")
+            self.assertIs(data["autoupdate"], False)
+            limit = provider["models"]["local"]["limit"]
+            self.assertEqual(limit["context"], context or 16384)
+            self.assertLessEqual(limit["output"], 16384)
+            self.assertEqual(provider["models"]["local"]["attachment"], bool(vision))
+            self.assertEqual(data.get("permission", {}).get("bash"), "allow" if full else None)
+            if full:
+                self.assertEqual(data["permission"]["external_directory"], "deny")
+            self.assertEqual((written / "AGENTS.md").read_text(), "x")
 
-    def test_dev_mode_adds_only_the_tools_volume_and_uses_the_dev_image(self):
-        support = self.root / "support"
-        support.mkdir()
-        for name in ("DevContainerfile", "shot.sh", "SKILLS.md", "longctx_probe.py"):
-            (support / name).write_text(name)
-        with patch.dict(os.environ, {"AIBOX_SUPPORT": str(support), "HOME": str(self.root / "home")}):
-            (self.root / "home").mkdir(exist_ok=True)
-            args = aibox.agent_args(self.cfg, self.project, ["true"], dev=True)
-            image = aibox.dev_image(self.cfg)
-        tools = (self.root / "home" / "projects/_aibox/_tools/default").resolve()
-        mounts = [args[i + 1] for i, a in enumerate(args) if a == "--mount"]
-        self.assertEqual(mounts, [f"type=bind,src={self.project},target=/work,bind-nonrecursive",
-                                  f"type=bind,src={tools},target=/tools,bind-nonrecursive"])
-        self.assertIn(image, args)
-        self.assertTrue(image.startswith("localhost/nx-ai-dev:"))
-        self.assertNotIn(os.environ.get("AIBOX_AGENT_IMAGE", "x"), args)
-        for kept in ("--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges"):
-            self.assertIn(kept, args)
-        self.assertEqual(oct(tools.stat().st_mode & 0o777), "0o700")
-
-    def test_tools_directory_never_overlaps_the_project(self):
-        (self.root / "home").mkdir(exist_ok=True)
-        with patch.dict(os.environ, {"HOME": str(self.root / "home")}):
-            inside = aibox.ws_root(self.cfg) / "_tools" / "default" / "proj"
-            inside.mkdir(parents=True)
-            with self.assertRaises(ValueError):
-                aibox.tools_directory(self.cfg, inside.resolve())
-
-    def test_dev_containerfile_pins_codex_and_persists_tool_dirs_outside_the_image(self):
-        text = (ROOT / "pkgs/aibox/DevContainerfile").read_text()
-        self.assertRegex(text, r"CODEX_VERSION=\d+\.\d+\.\d+")
-        self.assertIn("USER 1000:1000", text)
-        for variable in ("GRADLE_USER_HOME=/tools/gradle", "ANDROID_HOME=/tools/android-sdk", "npm_config_cache=/tools/npm-cache"):
-            self.assertIn(variable, text)
+    def test_context_and_vision_are_passed_as_environment_only_when_known(self):
+        plain = aibox.agent_args(self.cfg, self.project, ["true"])
+        self.assertFalse(any(a.startswith("--env=AIBOX_CONTEXT") or a.startswith("--env=AIBOX_VISION") for a in plain))
+        known = aibox.agent_args(self.cfg, self.project, ["true"], context=262144, vision=True)
+        self.assertIn("--env=AIBOX_CONTEXT=262144", known)
+        self.assertIn("--env=AIBOX_VISION=1", known)
 
     def test_argument_text_is_not_host_shell_code(self):
         command = ["bash", "-c", "printf '%s' '$HOME; touch /host-sentinel'"]
@@ -137,8 +123,8 @@ from pathlib import Path
 p = Path.home()
 (p / "writable").write_text("ok")
 print(json.dumps({"home": str(p), "mode": stat.S_IMODE(p.stat().st_mode),
-"uid": p.stat().st_uid, "skills": (p / ".codex/AGENTS.md").read_text(),
-"config_mode": stat.S_IMODE((p / ".codex/config.toml").stat().st_mode)}))
+"uid": p.stat().st_uid, "skills": (p / ".config/opencode/AGENTS.md").read_text(),
+"config_mode": stat.S_IMODE((p / ".config/opencode/opencode.json").stat().st_mode)}))
 '''
         homes = []
         for _ in range(2):
