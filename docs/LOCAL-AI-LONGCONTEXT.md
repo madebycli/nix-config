@@ -106,7 +106,7 @@ One user-supplied session; not a benchmark suite.
 | Item | Result |
 |---|---|
 | Start | loads, MTP active (`/slots` speculative=true), no OOM |
-| VRAM used (sysfs, incl. ~0.9 GiB desktop) | 15.0 to 15.26 GiB peak seen, ~1.1 GiB free; implies ~1.5 GiB compute overhead (now the plan default) |
+| VRAM used (sysfs, incl. ~0.9 GiB desktop) | 15.0 to 15.26 GiB peak seen, ~1.1 GiB free; implies ~1.7 GiB compute overhead (plan default 1700 MiB); the desktop alone uses ~0.72 GiB (mango 578, helium 143, ghostty 107, noctalia 102 MiB) |
 | Container RAM | 4.1 GB at the time of `podman stats`; system RAM 12.2 of 31 GiB used |
 | Decode (chat, thinking on) | 35 to 48 t/s, mostly 36 to 44; 32 to 38 t/s for short samples after 8K/50K/85K prompts |
 | Prefill, cold | 330 to 345 t/s at start, 254 t/s average at 50K (212 s total), 222 t/s at 85.6K (385 s) |

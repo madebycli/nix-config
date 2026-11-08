@@ -371,7 +371,7 @@ def kv_types(dtype):
     if dtype == "k8v4":
         return "q8_0", "q4_0", "q8_0"
     return dtype, dtype, ("q8_0" if dtype == "q4_0" else dtype)
-KVMEM_COMPUTE_OVERHEAD_MIB = 1536  # measured on nyx with lc256-iq3: ~14.3 GiB peak incl. weights+KV pool, i.e. ~1.5 GiB of compute buffers/HIP context/replay state
+KVMEM_COMPUTE_OVERHEAD_MIB = 1700  # measured on nyx (lc256-iq3): ~14.5 GiB server peak (15.26 GiB total minus ~0.73 GiB desktop) minus weights and KV pool
 KVMEM_UI = "/opt/kvmem-build/share/kvmem/ui"
 
 
