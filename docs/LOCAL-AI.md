@@ -309,4 +309,5 @@ timeout off (long prompts take minutes). Context size and image support are read
 so a 256K KVMem server and a 16K Prism server both get correct limits. `aibox ws code NAME` refuses to start
 when no server is running. The first start downloads the `@ai-sdk/openai-compatible` provider package into
 `/tools/cache`, so it needs internet once. With `--full-access` (default in workspaces) edit, bash and web
-fetch are allowed without prompts, and access outside `/work` stays denied.
+fetch are allowed without prompts. Access outside `/work` is also allowed, because OpenCode uses `/tmp`; inside the
+container that reaches only its own read-only image, `/tmp`, `/tools` and `/state`, never the host beyond the mounts.

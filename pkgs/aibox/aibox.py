@@ -743,8 +743,11 @@ if [ -n "${AIBOX_STATE_HOME:-}" ]; then
 else
   HOME="$(mktemp -d "${TMPDIR:-/tmp}/aibox-home.XXXXXXXX")"
 fi
-mkdir -p "$HOME/.config/opencode"
+mkdir -p "$HOME/.config/opencode" "$HOME/.config/git"
 cp /share/aibox/SKILLS.md "$HOME/.config/opencode/AGENTS.md"
+printf '%s\n' node_modules/ dist/ .shots/ build/ .gradle/ __pycache__/ > "$HOME/.config/git/ignore"
+export GIT_AUTHOR_NAME="${GIT_AUTHOR_NAME:-AI Box agent}" GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-AI Box agent}"
+export GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-agent@aibox.invalid}" GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-agent@aibox.invalid}"
 python3 - <<'PY'
 import json, os
 ctx = int(os.environ.get("AIBOX_CONTEXT") or 16384)
@@ -765,9 +768,10 @@ config = {
             "modalities": {"input": ["text", "image"] if vision else ["text"], "output": ["text"]}}}}},
 }
 if os.environ.get("AIBOX_FULL_ACCESS") == "1":
-    # The container is the sandbox: no approval prompts inside it, but never outside /work.
+    # The container is the sandbox: no approval prompts inside it. external_directory is allowed
+    # because OpenCode itself uses /tmp; the host is still reachable only through the mounts.
     config["permission"] = {"edit": "allow", "bash": "allow", "webfetch": "allow",
-                            "doom_loop": "allow", "external_directory": "deny"}
+                            "doom_loop": "allow", "external_directory": "allow"}
 path = os.path.join(os.environ["HOME"], ".config/opencode/opencode.json")
 with open(path, "w") as stream:
     json.dump(config, stream, indent=2)

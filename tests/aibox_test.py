@@ -95,7 +95,10 @@ class ContainerPolicy(unittest.TestCase):
             self.assertEqual(provider["models"]["local"]["attachment"], bool(vision))
             self.assertEqual(data.get("permission", {}).get("bash"), "allow" if full else None)
             if full:
-                self.assertEqual(data["permission"]["external_directory"], "deny")
+                self.assertEqual(data["permission"]["external_directory"], "allow")
+            home_dir = next(home.glob("aibox-home.*"))
+            ignore = (home_dir / ".config/git/ignore").read_text().split()
+            self.assertIn("node_modules/", ignore)
             self.assertEqual((written / "AGENTS.md").read_text(), "x")
 
     def test_context_and_vision_are_passed_as_environment_only_when_known(self):
