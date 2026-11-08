@@ -112,7 +112,10 @@ One user-supplied session; not a benchmark suite.
 | Prefill, cold | 330 to 345 t/s at start, 254 t/s average at 50K (212 s total), 222 t/s at 85.6K (385 s) |
 | Retrieval | single needle at 50 % depth in 8,136 and 49,933 tokens: correct (49.9K exceeds the 44K VRAM pool) |
 
-Not yet measured: needles at 5 %/95 %, 110K/230K prompts, tool calls, vision, MTP acceptance, long-range code quality.
+Second session (same day): needles at 5 % and 95 % of 49,933 tokens both correct (209 s each, 240 t/s average prefill; VRAM peak 15.0 GiB incl. desktop, ~1.35 GiB free).
+Probe at 8,115 tokens (2,300 reused from the shared snapshot cache): TTFT 18.4 s; 138 tokens in 3.99 s = 34.6 t/s; MTP accepted 74 of 130 drafts (56.9 %), 2.12 tokens per round, 61 ms per round, 0 fallbacks; tool call (write_file) correct; red/blue test image described correctly with the CPU projector.
+
+Not yet measured: 110K/230K prompts, screenshot text reading, a same-conditions baseline of the 16K Prism path, long-range code quality, the Codex agent loop.
 
 ## Safety behaviour
 
