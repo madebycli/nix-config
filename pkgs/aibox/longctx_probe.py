@@ -65,11 +65,32 @@ def png(width, height, left, right):
 
 
 def filler(tokens):
-    # ~1.3 tokens per word of varied, needle-free log-like prose
-    words = []
-    for i in range(int(tokens / 1.3 / 9)):
-        words.append(f"Entry {i}: service node{i % 97} reported status {(i * 7) % 13} after retry {(i * 3) % 5}.")
-    return "\n".join(words)
+    # Digits tokenize badly: assume ~3 characters per token so --tokens is not underestimated.
+    target, lines, size, i = tokens * 3, [], 0, 0
+    while size < target:
+        line = f"Entry {i}: service node{i % 97} reported status {(i * 7) % 13} after retry {(i * 3) % 5}."
+        lines.append(line)
+        size += len(line) + 1
+        i += 1
+    return "\n".join(lines)
+
+
+def ask_streaming(prompt, max_tokens=64):
+    """Streamed request so progress is visible; returns (text, seconds, usage)."""
+    body = {"model": "local", "stream": True, "max_tokens": max_tokens, "temperature": 0,
+            "stream_options": {"include_usage": True}, "messages": [{"role": "user", "content": prompt}]}
+    started, text, usage = time.monotonic(), "", {}
+    with post("/v1/chat/completions", body) as response:
+        for raw in response:
+            line = raw.decode().strip()
+            if not line.startswith("data:") or line.endswith("[DONE]"):
+                continue
+            event = json.loads(line[5:])
+            usage = event.get("usage") or usage
+            for choice in event.get("choices", []):
+                delta = choice.get("delta", {})
+                text += (delta.get("content") or "") + (delta.get("reasoning_content") or "")
+    return text, time.monotonic() - started, usage
 
 
 def main():
@@ -89,11 +110,14 @@ def main():
             code = f"VX-{int(depth * 1000):04d}-{abs(hash(depth)) % 9000 + 1000}"
             lines = list(text)
             lines.insert(int(len(lines) * depth), f"IMPORTANT: the maintenance passphrase is {code}.")
-            data = chat([{"role": "user", "content": "\n".join(lines) + "\n\nWhat is the maintenance passphrase? Answer with the code only."}], max_tokens=64)
-            ok = code in json.dumps(data["choices"][0]["message"])
+            print(f"retrieval depth {depth}: sending ~{args.tokens} tokens; the server log shows progress "
+                  "(podman logs -f nx-ai-inference)", file=sys.stderr, flush=True)
+            answer, seconds, usage = ask_streaming("\n".join(lines) + "\n\nWhat is the maintenance passphrase? Answer with the code only.", max_tokens=256)
+            ok = code in answer
             failed |= not ok
-            results.append({"depth": depth, "expected": code, "ok": ok, "seconds": round(data["_seconds"], 1),
-                            "prompt_tokens": data.get("usage", {}).get("prompt_tokens")})
+            results.append({"depth": depth, "expected": code, "ok": ok, "seconds": round(seconds, 1),
+                            "prompt_tokens": usage.get("prompt_tokens")})
+            print(json.dumps(results[-1]), file=sys.stderr, flush=True)
         report["retrieval"] = results
     if "speed" not in skip:
         report["speed"] = stream_speed(filler(args.tokens) + "\n\nSummarize the log above in three sentences.")
