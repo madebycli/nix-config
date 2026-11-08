@@ -294,3 +294,8 @@ three folders. `workspace.json` is not mounted, so the agent cannot change its o
 Defaults: internet on and agent approvals off inside the container (`--offline`, `--ask` change that).
 The nix template cannot evaluate or build: there is no nix inside the sandbox. A browser UI for
 managing workspaces is not implemented.
+
+**Where things live.** Per-workspace data that the agent fetches or creates (downloaded tools, Gradle/JDK
+versions, SDKs, caches, chat history) is stored visibly in `~/projects/_aibox/` (`my.features.local-ai.workspaceRoot`),
+next to the project folders. The AI Box itself is not stored there: models stay in
+`~/.local/share/nx-ai/models`, and container images in Podman's own storage.

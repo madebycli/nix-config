@@ -50,6 +50,16 @@ class Workspaces(unittest.TestCase):
         self.assertTrue(ma[2].split(",")[1].endswith("/home"))  # workspace.json is never mounted
         self.assertIn("Android", (Path(a["project"]) / "AGENTS.md").read_text())
 
+    def test_everything_per_workspace_lives_under_projects_aibox(self):
+        meta, _ = aibox.ws_new(self.cfg, "alpha", template="android")
+        root = self.home / "projects" / "_aibox"
+        self.assertEqual(aibox.ws_root(self.cfg), root.resolve())
+        args = aibox.ws_agent_args(self.cfg, "alpha", ["true"])
+        sources = [m.split(",")[1][4:] for m in self.mounts(args)]
+        self.assertTrue(all(Path(src).resolve().is_relative_to((self.home / "projects").resolve()) for src in sources))
+        self.assertFalse(any(".local" in src for src in sources))
+        self.assertEqual(Path(meta["project"]), (self.home / "projects" / "alpha").resolve())
+
     def test_tools_group_can_be_shared_deliberately(self):
         aibox.ws_new(self.cfg, "one", tools_group="android")
         aibox.ws_new(self.cfg, "two", tools_group="android")

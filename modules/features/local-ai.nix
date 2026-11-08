@@ -59,6 +59,12 @@ in
       defaultText = lib.literalExpression ''"/home/''${config.my.user}/.local/share/nx-ai/models"'';
       description = "Model storage: read-only for aibox start, writable for the explicit full model manager. Nothing is downloaded or started by activation.";
     };
+    workspaceRoot = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/${config.my.user}/projects/_aibox";
+      defaultText = lib.literalExpression ''"/home/''${config.my.user}/projects/_aibox"'';
+      description = "Visible folder for per-workspace agent data: chat history and downloaded tools (Gradle, JDKs, SDKs). Project folders stay beside it in ~/projects. Models and container images are stored elsewhere.";
+    };
     hipBaseImage = lib.mkOption {
       type = lib.types.str;
       default = "docker.io/rocm/dev-ubuntu-24.04:7.2.3-complete";
@@ -103,7 +109,7 @@ in
     systemd.user.sockets.podman.enable = false;
     systemd.user.services.podman.enable = false;
     environment.etc."aibox.json".text = builtins.toJSON {
-      inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs defaultProfile contextSize kvCacheType longContext;
+      inherit (cfg) gpuArch renderDevice modelDirectory hipBaseImage buildJobs defaultProfile contextSize kvCacheType longContext workspaceRoot;
     };
   };
 }

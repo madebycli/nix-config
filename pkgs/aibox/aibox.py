@@ -694,11 +694,11 @@ def prepare_dev(cfg):
 
 
 def tools_directory(cfg, workspace):
-    """Persistent download area for the dev agent, separate from project, models and manager state."""
+    """Persistent download area for `aibox shell --dev` (named workspaces have their own)."""
     models = Path(cfg["modelDirectory"]).expanduser().resolve()
-    base = models.parent / "agent-tools"
-    base.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path = safe_directory(base)
+    path = ws_root(cfg) / "_tools" / "default"
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = safe_directory(path)
     for other in (models, models.parent / "manager", workspace):
         if path.is_relative_to(other) or other.is_relative_to(path):
             raise ValueError(f"Agent tools directory must not overlap {other}")
@@ -777,7 +777,9 @@ WS_TEMPLATES = {
 
 
 def ws_root(cfg):
-    root = Path(cfg["modelDirectory"]).expanduser().resolve().parent / "workspaces"
+    """Visible area for everything per workspace (chat homes, tools); default ~/projects/_aibox."""
+    configured = cfg.get("workspaceRoot")
+    root = Path(configured).expanduser() if configured else Path.home() / "projects" / "_aibox"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     return safe_directory(root)
 

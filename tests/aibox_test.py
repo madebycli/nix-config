@@ -89,10 +89,11 @@ class ContainerPolicy(unittest.TestCase):
         support.mkdir()
         for name in ("DevContainerfile", "shot.sh", "SKILLS.md", "longctx_probe.py"):
             (support / name).write_text(name)
-        with patch.dict(os.environ, {"AIBOX_SUPPORT": str(support)}):
+        with patch.dict(os.environ, {"AIBOX_SUPPORT": str(support), "HOME": str(self.root / "home")}):
+            (self.root / "home").mkdir(exist_ok=True)
             args = aibox.agent_args(self.cfg, self.project, ["true"], dev=True)
             image = aibox.dev_image(self.cfg)
-        tools = (self.models.parent / "agent-tools").resolve()
+        tools = (self.root / "home" / "projects/_aibox/_tools/default").resolve()
         mounts = [args[i + 1] for i, a in enumerate(args) if a == "--mount"]
         self.assertEqual(mounts, [f"type=bind,src={self.project},target=/work,bind-nonrecursive",
                                   f"type=bind,src={tools},target=/tools,bind-nonrecursive"])
@@ -104,10 +105,12 @@ class ContainerPolicy(unittest.TestCase):
         self.assertEqual(oct(tools.stat().st_mode & 0o777), "0o700")
 
     def test_tools_directory_never_overlaps_the_project(self):
-        inside = self.models.parent / "agent-tools" / "proj"
-        inside.mkdir(parents=True)
-        with self.assertRaises(ValueError):
-            aibox.tools_directory(self.cfg, inside.resolve())
+        (self.root / "home").mkdir(exist_ok=True)
+        with patch.dict(os.environ, {"HOME": str(self.root / "home")}):
+            inside = aibox.ws_root(self.cfg) / "_tools" / "default" / "proj"
+            inside.mkdir(parents=True)
+            with self.assertRaises(ValueError):
+                aibox.tools_directory(self.cfg, inside.resolve())
 
     def test_dev_containerfile_pins_codex_and_persists_tool_dirs_outside_the_image(self):
         text = (ROOT / "pkgs/aibox/DevContainerfile").read_text()
