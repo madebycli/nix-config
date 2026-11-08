@@ -65,7 +65,8 @@ def image_name(cfg):
 
 def ensure_image(image):
     if not exists("image", image):
-        command = "aibox prepare-ui" if "nx-ai-manager" in image else "aibox prepare --strata"
+        command = ("aibox prepare-ui" if "nx-ai-manager" in image else
+                   "aibox prepare --agent-only" if "nx-ai-agent" in image else "aibox prepare --strata")
         raise ValueError(f"Image missing: {image}. Run {command}")
 
 
