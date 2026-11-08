@@ -46,6 +46,17 @@ class ContainerPolicy(unittest.TestCase):
         self.assertEqual(args[args.index("--network") + 1], aibox.NETWORK)
         self.assertNotIn("--publish", args)
 
+    def test_online_is_explicit_adds_only_the_nat_network_and_keeps_the_boundary(self):
+        offline = aibox.agent_args(self.cfg, self.project, ["true"])
+        self.assertEqual([x for x in offline if x == "--network"], ["--network"])
+        online = aibox.agent_args(self.cfg, self.project, ["true"], online=True)
+        networks = [online[i + 1] for i, x in enumerate(online) if x == "--network"]
+        self.assertEqual(networks, [aibox.NETWORK, aibox.OUTBOUND])
+        mounts = [online[i + 1] for i, x in enumerate(online) if x == "--mount"]
+        self.assertEqual(len(mounts), 1)
+        for forbidden in ("--privileged", "--network=host", "--device"):
+            self.assertFalse(any(x == forbidden or x.startswith(forbidden + "=") for x in online))
+
     def test_argument_text_is_not_host_shell_code(self):
         command = ["bash", "-c", "printf '%s' '$HOME; touch /host-sentinel'"]
         args = aibox.agent_args(self.cfg, self.project, command)

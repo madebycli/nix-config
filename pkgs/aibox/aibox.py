@@ -77,6 +77,18 @@ def ensure_network():
         raise ValueError("Refusing an existing network without the expected internal policy/label")
 
 
+OUTBOUND = "nx-ai-downloads"
+
+
+def ensure_outbound_network():
+    if not exists("network", OUTBOUND):
+        run("network", "create", "--label", f"{LABEL}=true", OUTBOUND)
+    net = json.loads(run("network", "inspect", OUTBOUND, capture=True).stdout)[0]
+    if net.get("internal") or net.get("labels", {}).get(LABEL) != "true":
+        raise ValueError("Refusing outbound network without the expected policy/label")
+    return OUTBOUND
+
+
 def base_run(name=None):
     args = ["run", "--pull=never", "--read-only", "--cap-drop=ALL",
             "--security-opt=no-new-privileges", "--http-proxy=false",
@@ -210,12 +222,7 @@ def start_ui(cfg, port):
     ensure_network()
     # Management needs outbound access for explicit model downloads. Coding
     # containers remain on NETWORK only. No host network or engine socket.
-    outbound = "nx-ai-downloads"
-    if not exists("network", outbound):
-        run("network", "create", "--label", f"{LABEL}=true", outbound)
-    net = json.loads(run("network", "inspect", outbound, capture=True).stdout)[0]
-    if net.get("internal") or net.get("labels", {}).get(LABEL) != "true":
-        raise ValueError("Refusing management network without the expected policy/label")
+    outbound = ensure_outbound_network()
     old = owned_server()
     if old and old.get("State", {}).get("Running"):
         raise ValueError("Inference is running. Run aibox stop before opening the model manager")
@@ -664,7 +671,7 @@ def show_llama_ui(port, no_open):
             print("Open the URL above manually.")
 
 
-def agent_args(cfg, project, command):
+def agent_args(cfg, project, command, *, online=False):
     path = safe_directory(project, workspace=True, model=cfg["modelDirectory"])
     manager = Path(cfg["modelDirectory"]).expanduser().resolve().parent / "manager"
     if path.is_relative_to(manager) or manager.is_relative_to(path):
@@ -674,6 +681,10 @@ def agent_args(cfg, project, command):
             "--mount", f"type=bind,src={path},target=/work,bind-nonrecursive",
             "--workdir=/work", "--env=OPENAI_BASE_URL=http://strata:8080/v1",
             "--env=OPENAI_API_KEY=local-only"]
+    if online:
+        # Explicit opt-in: the same container additionally joins the NAT network, so package
+        # downloads work. Still only PROJECT is mounted; the model API stays on the private net.
+        args += ["--network", OUTBOUND]
     if sys.stdin.isatty() and sys.stdout.isatty():
         args += ["--tty"]
     # The shell is inside the container. No host command string is evaluated.
@@ -732,8 +743,10 @@ def main():
     for name in ("stop", "status", "logs"):
         sub.add_parser(name)
     p = sub.add_parser("shell", help="Open offline coding shell sharing only PROJECT")
+    p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
     p.add_argument("project")
     p = sub.add_parser("exec", help="Run a command inside the offline coding container")
+    p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
     p.add_argument("project")
     p.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -794,12 +807,15 @@ def main():
     elif args.action in ("shell", "exec"):
         ensure_image(os.environ["AIBOX_AGENT_IMAGE"])
         ensure_network()
+        if args.online:
+            ensure_outbound_network()
+            print("ONLINE: this container can reach the internet. Only the project folder is shared.", file=sys.stderr)
         command = ["/bin/bash"] if args.action == "shell" else args.command
         if command and command[0] == "--":
             command = command[1:]
         if not command:
             raise ValueError("Expected a command after PROJECT")
-        result = run(*agent_args(cfg, args.project, command), check=False)
+        result = run(*agent_args(cfg, args.project, command, online=args.online), check=False)
         return result.returncode
     elif args.action == "stop":
         if owned_server():

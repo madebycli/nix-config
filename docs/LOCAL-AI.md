@@ -158,7 +158,8 @@ as a successful GPU run.
   No host port is published in the default CLI profile. Explicit `aibox ui --strata`
   publishes the UI/API on 127.0.0.1 only; no LAN port is published. The controller verifies an existing network's
   internal policy. Proxy variables from the host are not inherited.
-- The coding profile is **offline**. Internet package installation and cloud
+- The coding profile is **offline by default**; `aibox shell --online DIR` / `aibox exec --online DIR -- CMD` additionally joins
+  the labelled NAT network for that one session (no allow-list; only DIR is still shared). Otherwise internet package installation and cloud
   Claude/Codex providers do not work directly inside it. The manager has outbound
   access, and its upstream integrations can access the internet.
   Add dependencies declaratively through `agentExtraPackages` and rebuild.
