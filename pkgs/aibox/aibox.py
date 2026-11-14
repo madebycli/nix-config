@@ -939,7 +939,7 @@ def main():
     p.add_argument("--allow-experimental", action="store_true")
     p = sub.add_parser("plan", help="Print the memory plan and checks for a long-context preset; starts nothing")
     p.add_argument("preset", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3", "lc256-bonsai"))
-    p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3"))
+    p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true")
     for name in ("stop", "status", "logs"):
         sub.add_parser(name)
@@ -970,6 +970,7 @@ def main():
     p = sub.add_parser("exec", help="Run a command inside the offline coding container")
     p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
     p.add_argument("--full-access", action="store_true", help="Agent runs without approval prompts; the container stays the only boundary")
+    p.add_argument("--dev", action="store_true", help="Debian dev image with persistent /tools; implies --online and --full-access")
     p.add_argument("project")
     p.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
