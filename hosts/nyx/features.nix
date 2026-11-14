@@ -20,6 +20,9 @@
   my.features.agentbox.enable = false;
   # my.features.agentbox.sshKeys = [ "ssh-ed25519 AAAA... you@host" ];
 
+  # Rust toolchain, learning exercises and VSCodium.
+  my.features.rust-dev.enable = false;
+
   my.features.ai.enable = false;
   # Strata HIP + offline coding containers; no model downloads or autostart.
   my.features.local-ai.enable = false;
