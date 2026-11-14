@@ -69,6 +69,7 @@ Systemwechsel ist auch das installierte `nixctl` aktualisiert.
 - GCC als Linker und `pkg-config` für spätere Projekte mit nativen Bibliotheken.
 - VSCodium mit rust-analyzer, CodeLLDB und Even Better TOML.
 - `rustlings`: kleine interaktive Übungen.
+- `opencode`: Coding-Assistent im Terminal, direkt im Projekt nutzbar.
 
 Compiler, Cargo und Werkzeuge stammen aus demselben Nixpkgs-Pin. Installiere für
 dieses Setup kein zusätzliches Rust über `rustup` oder die automatische
@@ -109,6 +110,20 @@ cargo test
 Beim ersten Projekt mit externen Crates lädt Cargo Abhängigkeiten von crates.io.
 Ein Projekt mit C-/Systembibliotheken kann später zusätzliche Bibliotheken in
 einer projektspezifischen Nix-Entwicklungsumgebung benötigen.
+
+## OpenCode im Rust-Projekt
+
+OpenCode wird zusammen mit `rust-dev` installiert. Nach dem Systemwechsel kannst
+du es im Projektordner starten:
+
+```bash
+cd ~/Projekte/hallo-rust
+opencode
+```
+
+Anbieter und Modell richtest du in OpenCode selbst ein. Das NixOS-Modul hinterlegt
+keine API-Schlüssel oder Modellvorgaben und startet keinen zusätzlichen Dienst.
+Deine persönlichen OpenCode-Einstellungen bleiben unverwaltet.
 
 ## Debuggen
 
