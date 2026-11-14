@@ -926,8 +926,8 @@ def main():
     p.add_argument("--strata", action="store_true", help="Open legacy Strata manager instead")
     p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true", help="Explicitly omit the vision projector")
-    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"),
-                   help="Optional KVMem mode (qwen27-iq4xs); omitted = unchanged 16K Prism path")
+    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3", "lc256-bonsai"),
+                   help="Optional KVMem mode (model pinned by preset); omitted = unchanged 16K Prism path")
     p.add_argument("--allow-experimental", action="store_true")
     p.add_argument("--port", type=int, default=8766)
     p.add_argument("--no-open", action="store_true", help="Print the address without launching a browser")
@@ -935,10 +935,10 @@ def main():
     p.add_argument("--strata", action="store_true")
     p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true")
-    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"))
+    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3", "lc256-bonsai"))
     p.add_argument("--allow-experimental", action="store_true")
     p = sub.add_parser("plan", help="Print the memory plan and checks for a long-context preset; starts nothing")
-    p.add_argument("preset", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"))
+    p.add_argument("preset", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3", "lc256-bonsai"))
     p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3"))
     p.add_argument("--text-only", action="store_true")
     for name in ("stop", "status", "logs"):
