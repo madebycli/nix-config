@@ -18,7 +18,7 @@ class NixctlTests(unittest.TestCase):
         self.repo = self.root / "checkout with spaces"
         self.file = self.repo / "hosts/nyx/features.nix"
         self.file.parent.mkdir(parents=True)
-        self.original = '''{\n  my.kernel = "latest"; # keep this\n  my.desktop.compositors = [ "mango" ];\n  my.desktop.defaultSession = "mango";\n  my.desktop.shell = "noctalia";\n  my.features.gaming.enable = true;\n  my.features.virtualisation.enable = false;\n  my.features.ai.enable = false;\n}\n'''
+        self.original = '''{\n  my.kernel = "latest"; # keep this\n  my.desktop.compositors = [ "mango" ];\n  my.desktop.defaultSession = "mango";\n  my.desktop.shell = "noctalia";\n  my.features.gaming.enable = true;\n  my.features.virtualisation.enable = false;\n  my.features.ai.enable = false;\n  my.features.rust-dev.enable = false;\n}\n'''
         self.file.write_text(self.original)
         conf = self.root / "nixctl.conf"
         conf.write_text(f"REPO={shlex.quote(str(self.repo))}\nHOST=nyx\n")
@@ -79,6 +79,19 @@ if name=='nixos-rebuild' and os.environ.get('FAIL_BUILD'): sys.exit(1)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.file.read_text(), self.original.replace('virtualisation.enable = false;', 'virtualisation.enable = true;'))
         result = self.run_cli("off", "virtualisation")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.file.read_text(), self.original)
+        self.assertEqual(self.calls(), [])
+
+    def test_rust_dev_toggle_preserves_other_features_and_does_not_rebuild(self):
+        result = self.run_cli("list")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stdout, r"rust-dev\s+off")
+        result = self.run_cli("on", "rust-dev")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.file.read_text(), self.original.replace(
+            'rust-dev.enable = false;', 'rust-dev.enable = true;'))
+        result = self.run_cli("off", "rust-dev")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.file.read_text(), self.original)
         self.assertEqual(self.calls(), [])

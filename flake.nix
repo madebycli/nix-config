@@ -67,6 +67,7 @@
           virtualisation.enable = lib.mkForce true;
           ai.enable = lib.mkForce true;
           local-ai.enable = lib.mkForce true;
+          rust-dev.enable = lib.mkForce true;
         };
       };
 

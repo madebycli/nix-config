@@ -46,6 +46,10 @@ jobs:
         run: |
           nix eval --impure --json --file tests/virtualisation.nix | jq -e 'all(.[]; . == true)'
 
+      - name: Rust development is opt-in and configures VSCodium on both hosts
+        run: |
+          nix eval --impure --json --file tests/rust-dev.nix | jq -e 'all(.[]; . == true)'
+
       - name: Local AI stays opt-in and does not add a model service
         run: |
           nix eval --impure --json --expr '

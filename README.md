@@ -87,6 +87,7 @@ upstream `master`; `nx update base` also updates its locked sources.
 | `agentbox` | Isolated VM for Claude Code and Codex |
 | `plymouth` | Boot splash with themes switchable without a rebuild |
 | `ai` | Local models (Ollama, Open WebUI), started on demand |
+| `rust-dev` | Rust, Cargo, Clippy, rustfmt, rustlings and VSCodium with Rust/TOML support and debugging |
 | `flatpak` | Flatpak with a declarative app list |
 
 The experimental GBox sandbox, Rust Settings frontend and native Nixdatifier
@@ -158,6 +159,20 @@ dots adopt      # move existing ~/.config folders into the repository
 
 A conflict aborts the rebase, switches auto-sync off and sends a notification.
 Files over 5 MB are never committed.
+
+## Rust development (`rust-dev`)
+
+Enable the feature for the current machine, then build and activate:
+
+```bash
+nixctl on rust-dev
+nixctl apply
+```
+
+Or set `my.features.rust-dev.enable = true;` in `hosts/<host>/features.nix`.
+Both hosts keep this feature disabled initially. See [the Rust learning setup](docs/RUST-DEV.md)
+for your first project, VSCodium, debugging and rustlings exercises.
+Use `nixctl off rust-dev` followed by `nixctl apply` to disable it.
 
 ## Agent VM (`agentbox`)
 
