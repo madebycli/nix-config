@@ -172,24 +172,26 @@ class LongContext(unittest.TestCase):
         self.assertEqual(settings["kvDtype"], "q8_0")
 
     def test_bonsai_plan_cli_accepts_explicit_profile(self):
+        if os.getuid() == 0:
+            self.skipTest("aibox runs only as a normal user")
         with patch("sys.argv", ["aibox", "plan", "lc256-bonsai", "--profile", "bonsai27-pq2"]):
             with patch.object(aibox, "load_config", return_value=self.cfg):
-                with patch.object(aibox.os, "getuid", return_value=1000):
-                    with patch.object(aibox, "vram_mib", return_value=(16368, 0)):
-                        with patch.object(aibox, "meminfo_mib", return_value={"MemAvailable": 32768}):
-                            with patch("builtins.print"):
-                                self.assertEqual(aibox.main(), 0)
+                with patch.object(aibox, "vram_mib", return_value=(16368, 0)):
+                    with patch.object(aibox, "meminfo_mib", return_value={"MemAvailable": 32768}):
+                        with patch("builtins.print"):
+                            self.assertEqual(aibox.main(), 0)
 
     def test_exec_cli_declares_dev_attribute_to_support_longctx_probe(self):
         from unittest.mock import Mock
+        if os.getuid() == 0:
+            self.skipTest("aibox runs only as a normal user")
         with patch("sys.argv", ["aibox", "exec", str(self.models), "--", "true"]):
             with patch.object(aibox, "load_config", return_value=self.cfg):
-                with patch.object(aibox.os, "getuid", return_value=1000):
-                    with patch.dict(os.environ, {"AIBOX_AGENT_IMAGE": "localhost/test:fixed"}):
-                        with patch.object(aibox, "ensure_image"), patch.object(aibox, "ensure_network"):
-                            with patch.object(aibox, "agent_args", return_value=["fake"]):
-                                with patch.object(aibox, "run", return_value=Mock(returncode=0)):
-                                    self.assertEqual(aibox.main(), 0)
+                with patch.dict(os.environ, {"AIBOX_AGENT_IMAGE": "localhost/test:fixed"}):
+                    with patch.object(aibox, "ensure_image"), patch.object(aibox, "ensure_network"):
+                        with patch.object(aibox, "agent_args", return_value=["fake"]):
+                            with patch.object(aibox, "run", return_value=Mock(returncode=0)):
+                                self.assertEqual(aibox.main(), 0)
 
     def test_kvmem_image_is_independent_of_prism_image(self):
         before = aibox.llama_image(self.cfg)
