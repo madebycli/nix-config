@@ -606,8 +606,9 @@ def start_llama(cfg, name=None, *, port=None, no_open=True, vision=True, long_co
     if port is not None and (type(port) is not int or not 1024 <= port <= 65535):
         raise ValueError("UI port must be between 1024 and 65535")
     settings = longcontext_settings(cfg, long_context, allow_experimental=allow_experimental) if long_context else None
-    if settings and name == "bonsai27-pq2":
-        raise ValueError("Bonsai needs the Prism runtime (use the default 16K mode)")
+    # A long-context preset pins its model explicitly. The pinned KVMem llama.cpp
+    # patch series includes PQ2_0 and Bonsai Hadamard/MTP support; no fallback to
+    # the Prism server or to a different quantization is permitted.
     server_args = kvmem_server_args(cfg, name, settings, vision=vision) if settings else llama_server_args(cfg, name, vision=vision)
     engine = "kvmem" if settings else "prism"
     old = owned_server()
