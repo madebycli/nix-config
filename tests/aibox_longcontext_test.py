@@ -181,6 +181,7 @@ class LongContext(unittest.TestCase):
         self.assertRegex(text, r"KVMEM_REV=[0-9a-f]{40}")
         self.assertRegex(text, r"LLAMA_BASE=[0-9a-f]{40}")
         self.assertIn("prepare-backends.py --backend llamacpp --check", text)
+        self.assertIn("GGML_TYPE_PQ2_0", text)  # build must include Bonsai's PQ2 type and HIP kernel
         self.assertNotIn("RyensX", text)
         for flag in ("--kvmem-host-mib", "--spec-kv-dtype", "--no-mmproj-offload"):
             self.assertIn(flag, text)
