@@ -1,4 +1,4 @@
-# Optional long-context mode (KVMem) for Qwen3.8-27B IQ4_XS
+# Optional long-context mode (KVMem) for Qwen3.8-27B and Bonsai 2 27B
 
 **Status: implemented and unit-tested; UNVERIFIED on hardware.** No RX 6800 was
 available when this was written. Every GPU, speed, VRAM, vision, MTP and quality
@@ -30,8 +30,11 @@ found no downloaders, obfuscation or binaries (not a full audit); it offers noth
 | Model + projector | unchanged: `qwen27-iq4xs` in `profiles.json` (bartowski, sha256-pinned) |
 | ROCm / HIP | `hipBaseImage` (7.2.3), target `gfx1030` |
 
-This is **upstream llama.cpp + KVMem, not the Prism fork**. Prism is only needed for
-Bonsai PQ2_0, so the mode is restricted to `qwen27-iq4xs` (Bonsai is rejected).
+This is **upstream llama.cpp + KVMem, not the Prism fork**. The pinned KVMem source
+already includes Bonsai 2 Hadamard and PQ2_0 patches. The separate `lc256-bonsai`
+preset now selects the existing Bonsai PQ2_0 + Q8 MTP profile. **RX 6800 inference
+for this specific artifact is still unverified.** See [Bonsai KVMem 256K](LOCAL-AI-BONSAI-KVMEM.md).
+The normal Bonsai 16K Prism path is unchanged.
 
 ## Compatibility
 
@@ -39,7 +42,7 @@ Bonsai PQ2_0, so the mode is restricted to `qwen27-iq4xs` (Bonsai is rejected).
 |---|---|
 | Qwen3.8-27B IQ4_XS | Supported family; KVMem's reference recipe is IQ4_XS+MTP (RTX 5060 Ti, Q5 KV). Not tested with *this* bartowski file. |
 | RX 6800 / gfx1030 / HIP | `gfx1030` is a documented build target and an RDNA2 FA fix is in the patch series, but KVMem's recorded ROCm long-context tests are RDNA4 (RX 9060 XT) / 7900 XTX. **No gfx1030 qualification exists.** RDNA2 + **F16 draft KV is a known gap**, so draft KV is quantized here. |
-| Prism integration | Not combined: separate engine and image. Prism stays for 16K and Bonsai. |
+| Prism integration | Not combined: separate engine and image. Prism stays for the normal 16K path; KVMem has its own PQ2 support for Bonsai long context. |
 | Vision | KVMem on ROCm runs the projector on CPU (`--no-mmproj-offload`); this saves ~0.86 GiB VRAM but image encoding is slower. The f16 projector with this server is untested. |
 | MTP | `draft-mtp`, max 2, ReplaySSM (`--kvmem-mtp-state replay`). The controller checks `/slots` and stops the server if the speculative sampler is not active. Acceptance with KVMem retrieval is unmeasured. |
 | Q8 KV | Requested type, default. `kvDtype = "q5_0"` is an explicit opt-in (KVMem's IQ4 recipe). |
@@ -76,6 +79,7 @@ cold prefill (KVMem reports ~250 t/s overall on a 5060 Ti).
 | `lc128` | 131,072 | 12288 + 4096 | 6 GiB | 14 GiB |
 | `lc256` | 262,144 | 12288 + 4096 | 12 GiB | 20 GiB |
 | `lc512` (experimental, ≈500K) | 524,288 | 12288 + 4096 | 22 GiB | 28 GiB |
+| `lc256-bonsai` (PQ2_0 + Q8 MTP) | 262,144 | 32768 + 12288 | 12 GiB | 20 GiB |
 
 Host KV quotas are generous over the estimate (2.3 / 4.5 / 9 / 18 GiB). `lc512` will
 normally be refused on 32 GB RAM; it needs `--allow-experimental`.

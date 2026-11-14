@@ -606,8 +606,9 @@ def start_llama(cfg, name=None, *, port=None, no_open=True, vision=True, long_co
     if port is not None and (type(port) is not int or not 1024 <= port <= 65535):
         raise ValueError("UI port must be between 1024 and 65535")
     settings = longcontext_settings(cfg, long_context, allow_experimental=allow_experimental) if long_context else None
-    if settings and name == "bonsai27-pq2":
-        raise ValueError("Bonsai needs the Prism runtime (use the default 16K mode)")
+    # A long-context preset pins its model explicitly. The pinned KVMem llama.cpp
+    # patch series includes PQ2_0 and Bonsai Hadamard/MTP support; no fallback to
+    # the Prism server or to a different quantization is permitted.
     server_args = kvmem_server_args(cfg, name, settings, vision=vision) if settings else llama_server_args(cfg, name, vision=vision)
     engine = "kvmem" if settings else "prism"
     old = owned_server()
@@ -925,8 +926,8 @@ def main():
     p.add_argument("--strata", action="store_true", help="Open legacy Strata manager instead")
     p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true", help="Explicitly omit the vision projector")
-    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"),
-                   help="Optional KVMem mode (qwen27-iq4xs); omitted = unchanged 16K Prism path")
+    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3", "lc256-bonsai"),
+                   help="Optional KVMem mode (model pinned by preset); omitted = unchanged 16K Prism path")
     p.add_argument("--allow-experimental", action="store_true")
     p.add_argument("--port", type=int, default=8766)
     p.add_argument("--no-open", action="store_true", help="Print the address without launching a browser")
@@ -934,11 +935,11 @@ def main():
     p.add_argument("--strata", action="store_true")
     p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true")
-    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"))
+    p.add_argument("--long-context", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3", "lc256-bonsai"))
     p.add_argument("--allow-experimental", action="store_true")
     p = sub.add_parser("plan", help="Print the memory plan and checks for a long-context preset; starts nothing")
-    p.add_argument("preset", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3"))
-    p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3"))
+    p.add_argument("preset", choices=("lc64", "lc128", "lc256", "lc512", "lc256-iq3", "lc256-bonsai"))
+    p.add_argument("--profile", choices=("qwen27-iq4xs", "qwen27-iq3", "bonsai27-pq2"))
     p.add_argument("--text-only", action="store_true")
     for name in ("stop", "status", "logs"):
         sub.add_parser(name)
@@ -969,6 +970,7 @@ def main():
     p = sub.add_parser("exec", help="Run a command inside the offline coding container")
     p.add_argument("--online", action="store_true", help="Also allow outbound internet (package downloads) for this session")
     p.add_argument("--full-access", action="store_true", help="Agent runs without approval prompts; the container stays the only boundary")
+    p.add_argument("--dev", action="store_true", help="Debian dev image with persistent /tools; implies --online and --full-access")
     p.add_argument("project")
     p.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()

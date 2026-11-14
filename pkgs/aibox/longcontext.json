@@ -1,5 +1,5 @@
 {
-  "_comment": "Test presets for the optional KVMem long-context mode. workspace is the logical context kept mostly in host RAM. gpuBudget+genReserve is the VRAM KV working pool (same 16384-token pool as the 16K profile, so VRAM need is comparable). hostKvMiB is the hard KVMem host-KV quota, containerRamMiB the hard container cap (swap disabled). Nothing here is measured on an RX 6800.",
+  "_comment": "Optional KVMem presets: workspace is logical context mostly in host RAM; gpuBudget+genReserve is the GPU KV working pool. Host KV and container RAM are hard caps, no swap. lc256-bonsai uses existing Bonsai PQ2_0+Q8 MTP weights and Q8 K/V with a 44K-token pool. RX 6800 PQ2+MTP+vision has NOT been hardware-qualified; estimates are approximate.",
   "lc64": {
     "workspace": 65536,
     "gpuBudget": 12288,
@@ -39,6 +39,16 @@
   "lc256-iq3": {
     "profile": "qwen27-iq3",
     "kvDtype": "k8v4",
+    "workspace": 262144,
+    "gpuBudget": 32768,
+    "genReserve": 12288,
+    "hostKvMiB": 12288,
+    "containerRamMiB": 20480,
+    "experimental": false
+  },
+  "lc256-bonsai": {
+    "profile": "bonsai27-pq2",
+    "kvDtype": "q8_0",
     "workspace": 262144,
     "gpuBudget": 32768,
     "genReserve": 12288,

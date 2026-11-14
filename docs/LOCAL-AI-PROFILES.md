@@ -93,6 +93,24 @@ Primary sources:
 [official Bonsai/projector](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf),
 [pinned runtime](https://github.com/PrismML-Eng/llama.cpp/tree/a15369706017f177cae8aa40b6b8592259a48806).
 
+## Optional Bonsai KVMem 256K mode
+
+The ordinary Bonsai profile still defaults to the pinned 16K Prism engine.
+For **Bonsai only**, the additional opt-in KVMem mode is:
+
+```bash
+aibox prepare --kvmem
+aibox verify bonsai27-pq2
+aibox plan lc256-bonsai
+aibox stop
+aibox ui --profile bonsai27-pq2 --long-context lc256-bonsai
+```
+
+This uses exactly the pinned ProCreations PQ2_0/Q8 MTP GGUF and Prism Q8 projector,
+but through KVMem's independently patched llama.cpp runtime. RX 6800 inference,
+vision, long-range retrieval and Q8 head acceptance remain **unverified**.
+See [the Bonsai-specific runbook](LOCAL-AI-BONSAI-KVMEM.md).
+
 ## RX 6800 memory and acceptance
 
 **Qwen IQ4_XS is a tight fit, not a promise of full GPU residency.** Its weights,

@@ -5,7 +5,8 @@
 ARG BASE=docker.io/rocm/dev-ubuntu-24.04:7.2.3-complete
 FROM docker.io/library/node:22.20.0-bookworm-slim AS source
 # kvmem/kvmem main 0.19.0. The pinned upstream llama.cpp base commit and the
-# ordered patch series (with tree hashes) are verified by scripts/prepare-backends.py.
+# ordered patch series (with tree hashes), including Bonsai PQ2 kernels for HIP,
+# are verified by scripts/prepare-backends.py; no Prism runtime fork is substituted.
 ARG KVMEM_REV=deb8e76582892a3f6f61bae0b728701b3b41cce7
 ARG LLAMA_BASE=cd959bae99ff4bed22bef2604f45241c09bbb8c8
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 \
@@ -20,6 +21,8 @@ RUN --mount=type=secret,id=proxy_ca \
     && test "$(git -C backends/llamacpp rev-parse HEAD)" = "${LLAMA_BASE}" \
     && python3 scripts/prepare-backends.py --backend llamacpp \
     && python3 scripts/prepare-backends.py --backend llamacpp --check \
+    && grep -q GGML_TYPE_PQ2_0 backends/llamacpp/ggml/include/ggml.h \
+    && grep -q GGML_TYPE_PQ2_0 backends/llamacpp/ggml/src/ggml-cuda/ggml-cuda.cu \
     && python3 scripts/build-webui.py --full-ui --output /opt/kvmem-ui
 FROM ${BASE}
 ARG GPU_ARCH=gfx1030
