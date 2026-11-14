@@ -159,6 +159,9 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: VSCodium settings stay writable and preserve Noctalia preferences
+        run: python3 tests/rust_dev_settings_test.py
+
       - name: nx unit tests
         run: python3 tests/nx_test.py
 

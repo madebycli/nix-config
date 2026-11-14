@@ -26,8 +26,21 @@ nixctl off rust-dev
 nixctl apply
 ```
 
-Deine Projekte bleiben erhalten. Änderungen an verwalteten Editor-Einstellungen
-gehören in `modules/features/rust-dev.nix`; Home Manager verwaltet diese Dateien.
+Deine Projekte und Editor-Einstellungen bleiben erhalten. `settings.json` bleibt
+eine normale, schreibbare Benutzerdatei. Du kannst Einstellungen, das Farbthema
+und zusätzliche Erweiterungen in VSCodium ändern. Das gilt auch für die
+NoctaliaTheme-Erweiterung und Noctalias VSCode-Template.
+
+Die Rust-Vorgaben werden nur beim ersten Start ohne vorhandene Einstellungsdatei
+angelegt. Vorhandene eigene Einstellungen (auch JSON mit Kommentaren) werden
+nicht überschrieben. Die früher vom Rust-Modul angelegte Nix-Store-Verknüpfung
+wird beim nächsten Aktivieren vor Home Managers Bereinigung in eine schreibbare
+Datei umgewandelt. Ihr vorheriger Inhalt bleibt zusätzlich als
+`settings.json.before-rust-dev-writable` erhalten. VSCodium vor dieser ersten
+Migration schließen und nach dem Systemwechsel erneut öffnen.
+
+Die Rust-Werkzeuge verwenden stabile Systempfade, damit Änderungen am Nixpkgs-Pin
+keine veralteten Nix-Store-Pfade in neu angelegten Einstellungen hinterlassen.
 
 ## Wenn noch ein altes `nixctl` installiert ist
 
@@ -83,8 +96,9 @@ fn main() {
 }
 ```
 
-Beim Speichern formatiert VSCodium Rust-Dateien automatisch und zeigt
-Clippy-Hinweise an. Dieselben Prüfungen funktionieren im Terminal:
+Die neu angelegten Rust-Vorgaben aktivieren Formatierung beim Speichern und
+Clippy-Hinweise. Wenn bereits eigene Einstellungen vorhanden waren, kannst du
+Formatierung und `rust-analyzer.check.command = clippy` im Editor einschalten. Dieselben Prüfungen funktionieren im Terminal:
 
 ```bash
 cargo fmt --check
