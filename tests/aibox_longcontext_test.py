@@ -21,6 +21,7 @@ class LongContext(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.models = Path(tmp.name) / "models"
         (self.models / "qwen27-iq4xs").mkdir(parents=True)
+        (self.models / "bonsai27-pq2").mkdir(parents=True)
         self.cfg = {"modelDirectory": str(self.models), "gpuArch": "gfx1030", "hipBaseImage": "test:fixed",
                     "buildJobs": 2, "renderDevice": "/dev/dri/renderD128", "longContext": {}}
         env = patch.dict(os.environ, {"AIBOX_SUPPORT": str(ROOT / "pkgs/aibox")})
