@@ -13,6 +13,7 @@ let
     in
     !c.my.features.rust-dev.enable
     && !hasPackage c system.pkgs.rustc
+    && !hasPackage c system.pkgs.opencode
     && !c.home-manager.users.${c.my.user}.programs.vscodium.enable
     && !(c.environment.variables ? RUST_SRC_PATH);
   enabled = host:
@@ -27,7 +28,7 @@ let
         builtins.any (p: p.drvPath == extension.drvPath) profile.extensions;
     in
     c.my.features.rust-dev.enable
-    && builtins.all (hasPackage c) (with pkgs; [ rustc cargo rustfmt clippy rust-analyzer rustlings gcc pkg-config ])
+    && builtins.all (hasPackage c) (with pkgs; [ rustc cargo rustfmt clippy rust-analyzer rustlings opencode gcc pkg-config ])
     && c.environment.variables.RUST_SRC_PATH == "/etc/rust-dev/rust-src"
     && toString c.environment.etc."rust-dev/rust-src".source == "${pkgs.rustPlatform.rustLibSrc}"
     && !(builtins.hasAttr "${home.xdg.configHome}/VSCodium/User/settings.json" home.home.file)

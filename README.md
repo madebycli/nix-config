@@ -87,7 +87,7 @@ upstream `master`; `nx update base` also updates its locked sources.
 | `agentbox` | Isolated VM for Claude Code and Codex |
 | `plymouth` | Boot splash with themes switchable without a rebuild |
 | `ai` | Local models (Ollama, Open WebUI), started on demand |
-| `rust-dev` | Rust, Cargo, Clippy, rustfmt, rustlings and VSCodium with Rust/TOML support and debugging |
+| `rust-dev` | Rust, Cargo, Clippy, rustfmt, rustlings, OpenCode and VSCodium with Rust/TOML support and debugging |
 | `flatpak` | Flatpak with a declarative app list |
 
 The experimental GBox sandbox, Rust Settings frontend and native Nixdatifier

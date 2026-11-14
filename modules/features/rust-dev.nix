@@ -26,6 +26,7 @@ in
       clippy
       rust-analyzer
       rustlings
+      opencode
       gcc
       pkg-config
     ];
