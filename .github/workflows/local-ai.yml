@@ -115,6 +115,20 @@ jobs:
         if: always()
         run: docker logs strata-ci || true
 
+  kvmem-hip-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned KVMem HIP gfx1030 with PQ2 kernels, without weights
+        run: docker build --tag nx-ai-kvmem-ci --file pkgs/aibox/KvmemContainerfile pkgs/aibox
+      - name: Verify the real KVMem CLI flags without GPU/model inference
+        run: |
+          docker run --rm nx-ai-kvmem-ci --help > /tmp/kvmem-help.txt 2>&1
+          for flag in --kvmem --kvmem-budget --kvmem-host-mib --spec-type --spec-kv-dtype --no-mmproj-offload; do
+            grep -q -- "$flag" /tmp/kvmem-help.txt
+          done
+
   prism-hip-build:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
