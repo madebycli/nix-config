@@ -43,7 +43,7 @@ cmd_apply() {
   echo "nixctl: building $HOST ..."
   local out
   out="$(mktemp -d)"
-  nixos-rebuild build --flake "$REPO#$HOST" --out-link "$out/result"
+  nix build --out-link "$out/result" "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel"
   echo
   echo "nixctl: changes compared to the running system:"
   nix store diff-closures /run/current-system "$out/result" || true

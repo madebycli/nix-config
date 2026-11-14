@@ -29,6 +29,24 @@ nixctl apply
 Deine Projekte bleiben erhalten. Änderungen an verwalteten Editor-Einstellungen
 gehören in `modules/features/rust-dev.nix`; Home Manager verwaltet diese Dateien.
 
+## Wenn noch ein altes `nixctl` installiert ist
+
+Falls `rust-dev` unbekannt ist, fehlt die neue Schalterzeile im verwendeten
+Checkout. Aktualisiere nach dem Merge zuerst den Code. Wenn `nixctl apply` noch
+`unrecognized arguments: --out-link` meldet, starte einmal die korrigierte
+Version direkt aus dem aktualisierten Checkout:
+
+```bash
+cd ~/nix-config
+nx pull
+nix run .#nixctl -- on rust-dev
+nix run .#nixctl -- apply
+```
+
+Verwende bei einem anderen Repository-Pfad deinen tatsächlichen Checkout.
+`nixctl` liest den konfigurierten Pfad aus `/etc/nixctl.conf`. Nach dem
+Systemwechsel ist auch das installierte `nixctl` aktualisiert.
+
 ## Was enthalten ist
 
 - `rustc`: Rust-Compiler.
