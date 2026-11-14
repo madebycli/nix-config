@@ -28,18 +28,19 @@ let
     in
     c.my.features.rust-dev.enable
     && builtins.all (hasPackage c) (with pkgs; [ rustc cargo rustfmt clippy rust-analyzer rustlings gcc pkg-config ])
-    && c.environment.variables.RUST_SRC_PATH == "${pkgs.rustPlatform.rustLibSrc}"
-    && (builtins.hasAttr "${home.xdg.configHome}/VSCodium/User/settings.json" home.home.file)
+    && c.environment.variables.RUST_SRC_PATH == "/etc/rust-dev/rust-src"
+    && toString c.environment.etc."rust-dev/rust-src".source == "${pkgs.rustPlatform.rustLibSrc}"
+    && !(builtins.hasAttr "${home.xdg.configHome}/VSCodium/User/settings.json" home.home.file)
     && !(builtins.hasAttr "${home.xdg.configHome}/Code/User/settings.json" home.home.file)
     && editor.enable
+    && editor.mutableExtensionsDir
     && editor.package.drvPath == pkgs.vscodium.drvPath
     && builtins.all hasExtension (with pkgs.vscode-extensions; [
       rust-lang.rust-analyzer vadimcn.vscode-lldb tamasfe.even-better-toml
     ])
-    && profile.userSettings."rust-analyzer.server.path" == "${pkgs.rust-analyzer}/bin/rust-analyzer"
-    && profile.userSettings."rust-analyzer.cargo.sysrootSrc" == c.environment.variables.RUST_SRC_PATH
-    && profile.userSettings."rust-analyzer.check.command" == "clippy"
-    && profile.userSettings."[rust]"."editor.formatOnSave";
+    && profile.userSettings == { }
+    && home.home.activation.rustDevWritableSettings.before == [ "linkGeneration" ]
+    && home.home.activation.rustDevWritableSettings.after == [ "writeBoundary" ];
 in
 {
   nyxDisabledByDefault = disabled "nyx";
