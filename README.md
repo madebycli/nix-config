@@ -68,6 +68,9 @@ my.desktop.defaultSession = "mango";
 my.desktop.shell = "noctalia";   # "caelestia" only with [ "hyprland" ] alone
 ```
 
+[Desktop portals](docs/DESKTOP-PORTALS.md) configure screen sharing and the
+GNOME/Nautilus file chooser for native applications.
+
 The Noctalia shell uses the upstream `noctalia` flake input, without an extra
 binary cache. The Noctalia Greeter stays in Nixpkgs. `nx update desktop` updates
 the shell; `nx update base` updates the greeter.
