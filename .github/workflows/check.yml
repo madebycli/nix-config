@@ -42,6 +42,13 @@ jobs:
               | jq -e '.substitute != false and .substituters == ["https://cache.nixos.org/"] and .fallback != true and .["require-sigs"] != false' >/dev/null
           done
 
+      - name: Desktop portals select GNOME files and session-native capture
+        run: |
+          # Evaluate each session separately to keep Nix evaluator memory bounded.
+          for check in nyxMangoHasAbsoluteChooserAndGnomeFiles aetherMangoHasAbsoluteChooserAndGnomeFiles niriKeepsNativeCaptureAndGnomeFiles hyprlandKeepsNativeCaptureAndGnomeFiles mixedSessionsKeepIndependentCapture; do
+            nix eval --impure --json --file tests/portals.nix --apply "checks: checks.$check" | jq -e '. == true'
+          done
+
       - name: Virtualisation toggles the complete VM stack for AMD and Intel
         run: |
           nix eval --impure --json --file tests/virtualisation.nix | jq -e 'all(.[]; . == true)'

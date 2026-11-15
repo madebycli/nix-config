@@ -6,6 +6,7 @@ in
 {
   imports = [
     ./apps.nix
+    ./portals.nix
     ./greeter.nix
     ./mango.nix
     ./niri.nix

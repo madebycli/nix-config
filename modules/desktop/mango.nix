@@ -21,6 +21,22 @@ in
       addLoginEntry = true;
     };
 
+    # Use the portal's supported dmenu chooser with a store path. The user
+    # service PATH need not include system-profile programs such as fuzzel.
+    xdg.portal.wlr.settings.screencast = {
+      chooser_type = "dmenu";
+      chooser_cmd = "${pkgs.fuzzel}/bin/fuzzel --dmenu --prompt='Share screen: '";
+    };
+    xdg.portal.config.mango."org.freedesktop.impl.portal.FileChooser" = [ "gnome" ];
+
+    # Mango exports its activation environment itself, but its native session
+    # does not start graphical-session.target. Allow the file chooser backend
+    # to be D-Bus activated there; retain its upstream ordering and stop binding.
+    systemd.user.services.xdg-desktop-portal-gnome = {
+      overrideStrategy = "asDropin";
+      unitConfig.Requisite = "";
+    };
+
     # Workaround dependencies for Mango/wlroots clipboard interoperability
     # with Steam Proton XWayland clients.
     environment.systemPackages = with pkgs; [
