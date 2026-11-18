@@ -21,11 +21,10 @@ in
       addLoginEntry = true;
     };
 
-    # Mango has its own portal section, so the common GNOME defaults must be
-    # repeated here. Otherwise ScreenCast falls back to wlr and its fuzzel chooser.
-    xdg.portal.config.mango = {
-      # The mango flake module sets default = gtk at normal priority.
-      default = lib.mkForce [ "gnome" ];
+    # Mango has its own portal section. The mango flake module also sets keys
+    # there, so this whole section is forced to avoid conflicting definitions.
+    xdg.portal.config.mango = lib.mkForce {
+      default = [ "gnome" ];
       "org.freedesktop.impl.portal.FileChooser" = [ "gnome" ];
       "org.freedesktop.impl.portal.ScreenCast" = [ "gnome" ];
       "org.freedesktop.impl.portal.Inhibit" = [ "none" ];
