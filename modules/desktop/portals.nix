@@ -8,8 +8,9 @@
       pkgs.xdg-desktop-portal-gnome
     ];
     config.common = {
-      default = [ "gtk" ];
+      default = [ "gnome" ];
       "org.freedesktop.impl.portal.FileChooser" = [ "gnome" ];
+      "org.freedesktop.impl.portal.ScreenCast" = [ "gnome" ];
       "org.freedesktop.impl.portal.Inhibit" = [ "none" ];
     };
   };
