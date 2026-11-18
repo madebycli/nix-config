@@ -22,13 +22,14 @@ in
     };
 
     # Screen sharing on mango uses the official NixOS wlr portal module. The
-    # GNOME backend has no ScreenCast interface outside GNOME Shell. Slurp is
-    # the chooser from the xdg-desktop-portal-wlr manual: click a monitor.
+    # GNOME backend has no ScreenCast interface outside GNOME Shell. Fuzzel is
+    # the dmenu chooser, with a store path because the user service PATH need
+    # not include system-profile programs.
     xdg.portal.wlr = {
       enable = true;
       settings.screencast = {
-        chooser_type = "simple";
-        chooser_cmd = "${pkgs.slurp}/bin/slurp -f 'Monitor: %o' -or";
+        chooser_type = "dmenu";
+        chooser_cmd = "${pkgs.fuzzel}/bin/fuzzel --dmenu --prompt='Share screen: '";
       };
     };
 
