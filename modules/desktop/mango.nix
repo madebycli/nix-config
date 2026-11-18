@@ -21,13 +21,14 @@ in
       addLoginEntry = true;
     };
 
-    # Use the portal's supported dmenu chooser with a store path. The user
-    # service PATH need not include system-profile programs such as fuzzel.
-    xdg.portal.wlr.settings.screencast = {
-      chooser_type = "dmenu";
-      chooser_cmd = "${pkgs.fuzzel}/bin/fuzzel --dmenu --prompt='Share screen: '";
+    # Mango has its own portal section, so the common GNOME defaults must be
+    # repeated here. Otherwise ScreenCast falls back to wlr and its fuzzel chooser.
+    xdg.portal.config.mango = {
+      default = [ "gnome" ];
+      "org.freedesktop.impl.portal.FileChooser" = [ "gnome" ];
+      "org.freedesktop.impl.portal.ScreenCast" = [ "gnome" ];
+      "org.freedesktop.impl.portal.Inhibit" = [ "none" ];
     };
-    xdg.portal.config.mango."org.freedesktop.impl.portal.FileChooser" = [ "gnome" ];
 
     # Mango exports its activation environment itself, but its native session
     # does not start graphical-session.target. Allow the file chooser backend
