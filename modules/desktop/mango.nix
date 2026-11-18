@@ -21,12 +21,24 @@ in
       addLoginEntry = true;
     };
 
+    # Screen sharing on mango uses the official NixOS wlr portal module. The
+    # GNOME backend has no ScreenCast interface outside GNOME Shell. Slurp is
+    # the chooser from the xdg-desktop-portal-wlr manual: click a monitor.
+    xdg.portal.wlr = {
+      enable = true;
+      settings.screencast = {
+        chooser_type = "simple";
+        chooser_cmd = "${pkgs.slurp}/bin/slurp -f 'Monitor: %o' -or";
+      };
+    };
+
     # Mango has its own portal section. The mango flake module also sets keys
     # there, so this whole section is forced to avoid conflicting definitions.
     xdg.portal.config.mango = lib.mkForce {
       default = [ "gnome" ];
       "org.freedesktop.impl.portal.FileChooser" = [ "gnome" ];
-      "org.freedesktop.impl.portal.ScreenCast" = [ "gnome" ];
+      "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
+      "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
       "org.freedesktop.impl.portal.Inhibit" = [ "none" ];
     };
 
